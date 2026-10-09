@@ -4,12 +4,11 @@
 
 ## 当前接手位置
 
-- 更新日期：2026-10-09；TooAngel 单房经济与冷恢复首片已提交 `a3c0602`（实施基线 `5315dca`）；Source Keeper 巡守与战斗已收口（含三路复审清偿批）。最近引擎验证：完整门禁 Rust 1481 passed / 0 failed；release 棘轮全量 2802 passed / 8 failed / 104 skipped（0 转红，8 例均为既有官方对齐豁免）；本批未重跑三 bot。
+- 更新日期：2026-10-09；普通 Invader 行为与移动记忆恢复已提交 `5c544cf`；持续 NPC 战斗验收随本提交交付。最近完整门禁 Rust 1482 passed / 0 failed；最近 release 棘轮 2802 passed / 8 failed / 104 skipped（0 转红，8 例既有豁免）。本批重跑 TooAngel 持续世界六阶段，没有重跑固定世界三 bot。
 - 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座、deposit 采集链、observer 限时视野已交付。**M2H.b 19/19 powers 全部接通**。
-- 当前接手：普通 Invader 行为已贯通（基线 `13424c7`，随本提交交付），接着推进持续世界 NPC 战斗与输入回放/冷恢复验收。walkTo 唯一上游消费者为 stronghold，普通 Invader moveTo/lastMove 已接；地图生成/raid/stronghold 与 G21 Mod 世界事件仍未完成。
-- 本次完成：**Invader 相邻近战首片**（基线 `5ed3a03`，随本提交交付）；实现零步可达目标选择、独立近战/远程与共用战斗链，双通道、晚期失败重试和冷恢复已验。下一片为路径建筑改向/追击/逃离，须同片补齐 NPC 推挤记忆及保存恢复；治疗与 raid/stronghold 另拆。
-- 已完成：**Invader 自动远程攻击首片**（提交 `5ed3a03`，基线 `a3c0602`）；最低 hits 目标、过滤、既有战斗链、失败重试与冷恢复已验，无新增保存域。后续按官方消费者推进路径建筑改向/追击/治疗，寻路/walkTo 须同片补齐 NPC 推挤记忆；raid/stronghold 另拆。
-- 后续候选：**零散红逐例归因**（剩余 8 例均为既有官方对齐豁免，清单见最新兼容报告；NPC 自杀与 keeper lair 已转绿，后续可推进 Invader 路径建筑改向/追击/治疗或 G02.d3 后续，仍按实际消费者拆片）或推进 Overmind/战斗/多房真实 bot 验收；TooAngel 单房经济首片已完成，每片贯通真实消费者、玩家投影、失败边界和冷恢复。
+- 当前接手：持续 NPC 战斗与输入回放/冷恢复已验，直接继续 Overmind 真实单房经济验收。初步 100 tick 探针发现 Flag 原型继承疑点，须核对官方源码并补回归；探针不等于长期验收完成。
+- 本次完成：JSON/KKPV 各 200 tick 持续战斗、100+100 tick 跨进程冷恢复和完整检查点回放；实际位置/hits 证明移动、受伤与恢复，双通道及直跑/续跑世界与 Memory 等值。TooAngel v6 双通道 2000 tick 连跑及 1000+1000 tick 冷恢复六阶段复验通过。
+- 剩余：Overmind/真实 bot 战斗/多房/长期存活验收；地图生成/raid/stronghold 与 G21 Mod 世界事件；walkTo/Keeper lastMove 按实际 stronghold 消费者接线；G02.d3 后续与 G27.a。NPC 场景不标 M2B 或 G21 完成。
 - 兼容率 2802/2914≈96.2%（**95% 中间检查点已越过**；99% 目标需 2885）。
 - Mod 扩展：移动策略、对象/建筑/资源、库存/耐久/受击、作者 CLI/类型、输入回放和检查点已有基础；未完成范围以任务表为准。默认玩法已有消费者不代表对应 Mod 替换能力已经开放。
 - 网络服务、持久 storage 后端与真实游戏客户端仍未实现；renderer R0–R6 已交付，R7 最终矩阵/长测未收口。现有 bot-check 不能代替持续推进世界中的可玩验收。
@@ -19,7 +18,7 @@
 
 | 顺位 | 任务 | 首片与完成条件 |
 |---|---|---|
-| 1 | 零散红逐例归因与修复 | 8 条既有官方对齐豁免保留证据；Invader 自动远程攻击已交付；零步相邻近战已交付；普通 Invader 路径建筑改向/追击/治疗已贯通；后续为 NPC 战斗验收与地图/raid/stronghold（Source Keeper 同房巡守/战斗已交付），raid/stronghold 另拆；每例有官方源或套件仲裁证据 |
+| 1 | 零散红逐例归因与修复 | 8 条既有官方对齐豁免保留证据；Invader 自动远程攻击已交付；零步相邻近战已交付；普通 Invader 路径建筑改向/追击/治疗已贯通；NPC 持续战斗已验，后续为地图/raid/stronghold（Source Keeper 同房巡守/战斗已交付），raid/stronghold 另拆；每例有官方源或套件仲裁证据 |
 | 2 | 真实 bot 验收与 G02.d3 后续 | TooAngel 单房经济/死亡后补员/冷恢复已验；剩余 Overmind、战斗、多房，以及结构/rampart 通行与寻路贯通 |
 | 独立候选 | G02.d3 后续、G27.a | 前者贯通结构/rampart 通行与寻路；后者提供异步后台生命周期，随后才接 storage/outbox/网络 |
 
@@ -265,3 +264,13 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - 原首片守卫变化：可达 spawn 不再保留无目标 Invader；满血孤立 healer 无目标自杀。无活跃 ATTACK 仍可能按官方最终 attack 产生零伤害事件，旧“零攻击事件”断言按真实官方消费者收紧为零伤害，而非隐藏新行为。
 - 完整无参数 `pnpm run check` 通过：Rust 1481 passed / 0 failed，Clippy、debug CLI、JavaScript workspace/维护工具、303 个 Markdown / 1929 个本地链接、912 个源码/测试文件均 ≤1000 行。release CLI、固定 bot 准备与适配器构建通过；显式 release 棘轮 2802 passed / 8 failed / 104 skipped（floor 2802，0 转红/0 转绿，8 条既有豁免）。代码/契约/报告随本提交交付，未推送。随后直接推进持续世界 NPC 战斗与输入日志/冷恢复验收。
 - 父领域未完成：地图 NPC 生成/raid 调度、userSummoned/strongholdId 特殊状态、stronghold 战术/walkTo 推挤与 Keeper lastMove，G21 Mod 世界事件能力仍未开放。
+
+## 2026-10-09 持续世界 NPC 战斗验收（已完成，随本提交交付）
+
+- 基线 `5c544cf`，工作区干净。普通 Invader 已交付后直接继续验收，不等待逐片确认。
+- 当前场景：护卫与近战/远程/治疗三名 Invader 在真实世界持续交战，使用公开事件与 hits/位置变化记录 NPC 移动、近战/远程伤害、治疗事件、NPC 实际恢复及护卫实际受伤；不只累计已发出的治疗意图。
+- 计划验证：JSON/KKPV 各 200 tick 连跑、100+100 tick 跨进程冷恢复，各阶段输入日志与完整状态 verify-replay；补 CLI 场景回归及说明，保存可复现命令/报告证据。新载荷 v6 同时重跑既有 TooAngel 双通道首片确认输入回放/冷恢复未受空 NPC 域影响。
+- 最终六阶段矩阵通过；四份终态指标一致：NPC 移动 229 次、近战伤害 840、远程伤害 4780、NPC 治疗事件正量 4600、NPC 实际恢复 3808、护卫实际受伤 252，事件观察截至 tick 199。各阶段完整输入回放通过，同通道连跑/续跑与跨通道的最终世界、玩家 Memory 等值。报告见 [NPC 战斗汇总](../../compat/reports/gameplay-invader/summary.json)。
+- TooAngel 六阶段重新实跑通过：各通道 2000 tick 连跑、1000+1000 tick 冷恢复，出生/死亡后补员、采集/搬运/建造/升级与 GCL 条件及完整检查点回放通过，最新 v6 报告覆盖原位置；历史证据保留于 Git。
+- 完整无参数 `pnpm run check` 通过：Rust 1482 passed / 0 failed，Clippy、debug CLI、JS workspace/维护工具、303 个 Markdown / 1932 个本地链接、914 个源码/测试文件规模通过；release CLI 重建、JS 格式检查通过。无生产实现/适配器或 doctest 变化，本片不重复棘轮，最近 `5c544cf` 的 release 棘轮 2802/8/104、零转红仍是对应实现证据。
+- 场景/CLI 回归、机器报告和现行模拟契约随本提交交付，无实现残项；下一步 Overmind 单房经济验收。场景不替代真实 bot 战斗/多房验收，不标 M2B 或 G21 完成。

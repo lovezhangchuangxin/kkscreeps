@@ -98,6 +98,35 @@ JSON/KKPV 各运行一次 2000 tick 连跑和一次 1000+1000 tick 跨进程冷�
 
 退出码 0 表示所有运行及业务条件通过；2 表示运行/验收失败（逐项检查和已有失败产物保留）；1 表示参数或输出目录无法建立。失败不复用上次成功报告，也不覆盖既有目录。入库证据见[本批汇总](reports/gameplay-tooangel/summary.json)；它只关闭 TooAngel 单房经济与冷恢复首片，Overmind、战斗、多房与 M2B 最终验收仍待推进。
 
+### 普通 Invader 持续战斗与冷恢复
+
+[场景](fixtures/sim-invader-battle/scenario.json)包含一名优先自疗的护卫与近战/远程/治疗三名 Invader。护卫靠近目标触发近战反击，NPC 自动追击、逃离、攻击和治疗；观察器除记录攻击/治疗事件，还比较实际 hits 与位置变化，要求护卫累计实际受伤 ≥100、NPC 血量实际恢复 ≥100、NPC 移动、近战/远程伤害和治疗发生。事件截至上一拍，不把最后一轮未读事件计入统计。场景为固定 200 tick 单房战斗切片，不是第三方 bot 战斗、多房或完整 M2B 验收。
+
+在仓库根目录执行下面的 Bash 矩阵（输出目录须不存在）：
+
+```bash
+cargo build --release -p kk-cli
+battle_out=/tmp/invader-battle
+mkdir "$battle_out"
+for battle_channel in json kkpv; do
+  battle_flags=()
+  if [ "$battle_channel" = kkpv ]; then battle_flags+=(--kkpv); fi
+  target/release/kkscreeps sim run --scenario compat/fixtures/sim-invader-battle/scenario.json \
+    --ticks 200 "${battle_flags[@]}" --input-log "$battle_out/$battle_channel-continuous.jsonl" \
+    --verify-replay --report "$battle_out/$battle_channel-continuous.json"
+  target/release/kkscreeps sim run --scenario compat/fixtures/sim-invader-battle/scenario.json \
+    --ticks 100 "${battle_flags[@]}" --input-log "$battle_out/$battle_channel-split.jsonl" \
+    --verify-replay --save-checkpoint "$battle_out/$battle_channel.checkpoint.json" \
+    --report "$battle_out/$battle_channel-prefix.json"
+  target/release/kkscreeps sim run --scenario compat/fixtures/sim-invader-battle/scenario.json \
+    --ticks 100 "${battle_flags[@]}" --input-log "$battle_out/$battle_channel-split.jsonl" \
+    --verify-replay --load-checkpoint "$battle_out/$battle_channel.checkpoint.json" \
+    --report "$battle_out/$battle_channel-resumed.json"
+done
+```
+
+六阶段逐段回放均比较完整检查点（包含 v6 Invader 路径与 lastMove）。[入库汇总](reports/gameplay-invader/summary.json)记录六阶段报告与业务指标；CLI 门禁同时比较 JSON/KKPV、连续/冷恢复的最终 world 和 Memory。该脚本不读取 Date/随机/CPU，故本固定切片验证上述终态等值；此结论不扩展为任意真实 bot 的独立执行等值。
+
 Mod 生命周期场景可运行 `target/release/kkscreeps sim run --scenario compat/fixtures/sim-mod-tick/scenario.json --ticks 50 --report /tmp/sim-mod-tick.json`。它显式装载官方原型 clockwork，验证两房对象自主更新、玩家类和查询、Mod state 与真实计划身份；没有玩家意图或按官方包 ID 特殊处理。该场景不含对象增删、生产建筑和内容预设。另有 `sim-mod-objects/scenario.json`，使用相同命令运行至少 53 轮，验证 nursery 双房自主生成/到期删除、玩家类/空间查询；报告 mod_objects 包含全部动态 Mod 对象。两场景的 root 都装载 official 的直接子包，尚不是内容预设或显式包选择。
 
 独立 JS 处理器组合可运行 `target/release/kkscreeps mod inspect --root compat/fixtures/mod-composition --report /tmp/composition.json`，使用 `--disable z-gate` 预览依赖闭包。`sim-mod-composition/scenario.json` 至少运行 100 轮，真实玩家核验链序 trace，报告 composition 与实际装配同源。接口和约束见[组合诊断](../docs/architecture/mod-composition.md)。

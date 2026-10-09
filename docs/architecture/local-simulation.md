@@ -99,3 +99,5 @@ CLI 参数解析失败沿用 Clap 的退出码 2，不写报告。报告通过�
 `run_wall_ms` 仅包含推进循环，不含加载、指纹计算、最终状态观察和报告写入。`phases` 使用运行时已有的累计阶段计时，是诊断数据，不能直接作为正式跨实现基准。玩家 Date、Math.random、CPU 查询保持生产行为，因此固定场景和源码不保证任意 bot 完全确定；Mod 规则代码的时间/随机则自 G22.b 起确定性（[协议](gameplay-determinism.md)）。复现要求见[开发套件设计](../designs/dev-kit.md)。
 
 原生场景验收见[初始交付记录](../research/notes/sim-run-2026-10-04.md)，Mod 场景验收见[生命周期交付记录](../research/notes/n1a-object-tick-2026-10-05.md)和[对象操作交付记录](../research/notes/n1b-mod-objects-2026-10-05.md)。
+
+普通 Invader 持续战斗切片使用公开事件、hits 和位置观察，在 JSON/KKPV 上运行 200 tick 连跑与 100+100 tick 冷恢复，各阶段 `--verify-replay` 核对完整状态（包含载荷 v6 私有 NPC 记忆）。其 world/Memory 终态等值属于固定无随机脚本的验收，不能推及任意真实 bot；场景与命令见[兼容验收](../../compat/README.md#普通-invader-持续战斗与冷恢复)。

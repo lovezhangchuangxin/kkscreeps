@@ -1,0 +1,296 @@
+{
+  "report_version": 1,
+  "success": true,
+  "scope": "单房普通 Invader 战斗、200 tick 连跑与 100+100 tick 冷恢复；不含真实 bot 战斗/多房、raid/stronghold 或完整 M2B",
+  "implementation_commit": "5c544cf",
+  "executable_sha256": "8043ad71137dd6d3ea11ccc8aa7304527ef5e8a3bb3da4cf79492dd9670834cc",
+  "scenario_sha256": "fac5f716a0179008b377ebb0acf6caa8c4945f471da62bcefa3c396df6ad5197",
+  "checks": {
+    "six_phases_complete": true,
+    "six_phases_full_checkpoint_replay": true,
+    "same_channel_cold_resume_world_and_memory_equal": true,
+    "cross_channel_world_and_memory_equal": true,
+    "same_executable": true,
+    "same_scenario": true,
+    "same_modules": true
+  },
+  "runs": [
+    {
+      "name": "json-continuous",
+      "report": "json-continuous.json",
+      "channel": "json",
+      "ticks_requested": 200,
+      "world_ticks_committed": 200,
+      "stats": {
+        "melee": 840,
+        "ranged": 4780,
+        "healed": 14152,
+        "npcMelee": 840,
+        "npcRanged": 4780,
+        "npcHealed": 4600,
+        "npcMoved": 229,
+        "deaths": 0,
+        "npcRecovered": 3808,
+        "guardInjured": 252,
+        "previousGuardHits": 2100,
+        "lastHits": {
+          "kk0000000000000003": 320,
+          "kk0000000000000004": 500,
+          "kk0000000000000005": 500
+        },
+        "last": {
+          "kk0000000000000003": "16,1",
+          "kk0000000000000004": "16,2",
+          "kk0000000000000005": "13,6"
+        },
+        "eventsThroughTick": 199
+      },
+      "verify_replay": {
+        "status": "passed",
+        "segments": 200,
+        "first_tick": 1,
+        "last_tick": 200,
+        "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
+      },
+      "input_log": {
+        "path": "/tmp/kkscreeps-invader-battle-20261009/json-continuous.jsonl",
+        "segments": 200,
+        "read_back_segments": 200,
+        "first_tick": 1,
+        "last_tick": 200,
+        "validation": "ok"
+      }
+    },
+    {
+      "name": "json-prefix",
+      "report": "json-prefix.json",
+      "channel": "json",
+      "ticks_requested": 100,
+      "world_ticks_committed": 100,
+      "stats": {
+        "melee": 450,
+        "ranged": 2270,
+        "healed": 6952,
+        "npcMelee": 450,
+        "npcRanged": 2270,
+        "npcHealed": 2200,
+        "npcMoved": 114,
+        "deaths": 0,
+        "npcRecovered": 1720,
+        "guardInjured": 180,
+        "previousGuardHits": 2100,
+        "lastHits": {
+          "kk0000000000000003": 260,
+          "kk0000000000000004": 500,
+          "kk0000000000000005": 500
+        },
+        "last": {
+          "kk0000000000000003": "15,8",
+          "kk0000000000000004": "15,9",
+          "kk0000000000000005": "13,13"
+        },
+        "eventsThroughTick": 99
+      },
+      "verify_replay": {
+        "status": "passed",
+        "segments": 100,
+        "first_tick": 1,
+        "last_tick": 100,
+        "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
+      },
+      "input_log": {
+        "path": "/tmp/kkscreeps-invader-battle-20261009/json-split.jsonl",
+        "segments": 100,
+        "read_back_segments": 100,
+        "first_tick": 1,
+        "last_tick": 100,
+        "validation": "ok"
+      }
+    },
+    {
+      "name": "json-resumed",
+      "report": "json-resumed.json",
+      "channel": "json",
+      "ticks_requested": 100,
+      "world_ticks_committed": 100,
+      "stats": {
+        "melee": 840,
+        "ranged": 4780,
+        "healed": 14152,
+        "npcMelee": 840,
+        "npcRanged": 4780,
+        "npcHealed": 4600,
+        "npcMoved": 229,
+        "deaths": 0,
+        "npcRecovered": 3808,
+        "guardInjured": 252,
+        "previousGuardHits": 2100,
+        "lastHits": {
+          "kk0000000000000003": 320,
+          "kk0000000000000004": 500,
+          "kk0000000000000005": 500
+        },
+        "last": {
+          "kk0000000000000003": "16,1",
+          "kk0000000000000004": "16,2",
+          "kk0000000000000005": "13,6"
+        },
+        "eventsThroughTick": 199
+      },
+      "verify_replay": {
+        "status": "passed",
+        "segments": 100,
+        "first_tick": 101,
+        "last_tick": 200,
+        "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
+      },
+      "input_log": {
+        "path": "/tmp/kkscreeps-invader-battle-20261009/json-split.jsonl",
+        "segments": 200,
+        "read_back_segments": 200,
+        "first_tick": 1,
+        "last_tick": 200,
+        "validation": "ok"
+      }
+    },
+    {
+      "name": "kkpv-continuous",
+      "report": "kkpv-continuous.json",
+      "channel": "kkpv",
+      "ticks_requested": 200,
+      "world_ticks_committed": 200,
+      "stats": {
+        "melee": 840,
+        "ranged": 4780,
+        "healed": 14152,
+        "npcMelee": 840,
+        "npcRanged": 4780,
+        "npcHealed": 4600,
+        "npcMoved": 229,
+        "deaths": 0,
+        "npcRecovered": 3808,
+        "guardInjured": 252,
+        "previousGuardHits": 2100,
+        "lastHits": {
+          "kk0000000000000003": 320,
+          "kk0000000000000004": 500,
+          "kk0000000000000005": 500
+        },
+        "last": {
+          "kk0000000000000003": "16,1",
+          "kk0000000000000004": "16,2",
+          "kk0000000000000005": "13,6"
+        },
+        "eventsThroughTick": 199
+      },
+      "verify_replay": {
+        "status": "passed",
+        "segments": 200,
+        "first_tick": 1,
+        "last_tick": 200,
+        "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
+      },
+      "input_log": {
+        "path": "/tmp/kkscreeps-invader-battle-20261009/kkpv-continuous.jsonl",
+        "segments": 200,
+        "read_back_segments": 200,
+        "first_tick": 1,
+        "last_tick": 200,
+        "validation": "ok"
+      }
+    },
+    {
+      "name": "kkpv-prefix",
+      "report": "kkpv-prefix.json",
+      "channel": "kkpv",
+      "ticks_requested": 100,
+      "world_ticks_committed": 100,
+      "stats": {
+        "melee": 450,
+        "ranged": 2270,
+        "healed": 6952,
+        "npcMelee": 450,
+        "npcRanged": 2270,
+        "npcHealed": 2200,
+        "npcMoved": 114,
+        "deaths": 0,
+        "npcRecovered": 1720,
+        "guardInjured": 180,
+        "previousGuardHits": 2100,
+        "lastHits": {
+          "kk0000000000000003": 260,
+          "kk0000000000000004": 500,
+          "kk0000000000000005": 500
+        },
+        "last": {
+          "kk0000000000000003": "15,8",
+          "kk0000000000000004": "15,9",
+          "kk0000000000000005": "13,13"
+        },
+        "eventsThroughTick": 99
+      },
+      "verify_replay": {
+        "status": "passed",
+        "segments": 100,
+        "first_tick": 1,
+        "last_tick": 100,
+        "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
+      },
+      "input_log": {
+        "path": "/tmp/kkscreeps-invader-battle-20261009/kkpv-split.jsonl",
+        "segments": 100,
+        "read_back_segments": 100,
+        "first_tick": 1,
+        "last_tick": 100,
+        "validation": "ok"
+      }
+    },
+    {
+      "name": "kkpv-resumed",
+      "report": "kkpv-resumed.json",
+      "channel": "kkpv",
+      "ticks_requested": 100,
+      "world_ticks_committed": 100,
+      "stats": {
+        "melee": 840,
+        "ranged": 4780,
+        "healed": 14152,
+        "npcMelee": 840,
+        "npcRanged": 4780,
+        "npcHealed": 4600,
+        "npcMoved": 229,
+        "deaths": 0,
+        "npcRecovered": 3808,
+        "guardInjured": 252,
+        "previousGuardHits": 2100,
+        "lastHits": {
+          "kk0000000000000003": 320,
+          "kk0000000000000004": 500,
+          "kk0000000000000005": 500
+        },
+        "last": {
+          "kk0000000000000003": "16,1",
+          "kk0000000000000004": "16,2",
+          "kk0000000000000005": "13,6"
+        },
+        "eventsThroughTick": 199
+      },
+      "verify_replay": {
+        "status": "passed",
+        "segments": 100,
+        "first_tick": 101,
+        "last_tick": 200,
+        "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
+      },
+      "input_log": {
+        "path": "/tmp/kkscreeps-invader-battle-20261009/kkpv-split.jsonl",
+        "segments": 200,
+        "read_back_segments": 200,
+        "first_tick": 1,
+        "last_tick": 200,
+        "validation": "ok"
+      }
+    }
+  ],
+  "evidence_note": "原始日志和检查点保留在运行目录；入库保存六阶段 sim 报告及汇总。场景无随机/Date/CPU 消费，终态对比范围为 world 与玩家 Memory；每阶段另以 verify-replay 比较完整检查点。"
+}

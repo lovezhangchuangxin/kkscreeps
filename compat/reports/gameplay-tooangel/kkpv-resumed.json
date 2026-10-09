@@ -3,12 +3,12 @@
   "success": true,
   "status": "passed",
   "engine_version": "0.1.0",
-  "executable_sha256": "47f39eae6119d3c7fd0391436489f9c76b091699702d799d0fe23536403a63fd",
-  "scenario": "/private/tmp/kkscreeps-tooangel-gameplay-20261009-final/scenario.json",
+  "executable_sha256": "8043ad71137dd6d3ea11ccc8aa7304527ef5e8a3bb3da4cf79492dd9670834cc",
+  "scenario": "/private/tmp/kkscreeps-tooangel-v6-20261009/scenario.json",
   "scenario_sha256": "4b7ba227fb231c9661833d2558336064dc0f8042237eb2cf9165f6ef78b5067b",
   "modules": {
     "bot": {
-      "directory": "/private/tmp/kkscreeps-tooangel-gameplay-20261009-final/modules",
+      "directory": "/private/tmp/kkscreeps-tooangel-v6-20261009/modules",
       "sha256": "de1dbf90d5d052f5ff321cc79ca2220126974687054637c194791edf5d523632",
       "files": [
         {
@@ -570,48 +570,48 @@
   "seed": 0,
   "start_time": 1001,
   "end_time": 2001,
-  "checkpoint_loaded": "/private/tmp/kkscreeps-tooangel-gameplay-20261009-final/kkpv-checkpoint.json",
+  "checkpoint_loaded": "/private/tmp/kkscreeps-tooangel-v6-20261009/kkpv-checkpoint.json",
   "checkpoint_saved": null,
-  "run_wall_ms": 6909.362125000001,
+  "run_wall_ms": 6137.546209,
   "phases": {
     "ticks": 1000,
     "phases": {
       "project": {
         "count": 1000,
-        "p50_ms": 0.355583,
-        "p95_ms": 0.44025,
-        "p99_ms": 0.47675,
-        "max_ms": 0.520959,
-        "total_ms": 357.08633
+        "p50_ms": 0.346167,
+        "p95_ms": 0.42325,
+        "p99_ms": 0.504917,
+        "max_ms": 0.539959,
+        "total_ms": 344.81570500000004
       },
       "run": {
         "count": 1000,
-        "p50_ms": 2.040001,
-        "p95_ms": 2.867625,
-        "p99_ms": 3.409833,
-        "max_ms": 12.209709,
-        "total_ms": 2016.6722280000026
+        "p50_ms": 2.008583,
+        "p95_ms": 2.8245,
+        "p99_ms": 3.321542,
+        "max_ms": 11.947457,
+        "total_ms": 1943.8157990000009
       },
       "settle": {
         "count": 1000,
-        "p50_ms": 4.455042,
-        "p95_ms": 5.267834,
-        "p99_ms": 6.572083,
-        "max_ms": 14.840708,
-        "total_ms": 4522.249113999998
+        "p50_ms": 3.696958,
+        "p95_ms": 4.86225,
+        "p99_ms": 5.692375,
+        "max_ms": 20.426083,
+        "total_ms": 3834.5926560000003
       },
       "wall": {
         "count": 1000,
-        "p50_ms": 6.963334,
-        "p95_ms": 8.036458,
-        "p99_ms": 9.328625,
-        "max_ms": 17.507624999999997,
-        "total_ms": 6897.875148999995
+        "p50_ms": 6.034625,
+        "p95_ms": 7.853000000000001,
+        "p99_ms": 8.957583,
+        "max_ms": 22.83025,
+        "total_ms": 6125.069374000002
       }
     }
   },
   "input_log": {
-    "path": "/private/tmp/kkscreeps-tooangel-gameplay-20261009-final/kkpv-resume.jsonl",
+    "path": "/private/tmp/kkscreeps-tooangel-v6-20261009/kkpv-resume.jsonl",
     "segments": 2000,
     "read_back_segments": 2000,
     "first_tick": 1,
@@ -679,7 +679,7 @@
         "hitsMax": 5000,
         "name": "Spawn1",
         "store": {
-          "energy": 168
+          "energy": 106
         },
         "storeCapacity": null,
         "spawning": null
@@ -941,74 +941,73 @@
         ],
         "memory": {
           "creeps": {
-            "builder-543255": {
+            "builder-381315": {
               "role": "builder",
               "routing": {
                 "targetRoom": "W1N1",
                 "reached": true,
                 "reverse": false,
-                "targetId": "kk000000000000016f"
+                "targetId": "kk00000000000001ac"
               },
-              "time": 317,
+              "time": 319,
               "ttl": 242,
-              "number": 543255,
-              "step": 0,
+              "number": 381315,
+              "step": 22001,
               "base": "W1N1",
               "born": 551,
               "room": "W1N1",
               "boosted": true,
-              "hasEnergy": false,
+              "hasEnergy": true,
               "source": "kk0000000000000003",
               "lastPositions": [
                 {
-                  "x": 6,
-                  "y": 5,
+                  "x": 5,
+                  "y": 4,
                   "roomName": "W1N1"
                 },
                 {
-                  "x": 7,
-                  "y": 6,
+                  "x": 4,
+                  "y": 3,
                   "roomName": "W1N1"
                 },
                 {
-                  "x": 8,
-                  "y": 7,
+                  "x": 5,
+                  "y": 4,
                   "roomName": "W1N1"
                 },
                 {
-                  "x": 9,
-                  "y": 8,
+                  "x": 5,
+                  "y": 4,
                   "roomName": "W1N1"
                 },
                 {
-                  "x": 9,
-                  "y": 8,
+                  "x": 5,
+                  "y": 4,
                   "roomName": "W1N1"
                 },
                 {
-                  "x": 8,
-                  "y": 7,
+                  "x": 4,
+                  "y": 3,
                   "roomName": "W1N1"
                 },
                 {
-                  "x": 7,
-                  "y": 6,
+                  "x": 5,
+                  "y": 4,
                   "roomName": "W1N1"
                 }
               ],
-              "targetEnergyMy": "kk000000000000016e",
               "_move": {
                 "dest": {
                   "x": 10,
                   "y": 10,
                   "room": "W1N1"
                 },
-                "time": 1903,
+                "time": 1891,
                 "path": "100945",
                 "room": "W1N1"
               }
             },
-            "carry-394407": {
+            "carry-826310": {
               "role": "carry",
               "routing": {
                 "targetRoom": "W1N1",
@@ -1019,7 +1018,7 @@
                   }
                 ],
                 "routePos": 0,
-                "pathPos": 39,
+                "pathPos": 7,
                 "reverse": false
               },
               "level": {
@@ -1034,54 +1033,127 @@
                 ],
                 "maxLayoutAmount": 1
               },
-              "time": 727,
-              "number": 394407,
+              "time": 728,
+              "number": 826310,
               "step": 0,
               "base": "W1N1",
-              "born": 728,
+              "born": 729,
               "flee": true,
               "buildRoad": true,
               "room": "W1N1",
               "boosted": true,
               "lastPositions": [
                 {
-                  "x": 41,
-                  "y": 34,
+                  "x": 9,
+                  "y": 6,
                   "roomName": "W1N1"
                 },
                 {
-                  "x": 41,
-                  "y": 34,
+                  "x": 8,
+                  "y": 5,
                   "roomName": "W1N1"
                 },
                 {
-                  "x": 41,
-                  "y": 34,
+                  "x": 7,
+                  "y": 6,
                   "roomName": "W1N1"
                 },
                 {
-                  "x": 40,
-                  "y": 33,
+                  "x": 6,
+                  "y": 5,
                   "roomName": "W1N1"
                 },
                 {
-                  "x": 40,
-                  "y": 33,
+                  "x": 7,
+                  "y": 6,
                   "roomName": "W1N1"
                 },
                 {
-                  "x": 39,
-                  "y": 32,
+                  "x": 8,
+                  "y": 5,
                   "roomName": "W1N1"
                 },
                 {
-                  "x": 38,
-                  "y": 31,
+                  "x": 9,
+                  "y": 6,
                   "roomName": "W1N1"
                 }
               ]
             },
-            "carry-498111": {
+            "carry-617819": {
+              "role": "carry",
+              "routing": {
+                "targetRoom": "W1N1",
+                "targetId": "kk0000000000000004",
+                "route": [
+                  {
+                    "room": "W1N1"
+                  }
+                ],
+                "routePos": 0,
+                "pathPos": 4,
+                "reverse": false
+              },
+              "level": {
+                "param": [
+                  "energyCapacityAvailable"
+                ],
+                "prefixString": "",
+                "layoutString": "CM",
+                "amount": [
+                  3,
+                  3
+                ],
+                "maxLayoutAmount": 1
+              },
+              "time": 931,
+              "number": 617819,
+              "step": 0,
+              "base": "W1N1",
+              "born": 932,
+              "flee": true,
+              "buildRoad": true,
+              "room": "W1N1",
+              "boosted": true,
+              "lastPositions": [
+                {
+                  "x": 6,
+                  "y": 5,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 5,
+                  "y": 4,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 4,
+                  "y": 3,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 3,
+                  "y": 2,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 4,
+                  "y": 3,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 5,
+                  "y": 4,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 6,
+                  "y": 5,
+                  "roomName": "W1N1"
+                }
+              ]
+            },
+            "carry-304561": {
               "role": "carry",
               "routing": {
                 "targetRoom": "W1N1",
@@ -1107,11 +1179,11 @@
                 ],
                 "maxLayoutAmount": 1
               },
-              "time": 930,
-              "number": 498111,
+              "time": 1134,
+              "number": 304561,
               "step": 0,
               "base": "W1N1",
-              "born": 931,
+              "born": 1135,
               "flee": true,
               "buildRoad": true,
               "room": "W1N1",
@@ -1154,7 +1226,216 @@
                 }
               ]
             },
-            "carry-469685": {
+            "universal-850097": {
+              "role": "universal",
+              "routing": {
+                "targetRoom": "W1N1",
+                "reached": false,
+                "reverse": false,
+                "route": [
+                  {
+                    "room": "W1N1"
+                  }
+                ],
+                "routePos": 0,
+                "pathPos": -1,
+                "targetId": "kk00000000000001ac"
+              },
+              "time": 1314,
+              "ttl": 250,
+              "number": 850097,
+              "step": 0,
+              "base": "W1N1",
+              "born": 1338,
+              "buildRoad": true,
+              "room": "W1N1",
+              "boosted": true,
+              "hasEnergy": false,
+              "source": "kk0000000000000003",
+              "lastPositions": [
+                {
+                  "x": 22,
+                  "y": 15,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 21,
+                  "y": 14,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 20,
+                  "y": 13,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 19,
+                  "y": 12,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 18,
+                  "y": 11,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 17,
+                  "y": 10,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 16,
+                  "y": 9,
+                  "roomName": "W1N1"
+                }
+              ],
+              "_move": {
+                "dest": {
+                  "x": 10,
+                  "y": 10,
+                  "room": "W1N1"
+                },
+                "time": 1838,
+                "path": "090944",
+                "room": "W1N1"
+              },
+              "targetEnergyMy": "kk0000000000000002"
+            },
+            "universal-229539": {
+              "role": "universal",
+              "routing": {
+                "targetRoom": "W1N1",
+                "reached": false,
+                "reverse": false,
+                "route": [
+                  {
+                    "room": "W1N1"
+                  }
+                ],
+                "routePos": 0,
+                "pathPos": -1,
+                "targetId": "kk00000000000001ac"
+              },
+              "time": 1338,
+              "ttl": 239,
+              "number": 229539,
+              "step": 0,
+              "base": "W1N1",
+              "born": 1422,
+              "buildRoad": true,
+              "room": "W1N1",
+              "boosted": true,
+              "hasEnergy": true,
+              "source": "kk0000000000000003",
+              "lastPositions": [
+                {
+                  "x": 20,
+                  "y": 13,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 19,
+                  "y": 12,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 18,
+                  "y": 11,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 17,
+                  "y": 10,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 16,
+                  "y": 9,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 15,
+                  "y": 8,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 14,
+                  "y": 7,
+                  "roomName": "W1N1"
+                }
+              ],
+              "_move": {
+                "dest": {
+                  "x": 10,
+                  "y": 10,
+                  "room": "W1N1"
+                },
+                "time": 1921,
+                "path": "1108456",
+                "room": "W1N1"
+              },
+              "targetEnergyMy": "kk0000000000000002"
+            },
+            "scout-855249": {
+              "role": "scout",
+              "routing": {
+                "targetRoom": "W1N1",
+                "reached": true
+              },
+              "base": "W1N1",
+              "time": 1497,
+              "number": 855249,
+              "step": 0,
+              "born": 1497,
+              "room": "W1N1",
+              "boosted": true,
+              "incompleteCount": 0,
+              "path": [
+                {
+                  "x": 1,
+                  "y": 0,
+                  "roomName": "W1N1"
+                }
+              ],
+              "lastPositions": [
+                {
+                  "x": 2,
+                  "y": 1,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 1,
+                  "y": 0,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 2,
+                  "y": 1,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 1,
+                  "y": 0,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 2,
+                  "y": 1,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 1,
+                  "y": 0,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 2,
+                  "y": 1,
+                  "roomName": "W1N1"
+                }
+              ]
+            },
+            "carry-777813": {
               "role": "carry",
               "routing": {
                 "targetRoom": "W1N1",
@@ -1165,7 +1446,7 @@
                   }
                 ],
                 "routePos": 0,
-                "pathPos": 40,
+                "pathPos": 37,
                 "reverse": false
               },
               "level": {
@@ -1180,262 +1461,55 @@
                 ],
                 "maxLayoutAmount": 1
               },
-              "time": 1133,
-              "number": 469685,
+              "time": 1337,
+              "ttl": 237,
+              "number": 777813,
               "step": 0,
               "base": "W1N1",
-              "born": 1134,
+              "born": 1551,
               "flee": true,
               "buildRoad": true,
               "room": "W1N1",
               "boosted": true,
               "lastPositions": [
                 {
-                  "x": 40,
-                  "y": 35,
+                  "x": 39,
+                  "y": 32,
                   "roomName": "W1N1"
                 },
                 {
-                  "x": 40,
-                  "y": 35,
+                  "x": 38,
+                  "y": 31,
                   "roomName": "W1N1"
                 },
                 {
-                  "x": 40,
-                  "y": 35,
+                  "x": 38,
+                  "y": 31,
                   "roomName": "W1N1"
                 },
                 {
-                  "x": 41,
-                  "y": 34,
+                  "x": 38,
+                  "y": 31,
                   "roomName": "W1N1"
                 },
                 {
-                  "x": 41,
-                  "y": 34,
+                  "x": 37,
+                  "y": 30,
                   "roomName": "W1N1"
                 },
                 {
-                  "x": 41,
-                  "y": 34,
+                  "x": 37,
+                  "y": 30,
                   "roomName": "W1N1"
                 },
                 {
-                  "x": 40,
-                  "y": 33,
+                  "x": 37,
+                  "y": 30,
                   "roomName": "W1N1"
                 }
               ]
             },
-            "universal-774778": {
-              "role": "universal",
-              "routing": {
-                "targetRoom": "W1N1",
-                "reached": false,
-                "reverse": false,
-                "route": [
-                  {
-                    "room": "W1N1"
-                  }
-                ],
-                "routePos": 0,
-                "pathPos": -1,
-                "targetId": "kk000000000000016f"
-              },
-              "time": 1294,
-              "ttl": 250,
-              "number": 774778,
-              "step": 0,
-              "base": "W1N1",
-              "born": 1334,
-              "buildRoad": true,
-              "room": "W1N1",
-              "boosted": true,
-              "hasEnergy": false,
-              "source": "kk0000000000000003",
-              "lastPositions": [
-                {
-                  "x": 25,
-                  "y": 18,
-                  "roomName": "W1N1"
-                },
-                {
-                  "x": 26,
-                  "y": 19,
-                  "roomName": "W1N1"
-                },
-                {
-                  "x": 27,
-                  "y": 20,
-                  "roomName": "W1N1"
-                },
-                {
-                  "x": 28,
-                  "y": 21,
-                  "roomName": "W1N1"
-                },
-                {
-                  "x": 27,
-                  "y": 22,
-                  "roomName": "W1N1"
-                },
-                {
-                  "x": 26,
-                  "y": 23,
-                  "roomName": "W1N1"
-                },
-                {
-                  "x": 25,
-                  "y": 24,
-                  "roomName": "W1N1"
-                }
-              ],
-              "_move": {
-                "dest": {
-                  "x": 10,
-                  "y": 10,
-                  "room": "W1N1"
-                },
-                "time": 1945,
-                "path": "090944",
-                "room": "W1N1"
-              }
-            },
-            "universal-49035": {
-              "role": "universal",
-              "routing": {
-                "targetRoom": "W1N1",
-                "reached": false,
-                "reverse": false,
-                "route": [
-                  {
-                    "room": "W1N1"
-                  }
-                ],
-                "routePos": 0,
-                "pathPos": -1,
-                "targetId": "kk000000000000016f"
-              },
-              "time": 1334,
-              "ttl": 239,
-              "number": 49035,
-              "step": 0,
-              "base": "W1N1",
-              "born": 1396,
-              "buildRoad": true,
-              "room": "W1N1",
-              "boosted": true,
-              "hasEnergy": false,
-              "source": "kk0000000000000003",
-              "lastPositions": [
-                {
-                  "x": 26,
-                  "y": 23,
-                  "roomName": "W1N1"
-                },
-                {
-                  "x": 27,
-                  "y": 22,
-                  "roomName": "W1N1"
-                },
-                {
-                  "x": 28,
-                  "y": 21,
-                  "roomName": "W1N1"
-                },
-                {
-                  "x": 27,
-                  "y": 20,
-                  "roomName": "W1N1"
-                },
-                {
-                  "x": 26,
-                  "y": 19,
-                  "roomName": "W1N1"
-                },
-                {
-                  "x": 25,
-                  "y": 18,
-                  "roomName": "W1N1"
-                },
-                {
-                  "x": 24,
-                  "y": 17,
-                  "roomName": "W1N1"
-                }
-              ],
-              "_move": {
-                "dest": {
-                  "x": 10,
-                  "y": 10,
-                  "room": "W1N1"
-                },
-                "time": 1785,
-                "path": "0808544",
-                "room": "W1N1"
-              },
-              "targetEnergyMy": "kk0000000000000002"
-            },
-            "scout-551304": {
-              "role": "scout",
-              "routing": {
-                "targetRoom": "W1N1",
-                "reached": true
-              },
-              "base": "W1N1",
-              "time": 1497,
-              "number": 551304,
-              "step": 0,
-              "born": 1497,
-              "room": "W1N1",
-              "boosted": true,
-              "incompleteCount": 0,
-              "path": [
-                {
-                  "x": 49,
-                  "y": 28,
-                  "roomName": "W1N1"
-                }
-              ],
-              "lastPositions": [
-                {
-                  "x": 48,
-                  "y": 27,
-                  "roomName": "W1N1"
-                },
-                {
-                  "x": 49,
-                  "y": 28,
-                  "roomName": "W1N1"
-                },
-                {
-                  "x": 48,
-                  "y": 27,
-                  "roomName": "W1N1"
-                },
-                {
-                  "x": 49,
-                  "y": 28,
-                  "roomName": "W1N1"
-                },
-                {
-                  "x": 48,
-                  "y": 27,
-                  "roomName": "W1N1"
-                },
-                {
-                  "x": 49,
-                  "y": 28,
-                  "roomName": "W1N1"
-                },
-                {
-                  "x": 48,
-                  "y": 27,
-                  "roomName": "W1N1"
-                }
-              ]
-            },
-            "sourcer-454592": {
+            "sourcer-155235": {
               "role": "sourcer",
               "routing": {
                 "targetRoom": "W1N1",
@@ -1450,10 +1524,10 @@
                 "reverse": false,
                 "reached": true
               },
-              "number": 454592,
+              "number": 155235,
               "step": 0,
               "base": "W1N1",
-              "born": 1829,
+              "born": 1830,
               "killPrevious": true,
               "flee": false,
               "buildRoad": true,
@@ -1496,11 +1570,11 @@
                   "roomName": "W1N1"
                 }
               ],
-              "timeToTravel": 72,
-              "nextSpawn": 83,
-              "wait": 144
+              "timeToTravel": 68,
+              "nextSpawn": 79,
+              "wait": 137
             },
-            "sourcer-7395": {
+            "sourcer-876496": {
               "role": "sourcer",
               "routing": {
                 "targetRoom": "W1N1",
@@ -1511,39 +1585,20 @@
                   }
                 ],
                 "routePos": 0,
-                "pathPos": 41,
+                "pathPos": 37,
                 "reverse": false
               },
-              "number": 7395,
+              "ttl": 250,
+              "number": 876496,
               "step": 0,
               "base": "W1N1",
-              "born": 1933,
+              "born": 1945,
               "killPrevious": true,
               "flee": false,
               "buildRoad": true,
               "room": "W1N1",
               "boosted": true,
               "lastPositions": [
-                {
-                  "x": 41,
-                  "y": 36,
-                  "roomName": "W1N1"
-                },
-                {
-                  "x": 40,
-                  "y": 35,
-                  "roomName": "W1N1"
-                },
-                {
-                  "x": 41,
-                  "y": 34,
-                  "roomName": "W1N1"
-                },
-                {
-                  "x": 40,
-                  "y": 33,
-                  "roomName": "W1N1"
-                },
                 {
                   "x": 39,
                   "y": 32,
@@ -1558,18 +1613,38 @@
                   "x": 37,
                   "y": 30,
                   "roomName": "W1N1"
+                },
+                {
+                  "x": 36,
+                  "y": 29,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 35,
+                  "y": 28,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 34,
+                  "y": 27,
+                  "roomName": "W1N1"
+                },
+                {
+                  "x": 33,
+                  "y": 26,
+                  "roomName": "W1N1"
                 }
               ]
             }
           },
           "__kkAcceptance": {
             "loops": 2000,
-            "births": 14,
-            "birthsAfterDeath": 2,
+            "births": 15,
+            "birthsAfterDeath": 3,
             "deaths": 5,
-            "harvested": 12808,
-            "transferred": 12097,
-            "built": 6836,
+            "harvested": 12862,
+            "transferred": 14001,
+            "built": 6755,
             "upgraded": 200,
             "seen": {
               "kk0000000000000006": true,
@@ -1577,15 +1652,16 @@
               "kk0000000000000009": true,
               "kk000000000000000b": true,
               "kk000000000000000d": true,
-              "kk0000000000000047": true,
-              "kk0000000000000066": true,
-              "kk0000000000000080": true,
-              "kk0000000000000094": true,
-              "kk0000000000000099": true,
-              "kk00000000000000c0": true,
-              "kk00000000000000f0": true,
-              "kk0000000000000189": true,
-              "kk00000000000001a2": true
+              "kk000000000000003d": true,
+              "kk0000000000000087": true,
+              "kk000000000000009e": true,
+              "kk00000000000000af": true,
+              "kk00000000000000b6": true,
+              "kk00000000000000df": true,
+              "kk0000000000000113": true,
+              "kk0000000000000128": true,
+              "kk00000000000001b7": true,
+              "kk00000000000001e0": true
             },
             "caughtErrors": 0,
             "errorSamples": [],
@@ -1732,14 +1808,562 @@
                   "name": "pathStart-universal"
                 }
               },
-              "controllerLevel": {
-                "checkPathInterval": 1,
-                "checkWrongStructureInterval": 96,
-                "buildStructuresInterval": 1,
-                "buildBlockersInterval": 1,
-                "setup_level_1": 1,
-                "checkBlockersInterval": 159,
-                "setup_level_2": 316
+              "misplacedSpawn": true,
+              "position": {
+                "creep": {
+                  "kk0000000000000001": [
+                    {
+                      "x": 2,
+                      "y": 2,
+                      "roomName": "W1N1"
+                    }
+                  ],
+                  "kk0000000000000003": [
+                    {
+                      "x": 10,
+                      "y": 9,
+                      "roomName": "W1N1"
+                    }
+                  ],
+                  "kk0000000000000004": [
+                    {
+                      "x": 40,
+                      "y": 39,
+                      "roomName": "W1N1"
+                    }
+                  ],
+                  "kk0000000000000005": [
+                    {
+                      "x": 30,
+                      "y": 29,
+                      "roomName": "W1N1"
+                    }
+                  ],
+                  "pathStart": [
+                    {
+                      "x": 3,
+                      "y": 2,
+                      "roomName": "W1N1"
+                    }
+                  ],
+                  "filler": [
+                    {
+                      "x": 3,
+                      "y": 4,
+                      "roomName": "W1N1"
+                    }
+                  ],
+                  "kk0000000000000008": [
+                    {
+                      "x": 4,
+                      "y": 2,
+                      "roomName": "W1N1"
+                    }
+                  ]
+                },
+                "structure": {
+                  "link": [
+                    {
+                      "x": 4,
+                      "y": 4,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 10,
+                      "y": 8,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 40,
+                      "y": 38,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 25,
+                      "y": 17,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 24,
+                      "y": 18,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 23,
+                      "y": 18,
+                      "roomName": "W1N1"
+                    }
+                  ],
+                  "extractor": [
+                    {
+                      "x": 30,
+                      "y": 30,
+                      "roomName": "W1N1"
+                    }
+                  ],
+                  "storage": [
+                    {
+                      "x": 3,
+                      "y": 3,
+                      "roomName": "W1N1"
+                    }
+                  ],
+                  "powerSpawn": [
+                    {
+                      "x": 4,
+                      "y": 5,
+                      "roomName": "W1N1"
+                    }
+                  ],
+                  "tower": [
+                    {
+                      "x": 3,
+                      "y": 5,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 22,
+                      "y": 16,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 21,
+                      "y": 16,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 24,
+                      "y": 15,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 24,
+                      "y": 16,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 23,
+                      "y": 17,
+                      "roomName": "W1N1"
+                    }
+                  ],
+                  "terminal": [
+                    {
+                      "x": 30,
+                      "y": 28,
+                      "roomName": "W1N1"
+                    }
+                  ],
+                  "extension": [
+                    {
+                      "x": 4,
+                      "y": 2,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 2,
+                      "y": 3,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 5,
+                      "y": 2,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 5,
+                      "y": 3,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 6,
+                      "y": 3,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 6,
+                      "y": 4,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 7,
+                      "y": 4,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 7,
+                      "y": 5,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 5,
+                      "y": 6,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 7,
+                      "y": 7,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 6,
+                      "y": 7,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 8,
+                      "y": 4,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 9,
+                      "y": 4,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 9,
+                      "y": 5,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 10,
+                      "y": 6,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 9,
+                      "y": 7,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 10,
+                      "y": 4,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 11,
+                      "y": 4,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 11,
+                      "y": 5,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 12,
+                      "y": 6,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 12,
+                      "y": 7,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 11,
+                      "y": 7,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 12,
+                      "y": 4,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 13,
+                      "y": 4,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 13,
+                      "y": 5,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 14,
+                      "y": 5,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 14,
+                      "y": 6,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 13,
+                      "y": 7,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 15,
+                      "y": 6,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 15,
+                      "y": 7,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 14,
+                      "y": 8,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 13,
+                      "y": 8,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 16,
+                      "y": 7,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 16,
+                      "y": 8,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 15,
+                      "y": 9,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 14,
+                      "y": 9,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 17,
+                      "y": 9,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 16,
+                      "y": 10,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 15,
+                      "y": 10,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 18,
+                      "y": 9,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 18,
+                      "y": 10,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 17,
+                      "y": 11,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 19,
+                      "y": 10,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 19,
+                      "y": 11,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 18,
+                      "y": 12,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 17,
+                      "y": 12,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 20,
+                      "y": 11,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 20,
+                      "y": 12,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 19,
+                      "y": 13,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 18,
+                      "y": 13,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 21,
+                      "y": 12,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 21,
+                      "y": 13,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 20,
+                      "y": 14,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 19,
+                      "y": 14,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 22,
+                      "y": 13,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 22,
+                      "y": 14,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 21,
+                      "y": 15,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 20,
+                      "y": 15,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 23,
+                      "y": 14,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 23,
+                      "y": 15,
+                      "roomName": "W1N1"
+                    }
+                  ],
+                  "spawn": [
+                    {
+                      "x": 5,
+                      "y": 5,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 6,
+                      "y": 6,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 8,
+                      "y": 6,
+                      "roomName": "W1N1"
+                    }
+                  ],
+                  "nuker": [
+                    {
+                      "x": 22,
+                      "y": 17,
+                      "roomName": "W1N1"
+                    }
+                  ],
+                  "observer": [
+                    {
+                      "x": 25,
+                      "y": 16,
+                      "roomName": "W1N1"
+                    }
+                  ],
+                  "factory": [
+                    {
+                      "x": 26,
+                      "y": 17,
+                      "roomName": "W1N1"
+                    }
+                  ],
+                  "lab": [
+                    {
+                      "x": 18,
+                      "y": 6,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 19,
+                      "y": 7,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 17,
+                      "y": 6,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 17,
+                      "y": 7,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 18,
+                      "y": 5,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 18,
+                      "y": 8,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 19,
+                      "y": 5,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 19,
+                      "y": 8,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 20,
+                      "y": 6,
+                      "roomName": "W1N1"
+                    },
+                    {
+                      "x": 20,
+                      "y": 7,
+                      "roomName": "W1N1"
+                    }
+                  ]
+                },
+                "pathEndLevel": [
+                  0,
+                  0,
+                  2,
+                  4,
+                  8,
+                  11,
+                  14,
+                  16,
+                  19
+                ],
+                "pathEnd": {
+                  "x": 26,
+                  "y": 18,
+                  "roomName": "W1N1"
+                },
+                "version": 22
               },
               "costMatrix": [
                 4294967295,
@@ -2368,7 +2992,15 @@
                 4294967295,
                 4294967295
               ],
-              "misplacedSpawn": true,
+              "controllerLevel": {
+                "checkPathInterval": 1,
+                "checkWrongStructureInterval": 96,
+                "buildStructuresInterval": 1,
+                "buildBlockersInterval": 1,
+                "setup_level_1": 1,
+                "checkBlockersInterval": 160,
+                "setup_level_2": 318
+              },
               "attackTimer": 0,
               "underSiege": false,
               "queue": [],
@@ -2378,571 +3010,15 @@
                 "builder": true
               },
               "lastSeen": 2000,
-              "spawnIdle": 0.7966879433457174,
-              "constants": {},
-              "position": {
-                "creep": {
-                  "kk0000000000000001": [
-                    {
-                      "x": 2,
-                      "y": 2,
-                      "roomName": "W1N1"
-                    }
-                  ],
-                  "kk0000000000000003": [
-                    {
-                      "x": 10,
-                      "y": 9,
-                      "roomName": "W1N1"
-                    }
-                  ],
-                  "kk0000000000000004": [
-                    {
-                      "x": 40,
-                      "y": 39,
-                      "roomName": "W1N1"
-                    }
-                  ],
-                  "kk0000000000000005": [
-                    {
-                      "x": 30,
-                      "y": 29,
-                      "roomName": "W1N1"
-                    }
-                  ],
-                  "pathStart": [
-                    {
-                      "x": 3,
-                      "y": 2,
-                      "roomName": "W1N1"
-                    }
-                  ],
-                  "filler": [
-                    {
-                      "x": 3,
-                      "y": 4,
-                      "roomName": "W1N1"
-                    }
-                  ],
-                  "kk0000000000000008": [
-                    {
-                      "x": 4,
-                      "y": 2,
-                      "roomName": "W1N1"
-                    }
-                  ]
-                },
-                "structure": {
-                  "link": [
-                    {
-                      "x": 4,
-                      "y": 4,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 10,
-                      "y": 8,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 40,
-                      "y": 38,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 25,
-                      "y": 17,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 24,
-                      "y": 18,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 23,
-                      "y": 18,
-                      "roomName": "W1N1"
-                    }
-                  ],
-                  "extractor": [
-                    {
-                      "x": 30,
-                      "y": 30,
-                      "roomName": "W1N1"
-                    }
-                  ],
-                  "storage": [
-                    {
-                      "x": 3,
-                      "y": 3,
-                      "roomName": "W1N1"
-                    }
-                  ],
-                  "powerSpawn": [
-                    {
-                      "x": 4,
-                      "y": 5,
-                      "roomName": "W1N1"
-                    }
-                  ],
-                  "tower": [
-                    {
-                      "x": 3,
-                      "y": 5,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 22,
-                      "y": 16,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 21,
-                      "y": 16,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 24,
-                      "y": 15,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 24,
-                      "y": 16,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 23,
-                      "y": 17,
-                      "roomName": "W1N1"
-                    }
-                  ],
-                  "terminal": [
-                    {
-                      "x": 30,
-                      "y": 28,
-                      "roomName": "W1N1"
-                    }
-                  ],
-                  "extension": [
-                    {
-                      "x": 4,
-                      "y": 2,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 2,
-                      "y": 3,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 5,
-                      "y": 2,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 5,
-                      "y": 3,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 6,
-                      "y": 3,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 6,
-                      "y": 4,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 7,
-                      "y": 4,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 7,
-                      "y": 5,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 5,
-                      "y": 6,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 7,
-                      "y": 7,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 6,
-                      "y": 7,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 8,
-                      "y": 4,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 9,
-                      "y": 4,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 9,
-                      "y": 5,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 10,
-                      "y": 6,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 9,
-                      "y": 7,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 10,
-                      "y": 4,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 11,
-                      "y": 4,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 11,
-                      "y": 5,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 12,
-                      "y": 6,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 12,
-                      "y": 7,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 11,
-                      "y": 7,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 12,
-                      "y": 4,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 13,
-                      "y": 4,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 13,
-                      "y": 5,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 14,
-                      "y": 5,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 14,
-                      "y": 6,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 13,
-                      "y": 7,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 15,
-                      "y": 6,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 15,
-                      "y": 7,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 14,
-                      "y": 8,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 13,
-                      "y": 8,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 16,
-                      "y": 7,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 16,
-                      "y": 8,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 15,
-                      "y": 9,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 14,
-                      "y": 9,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 17,
-                      "y": 9,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 16,
-                      "y": 10,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 15,
-                      "y": 10,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 18,
-                      "y": 9,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 18,
-                      "y": 10,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 17,
-                      "y": 11,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 19,
-                      "y": 10,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 19,
-                      "y": 11,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 18,
-                      "y": 12,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 17,
-                      "y": 12,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 20,
-                      "y": 11,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 20,
-                      "y": 12,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 19,
-                      "y": 13,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 18,
-                      "y": 13,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 21,
-                      "y": 12,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 21,
-                      "y": 13,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 20,
-                      "y": 14,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 19,
-                      "y": 14,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 22,
-                      "y": 13,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 22,
-                      "y": 14,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 21,
-                      "y": 15,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 20,
-                      "y": 15,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 23,
-                      "y": 14,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 23,
-                      "y": 15,
-                      "roomName": "W1N1"
-                    }
-                  ],
-                  "spawn": [
-                    {
-                      "x": 5,
-                      "y": 5,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 6,
-                      "y": 6,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 8,
-                      "y": 6,
-                      "roomName": "W1N1"
-                    }
-                  ],
-                  "nuker": [
-                    {
-                      "x": 22,
-                      "y": 17,
-                      "roomName": "W1N1"
-                    }
-                  ],
-                  "observer": [
-                    {
-                      "x": 25,
-                      "y": 16,
-                      "roomName": "W1N1"
-                    }
-                  ],
-                  "factory": [
-                    {
-                      "x": 26,
-                      "y": 17,
-                      "roomName": "W1N1"
-                    }
-                  ],
-                  "lab": [
-                    {
-                      "x": 18,
-                      "y": 6,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 19,
-                      "y": 7,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 17,
-                      "y": 6,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 17,
-                      "y": 7,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 18,
-                      "y": 5,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 18,
-                      "y": 8,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 19,
-                      "y": 5,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 19,
-                      "y": 8,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 20,
-                      "y": 6,
-                      "roomName": "W1N1"
-                    },
-                    {
-                      "x": 20,
-                      "y": 7,
-                      "roomName": "W1N1"
-                    }
-                  ]
-                },
-                "pathEndLevel": [
-                  0,
-                  0,
-                  2,
-                  4,
-                  8,
-                  11,
-                  14,
-                  16,
-                  19
-                ],
-                "pathEnd": {
-                  "x": 26,
-                  "y": 18,
-                  "roomName": "W1N1"
-                },
-                "version": 22
-              }
+              "spawnIdle": 0.785395643112119,
+              "constants": {}
             }
           },
           "layoutsCost": {},
           "skippedRoomsLog": {},
           "players": {}
         },
-        "raw_memory": "{\"creeps\":{\"builder-543255\":{\"role\":\"builder\",\"routing\":{\"targetRoom\":\"W1N1\",\"reached\":true,\"reverse\":false,\"targetId\":\"kk000000000000016f\"},\"time\":317,\"ttl\":242,\"number\":543255,\"step\":0,\"base\":\"W1N1\",\"born\":551,\"room\":\"W1N1\",\"boosted\":true,\"hasEnergy\":false,\"source\":\"kk0000000000000003\",\"lastPositions\":[{\"x\":6,\"y\":5,\"roomName\":\"W1N1\"},{\"x\":7,\"y\":6,\"roomName\":\"W1N1\"},{\"x\":8,\"y\":7,\"roomName\":\"W1N1\"},{\"x\":9,\"y\":8,\"roomName\":\"W1N1\"},{\"x\":9,\"y\":8,\"roomName\":\"W1N1\"},{\"x\":8,\"y\":7,\"roomName\":\"W1N1\"},{\"x\":7,\"y\":6,\"roomName\":\"W1N1\"}],\"targetEnergyMy\":\"kk000000000000016e\",\"_move\":{\"dest\":{\"x\":10,\"y\":10,\"room\":\"W1N1\"},\"time\":1903,\"path\":\"100945\",\"room\":\"W1N1\"}},\"carry-394407\":{\"role\":\"carry\",\"routing\":{\"targetRoom\":\"W1N1\",\"targetId\":\"kk0000000000000004\",\"route\":[{\"room\":\"W1N1\"}],\"routePos\":0,\"pathPos\":39,\"reverse\":false},\"level\":{\"param\":[\"energyCapacityAvailable\"],\"prefixString\":\"\",\"layoutString\":\"CM\",\"amount\":[3,3],\"maxLayoutAmount\":1},\"time\":727,\"number\":394407,\"step\":0,\"base\":\"W1N1\",\"born\":728,\"flee\":true,\"buildRoad\":true,\"room\":\"W1N1\",\"boosted\":true,\"lastPositions\":[{\"x\":41,\"y\":34,\"roomName\":\"W1N1\"},{\"x\":41,\"y\":34,\"roomName\":\"W1N1\"},{\"x\":41,\"y\":34,\"roomName\":\"W1N1\"},{\"x\":40,\"y\":33,\"roomName\":\"W1N1\"},{\"x\":40,\"y\":33,\"roomName\":\"W1N1\"},{\"x\":39,\"y\":32,\"roomName\":\"W1N1\"},{\"x\":38,\"y\":31,\"roomName\":\"W1N1\"}]},\"carry-498111\":{\"role\":\"carry\",\"routing\":{\"targetRoom\":\"W1N1\",\"targetId\":\"kk0000000000000004\",\"route\":[{\"room\":\"W1N1\"}],\"routePos\":0,\"pathPos\":11,\"reverse\":true},\"level\":{\"param\":[\"energyCapacityAvailable\"],\"prefixString\":\"\",\"layoutString\":\"CM\",\"amount\":[3,3],\"maxLayoutAmount\":1},\"time\":930,\"number\":498111,\"step\":0,\"base\":\"W1N1\",\"born\":931,\"flee\":true,\"buildRoad\":true,\"room\":\"W1N1\",\"boosted\":true,\"lastPositions\":[{\"x\":15,\"y\":8,\"roomName\":\"W1N1\"},{\"x\":16,\"y\":9,\"roomName\":\"W1N1\"},{\"x\":17,\"y\":10,\"roomName\":\"W1N1\"},{\"x\":18,\"y\":11,\"roomName\":\"W1N1\"},{\"x\":19,\"y\":12,\"roomName\":\"W1N1\"},{\"x\":20,\"y\":13,\"roomName\":\"W1N1\"},{\"x\":21,\"y\":14,\"roomName\":\"W1N1\"}]},\"carry-469685\":{\"role\":\"carry\",\"routing\":{\"targetRoom\":\"W1N1\",\"targetId\":\"kk0000000000000004\",\"route\":[{\"room\":\"W1N1\"}],\"routePos\":0,\"pathPos\":40,\"reverse\":false},\"level\":{\"param\":[\"energyCapacityAvailable\"],\"prefixString\":\"\",\"layoutString\":\"CM\",\"amount\":[3,3],\"maxLayoutAmount\":1},\"time\":1133,\"number\":469685,\"step\":0,\"base\":\"W1N1\",\"born\":1134,\"flee\":true,\"buildRoad\":true,\"room\":\"W1N1\",\"boosted\":true,\"lastPositions\":[{\"x\":40,\"y\":35,\"roomName\":\"W1N1\"},{\"x\":40,\"y\":35,\"roomName\":\"W1N1\"},{\"x\":40,\"y\":35,\"roomName\":\"W1N1\"},{\"x\":41,\"y\":34,\"roomName\":\"W1N1\"},{\"x\":41,\"y\":34,\"roomName\":\"W1N1\"},{\"x\":41,\"y\":34,\"roomName\":\"W1N1\"},{\"x\":40,\"y\":33,\"roomName\":\"W1N1\"}]},\"universal-774778\":{\"role\":\"universal\",\"routing\":{\"targetRoom\":\"W1N1\",\"reached\":false,\"reverse\":false,\"route\":[{\"room\":\"W1N1\"}],\"routePos\":0,\"pathPos\":-1,\"targetId\":\"kk000000000000016f\"},\"time\":1294,\"ttl\":250,\"number\":774778,\"step\":0,\"base\":\"W1N1\",\"born\":1334,\"buildRoad\":true,\"room\":\"W1N1\",\"boosted\":true,\"hasEnergy\":false,\"source\":\"kk0000000000000003\",\"lastPositions\":[{\"x\":25,\"y\":18,\"roomName\":\"W1N1\"},{\"x\":26,\"y\":19,\"roomName\":\"W1N1\"},{\"x\":27,\"y\":20,\"roomName\":\"W1N1\"},{\"x\":28,\"y\":21,\"roomName\":\"W1N1\"},{\"x\":27,\"y\":22,\"roomName\":\"W1N1\"},{\"x\":26,\"y\":23,\"roomName\":\"W1N1\"},{\"x\":25,\"y\":24,\"roomName\":\"W1N1\"}],\"_move\":{\"dest\":{\"x\":10,\"y\":10,\"room\":\"W1N1\"},\"time\":1945,\"path\":\"090944\",\"room\":\"W1N1\"}},\"universal-49035\":{\"role\":\"universal\",\"routing\":{\"targetRoom\":\"W1N1\",\"reached\":false,\"reverse\":false,\"route\":[{\"room\":\"W1N1\"}],\"routePos\":0,\"pathPos\":-1,\"targetId\":\"kk000000000000016f\"},\"time\":1334,\"ttl\":239,\"number\":49035,\"step\":0,\"base\":\"W1N1\",\"born\":1396,\"buildRoad\":true,\"room\":\"W1N1\",\"boosted\":true,\"hasEnergy\":false,\"source\":\"kk0000000000000003\",\"lastPositions\":[{\"x\":26,\"y\":23,\"roomName\":\"W1N1\"},{\"x\":27,\"y\":22,\"roomName\":\"W1N1\"},{\"x\":28,\"y\":21,\"roomName\":\"W1N1\"},{\"x\":27,\"y\":20,\"roomName\":\"W1N1\"},{\"x\":26,\"y\":19,\"roomName\":\"W1N1\"},{\"x\":25,\"y\":18,\"roomName\":\"W1N1\"},{\"x\":24,\"y\":17,\"roomName\":\"W1N1\"}],\"_move\":{\"dest\":{\"x\":10,\"y\":10,\"room\":\"W1N1\"},\"time\":1785,\"path\":\"0808544\",\"room\":\"W1N1\"},\"targetEnergyMy\":\"kk0000000000000002\"},\"scout-551304\":{\"role\":\"scout\",\"routing\":{\"targetRoom\":\"W1N1\",\"reached\":true},\"base\":\"W1N1\",\"time\":1497,\"number\":551304,\"step\":0,\"born\":1497,\"room\":\"W1N1\",\"boosted\":true,\"incompleteCount\":0,\"path\":[{\"x\":49,\"y\":28,\"roomName\":\"W1N1\"}],\"lastPositions\":[{\"x\":48,\"y\":27,\"roomName\":\"W1N1\"},{\"x\":49,\"y\":28,\"roomName\":\"W1N1\"},{\"x\":48,\"y\":27,\"roomName\":\"W1N1\"},{\"x\":49,\"y\":28,\"roomName\":\"W1N1\"},{\"x\":48,\"y\":27,\"roomName\":\"W1N1\"},{\"x\":49,\"y\":28,\"roomName\":\"W1N1\"},{\"x\":48,\"y\":27,\"roomName\":\"W1N1\"}]},\"sourcer-454592\":{\"role\":\"sourcer\",\"routing\":{\"targetRoom\":\"W1N1\",\"targetId\":\"kk0000000000000003\",\"route\":[{\"room\":\"W1N1\"}],\"routePos\":0,\"pathPos\":7,\"reverse\":false,\"reached\":true},\"number\":454592,\"step\":0,\"base\":\"W1N1\",\"born\":1829,\"killPrevious\":true,\"flee\":false,\"buildRoad\":true,\"room\":\"W1N1\",\"boosted\":true,\"lastPositions\":[{\"x\":10,\"y\":9,\"roomName\":\"W1N1\"},{\"x\":10,\"y\":9,\"roomName\":\"W1N1\"},{\"x\":10,\"y\":9,\"roomName\":\"W1N1\"},{\"x\":10,\"y\":9,\"roomName\":\"W1N1\"},{\"x\":10,\"y\":9,\"roomName\":\"W1N1\"},{\"x\":10,\"y\":9,\"roomName\":\"W1N1\"},{\"x\":10,\"y\":9,\"roomName\":\"W1N1\"}],\"timeToTravel\":72,\"nextSpawn\":83,\"wait\":144},\"sourcer-7395\":{\"role\":\"sourcer\",\"routing\":{\"targetRoom\":\"W1N1\",\"targetId\":\"kk0000000000000004\",\"route\":[{\"room\":\"W1N1\"}],\"routePos\":0,\"pathPos\":41,\"reverse\":false},\"number\":7395,\"step\":0,\"base\":\"W1N1\",\"born\":1933,\"killPrevious\":true,\"flee\":false,\"buildRoad\":true,\"room\":\"W1N1\",\"boosted\":true,\"lastPositions\":[{\"x\":41,\"y\":36,\"roomName\":\"W1N1\"},{\"x\":40,\"y\":35,\"roomName\":\"W1N1\"},{\"x\":41,\"y\":34,\"roomName\":\"W1N1\"},{\"x\":40,\"y\":33,\"roomName\":\"W1N1\"},{\"x\":39,\"y\":32,\"roomName\":\"W1N1\"},{\"x\":38,\"y\":31,\"roomName\":\"W1N1\"},{\"x\":37,\"y\":30,\"roomName\":\"W1N1\"}]}},\"__kkAcceptance\":{\"loops\":2000,\"births\":14,\"birthsAfterDeath\":2,\"deaths\":5,\"harvested\":12808,\"transferred\":12097,\"built\":6836,\"upgraded\":200,\"seen\":{\"kk0000000000000006\":true,\"kk0000000000000007\":true,\"kk0000000000000009\":true,\"kk000000000000000b\":true,\"kk000000000000000d\":true,\"kk0000000000000047\":true,\"kk0000000000000066\":true,\"kk0000000000000080\":true,\"kk0000000000000094\":true,\"kk0000000000000099\":true,\"kk00000000000000c0\":true,\"kk00000000000000f0\":true,\"kk0000000000000189\":true,\"kk00000000000001a2\":true},\"caughtErrors\":0,\"errorSamples\":[],\"eventsThroughTick\":1999},\"time\":2000,\"username\":\"bot\",\"myRooms\":[\"W1N1\"],\"squads\":{},\"powerBanks\":{},\"skippedRooms\":[],\"orders\":{\"buy\":{},\"sell\":{}},\"constructionSites\":{},\"quests\":{},\"rooms\":{\"W1N1\":{\"setup\":{\"steps\":{\"cleanupMemory\":true,\"updatePosition\":true,\"costMatrixSetMineralPath\":true,\"costMatrixPathFromStartToExit\":true,\"costMatrixPathCrossings\":true,\"addTerminal\":true,\"setupStructures\":true,\"checkForMisplacedSpawn\":true},\"completed\":true},\"routing\":{\"pathStart-kk0000000000000001\":{\"path\":\"W1N1:03027\",\"created\":1,\"name\":\"pathStart-kk0000000000000001\"},\"pathStart-kk0000000000000003\":{\"path\":\"W1N1:03024444444\",\"created\":1,\"name\":\"pathStart-kk0000000000000003\"},\"pathStart-kk0000000000000004\":{\"path\":\"W1N1:03024444244224444444444444444444444444444464466\",\"created\":1,\"name\":\"pathStart-kk0000000000000004\"},\"pathStart-filler\":{\"path\":\"W1N1:030246\",\"created\":1,\"name\":\"pathStart-filler\"},\"pathStart-kk0000000000000005\":{\"path\":\"W1N1:0302444424242444444444444444444444666\",\"created\":1,\"name\":\"pathStart-kk0000000000000005\"},\"pathStart-W1N2\":{\"path\":\"W1N1:03024444242424444222222222\",\"created\":1,\"name\":\"pathStart-W1N2\"},\"pathStart-W0N1\":{\"path\":\"W1N1:03024444242424444444444444444444444444444222222223\",\"created\":1,\"name\":\"pathStart-W0N1\"},\"pathStart-W1N0\":{\"path\":\"W1N1:030244442424244444444444444444444444444446666666666666665\",\"created\":1,\"name\":\"pathStart-W1N0\"},\"pathStart-W2N1\":{\"path\":\"W1N1:03024444242424444466666666666666776\",\"created\":1,\"name\":\"pathStart-W2N1\"},\"W1N2-W0N1\":{\"path\":\"W1N1:2500666666666444444444444444444444444222222223\",\"created\":1,\"name\":\"W1N2-W0N1\"},\"W1N2-W1N0\":{\"path\":\"W1N1:25006666666664444444444444444444444446666666666666665\",\"created\":1,\"name\":\"W1N2-W1N0\"},\"W1N2-W2N1\":{\"path\":\"W1N1:2500666666666466666666666666776\",\"created\":1,\"name\":\"W1N2-W2N1\"},\"W0N1-W1N2\":{\"path\":\"W1N1:4925766666666888888888888888888888888222222222\",\"created\":1,\"name\":\"W0N1-W1N2\"},\"W0N1-W1N0\":{\"path\":\"W1N1:49257666666666666666666666665\",\"created\":1,\"name\":\"W0N1-W1N0\"},\"W0N1-W2N1\":{\"path\":\"W1N1:49257666666668888888888888888888888866666666666666776\",\"created\":1,\"name\":\"W0N1-W2N1\"},\"W1N0-W1N2\":{\"path\":\"W1N1:25491222222222222222888888888888888888888888222222222\",\"created\":1,\"name\":\"W1N0-W1N2\"},\"W1N0-W0N1\":{\"path\":\"W1N1:25491222222222222222222222223\",\"created\":1,\"name\":\"W1N0-W0N1\"},\"W1N0-W2N1\":{\"path\":\"W1N1:254912222222222222228888888888888888888888866666666666666776\",\"created\":1,\"name\":\"W1N0-W2N1\"},\"W2N1-W1N2\":{\"path\":\"W1N1:0025233222222222222228222222222\",\"created\":1,\"name\":\"W2N1-W1N2\"},\"W2N1-W0N1\":{\"path\":\"W1N1:00252332222222222222244444444444444444444444222222223\",\"created\":1,\"name\":\"W2N1-W0N1\"},\"W2N1-W1N0\":{\"path\":\"W1N1:002523322222222222222444444444444444444444446666666666666665\",\"created\":1,\"name\":\"W2N1-W1N0\"},\"pathStart-universal\":{\"path\":\"W1N1:03024444242424444444444444\",\"created\":1,\"name\":\"pathStart-universal\"}},\"controllerLevel\":{\"checkPathInterval\":1,\"checkWrongStructureInterval\":96,\"buildStructuresInterval\":1,\"buildBlockersInterval\":1,\"setup_level_1\":1,\"checkBlockersInterval\":159,\"setup_level_2\":316},\"costMatrix\":[4294967295,4294967295,4294967295,4294967295,4294967295,4294967295,4294902271,4294967295,4294967295,4294967295,4294967295,4294967295,687865855,673720360,673720360,673720360,673720360,673720360,671164456,673720360,673720360,673720360,673720360,673720360,4280821800,4294912255,673720360,673720360,673720360,673720360,673720360,673720321,673720360,673720360,673720360,673720360,673720360,687865640,687810561,673720360,673720360,673720360,673720360,671164456,673720360,673720360,673720360,673720360,673720360,4280821800,33499391,673720360,673720360,673720360,673720360,19408936,673720360,673720360,673720360,673720360,673720360,673720360,687865640,4278321151,168430090,168430090,168430090,168430090,168430081,168430090,168430090,168430090,168430090,671746570,4280821800,4280822015,168427816,168430090,168430090,168430090,168427786,168430090,168430090,168430090,168430090,168430090,673720330,687865640,170403880,1010580481,1010580540,168430090,167840266,168430090,168430090,168430090,168430090,168430090,671746570,4280821800,673720575,17432872,1010580540,168442940,17435146,168430090,168430090,168430090,168430090,168430090,168430090,673720330,687865640,170403880,1006713857,1010580540,168430090,168430081,168430090,168430090,168430090,168430090,168430090,671746570,4280821800,673720575,17432872,1010630460,168442940,168427786,168430090,168430090,168430090,168430090,168430090,168430090,673720330,687865640,170403880,1010580481,1010580540,167840266,168430090,168430090,168430090,168430090,168430090,168430090,671746570,4280821800,673720575,1007288616,1010580540,17447996,168430090,168430090,168430090,168430090,168430090,168430090,168430090,673720330,687865640,170403880,1010580481,1010580540,168430081,168430090,168430090,168430090,168430090,168430090,168430090,671746570,4280821800,673720575,17435176,168430090,168427786,168430090,168430090,168430090,168430090,168430090,168430090,168430090,673720330,687865640,170403880,167840266,167840266,168430090,168430090,168430090,168430090,168430090,168430090,168430090,671746570,4280821800,673720575,168430120,17432842,168430090,168430090,168430090,168430090,168430090,168430090,168430090,168430090,673720330,687865640,170403880,167840266,168430081,168430090,168430090,168430090,168430090,168430090,168430090,168430090,671746570,4280821800,673720575,17435176,17435146,168430090,168430090,168430090,168430090,168430090,168430090,168430090,168430090,673720330,687865640,170403880,168430081,167840266,168430090,168430090,168430090,168430090,168430090,168430090,168430090,671746570,4280821800,673720575,168427816,168430090,168427786,168430090,168430090,168430090,168430090,168430090,168430090,168430090,673720330,687865640,167847976,168430090,168430090,168430081,168430090,168430090,168430090,168430090,168430090,168430090,671746570,4280821800,19409151,168430120,168430090,17435146,168430090,168430090,168430090,168430090,168430090,168430090,168430090,673720330,687865640,170403841,168430090,168430090,167840266,168430090,168430090,168430090,168430090,168430090,168430090,671746570,4280821800,673710591,168430120,168430090,168430090,168427786,168430090,168430090,168430090,168430090,168430090,168430090,673720330,671219496,170403880,168430090,168430090,168430090,168430081,4278848010,168430090,168430090,168430090,168430090,671746570,16853032,673720575,168430120,168430090,168430090,17435146,168430090,168430090,168430090,168430090,168430090,168430090,19408906,687865640,170403880,168430090,168430090,168430090,167840266,168430090,168430090,168430090,168430090,168430090,671746570,4280821761,673720575,168430120,168430090,168430090,168430090,168427786,168430090,168430090,168430090,168430090,168430090,673710346,687865640,170403880,168430090,168430090,168430090,168430090,168430081,168430090,168430090,168430090,168430090,671156746,4280821800,673720575,168430120,168430090,168430090,168430090,17435146,168430090,168492810,168430090,168430090,17435146,673720330,687865640,170403880,168430090,168430090,168430090,168430090,167840266,167840266,168430090,168430090,168430090,671746561,4280821800,673720575,168430120,168430090,168430090,168430090,168430090,17432842,168430090,168430090,168430090,168427786,673720330,687865640,170403880,168430090,168430090,168430090,168430090,168430090,168430081,168430090,168430090,167840266,671746570,4280821800,673720575,168430120,168430090,168430090,168430090,168430090,17435146,168430090,168430090,17435146,168430090,673720330,687865640,170403880,168430090,168430090,168430090,168430090,168430090,167840266,168430090,168430090,168430081,671746570,4280821800,673720575,168430120,168430090,168430090,168430090,168430090,168430090,168427786,168430090,168427786,168430090,673720330,687865640,170403880,168430090,168430090,168430090,168430090,168430090,168430090,168430081,1006701066,1010580540,671759420,4280821800,673720575,168430120,168430090,168430090,168430090,168430090,168430090,17435146,17435146,1010580490,1010580540,673720330,687865640,170403880,168430090,168430090,168430090,168430090,168430090,168430090,167840266,1007290881,1010580540,671759420,4280821800,673720575,168430120,168430090,168430090,168430090,168430090,168430090,168430090,17432842,4282137610,1010580540,673720330,687865640,170403880,168430090,168430090,168430090,168430090,168430090,168430090,167840266,1006701057,1010580481,671759420,4280821800,673720575,168430120,168430090,168430090,168430090,168430090,168430090,17435146,168430090,1010565386,1010580540,673720330,687865640,170403880,168430090,168430090,168430090,168430090,168430090,168430090,168430081,1007290890,1010580540,671759420,4280821800,673720575,168430120,168430090,168430090,168430090,168430090,168430090,168427786,168430090,168430090,168430090,673720330,687865640,673720360,673720360,673720360,673720360,673720360,673720360,671164456,673720360,673720360,673720360,673720360,4280821800,673720575,673720360,673720360,673720360,673720360,673720360,19408936,673720360,673720360,673720360,673720360,673720360,687865640,673720360,673720360,673720360,673720360,673720360,673720360,673720321,673720360,673720360,673720360,673720360,4280821800,673720575,673720360,673720360,673720360,673720360,673720360,673710376,673720360,673720360,673720360,673720360,673720360,4294967080,4294967295,4294967295,4294967295,4294967295,4294967295,33554431,4294967295,4294967295,4294967295,4294967295,4294967295,4294967295],\"misplacedSpawn\":true,\"attackTimer\":0,\"underSiege\":false,\"queue\":[],\"roles\":{\"universal\":true,\"sourcer\":true,\"builder\":true},\"lastSeen\":2000,\"spawnIdle\":0.7966879433457174,\"constants\":{},\"position\":{\"creep\":{\"kk0000000000000001\":[{\"x\":2,\"y\":2,\"roomName\":\"W1N1\"}],\"kk0000000000000003\":[{\"x\":10,\"y\":9,\"roomName\":\"W1N1\"}],\"kk0000000000000004\":[{\"x\":40,\"y\":39,\"roomName\":\"W1N1\"}],\"kk0000000000000005\":[{\"x\":30,\"y\":29,\"roomName\":\"W1N1\"}],\"pathStart\":[{\"x\":3,\"y\":2,\"roomName\":\"W1N1\"}],\"filler\":[{\"x\":3,\"y\":4,\"roomName\":\"W1N1\"}],\"kk0000000000000008\":[{\"x\":4,\"y\":2,\"roomName\":\"W1N1\"}]},\"structure\":{\"link\":[{\"x\":4,\"y\":4,\"roomName\":\"W1N1\"},{\"x\":10,\"y\":8,\"roomName\":\"W1N1\"},{\"x\":40,\"y\":38,\"roomName\":\"W1N1\"},{\"x\":25,\"y\":17,\"roomName\":\"W1N1\"},{\"x\":24,\"y\":18,\"roomName\":\"W1N1\"},{\"x\":23,\"y\":18,\"roomName\":\"W1N1\"}],\"extractor\":[{\"x\":30,\"y\":30,\"roomName\":\"W1N1\"}],\"storage\":[{\"x\":3,\"y\":3,\"roomName\":\"W1N1\"}],\"powerSpawn\":[{\"x\":4,\"y\":5,\"roomName\":\"W1N1\"}],\"tower\":[{\"x\":3,\"y\":5,\"roomName\":\"W1N1\"},{\"x\":22,\"y\":16,\"roomName\":\"W1N1\"},{\"x\":21,\"y\":16,\"roomName\":\"W1N1\"},{\"x\":24,\"y\":15,\"roomName\":\"W1N1\"},{\"x\":24,\"y\":16,\"roomName\":\"W1N1\"},{\"x\":23,\"y\":17,\"roomName\":\"W1N1\"}],\"terminal\":[{\"x\":30,\"y\":28,\"roomName\":\"W1N1\"}],\"extension\":[{\"x\":4,\"y\":2,\"roomName\":\"W1N1\"},{\"x\":2,\"y\":3,\"roomName\":\"W1N1\"},{\"x\":5,\"y\":2,\"roomName\":\"W1N1\"},{\"x\":5,\"y\":3,\"roomName\":\"W1N1\"},{\"x\":6,\"y\":3,\"roomName\":\"W1N1\"},{\"x\":6,\"y\":4,\"roomName\":\"W1N1\"},{\"x\":7,\"y\":4,\"roomName\":\"W1N1\"},{\"x\":7,\"y\":5,\"roomName\":\"W1N1\"},{\"x\":5,\"y\":6,\"roomName\":\"W1N1\"},{\"x\":7,\"y\":7,\"roomName\":\"W1N1\"},{\"x\":6,\"y\":7,\"roomName\":\"W1N1\"},{\"x\":8,\"y\":4,\"roomName\":\"W1N1\"},{\"x\":9,\"y\":4,\"roomName\":\"W1N1\"},{\"x\":9,\"y\":5,\"roomName\":\"W1N1\"},{\"x\":10,\"y\":6,\"roomName\":\"W1N1\"},{\"x\":9,\"y\":7,\"roomName\":\"W1N1\"},{\"x\":10,\"y\":4,\"roomName\":\"W1N1\"},{\"x\":11,\"y\":4,\"roomName\":\"W1N1\"},{\"x\":11,\"y\":5,\"roomName\":\"W1N1\"},{\"x\":12,\"y\":6,\"roomName\":\"W1N1\"},{\"x\":12,\"y\":7,\"roomName\":\"W1N1\"},{\"x\":11,\"y\":7,\"roomName\":\"W1N1\"},{\"x\":12,\"y\":4,\"roomName\":\"W1N1\"},{\"x\":13,\"y\":4,\"roomName\":\"W1N1\"},{\"x\":13,\"y\":5,\"roomName\":\"W1N1\"},{\"x\":14,\"y\":5,\"roomName\":\"W1N1\"},{\"x\":14,\"y\":6,\"roomName\":\"W1N1\"},{\"x\":13,\"y\":7,\"roomName\":\"W1N1\"},{\"x\":15,\"y\":6,\"roomName\":\"W1N1\"},{\"x\":15,\"y\":7,\"roomName\":\"W1N1\"},{\"x\":14,\"y\":8,\"roomName\":\"W1N1\"},{\"x\":13,\"y\":8,\"roomName\":\"W1N1\"},{\"x\":16,\"y\":7,\"roomName\":\"W1N1\"},{\"x\":16,\"y\":8,\"roomName\":\"W1N1\"},{\"x\":15,\"y\":9,\"roomName\":\"W1N1\"},{\"x\":14,\"y\":9,\"roomName\":\"W1N1\"},{\"x\":17,\"y\":9,\"roomName\":\"W1N1\"},{\"x\":16,\"y\":10,\"roomName\":\"W1N1\"},{\"x\":15,\"y\":10,\"roomName\":\"W1N1\"},{\"x\":18,\"y\":9,\"roomName\":\"W1N1\"},{\"x\":18,\"y\":10,\"roomName\":\"W1N1\"},{\"x\":17,\"y\":11,\"roomName\":\"W1N1\"},{\"x\":19,\"y\":10,\"roomName\":\"W1N1\"},{\"x\":19,\"y\":11,\"roomName\":\"W1N1\"},{\"x\":18,\"y\":12,\"roomName\":\"W1N1\"},{\"x\":17,\"y\":12,\"roomName\":\"W1N1\"},{\"x\":20,\"y\":11,\"roomName\":\"W1N1\"},{\"x\":20,\"y\":12,\"roomName\":\"W1N1\"},{\"x\":19,\"y\":13,\"roomName\":\"W1N1\"},{\"x\":18,\"y\":13,\"roomName\":\"W1N1\"},{\"x\":21,\"y\":12,\"roomName\":\"W1N1\"},{\"x\":21,\"y\":13,\"roomName\":\"W1N1\"},{\"x\":20,\"y\":14,\"roomName\":\"W1N1\"},{\"x\":19,\"y\":14,\"roomName\":\"W1N1\"},{\"x\":22,\"y\":13,\"roomName\":\"W1N1\"},{\"x\":22,\"y\":14,\"roomName\":\"W1N1\"},{\"x\":21,\"y\":15,\"roomName\":\"W1N1\"},{\"x\":20,\"y\":15,\"roomName\":\"W1N1\"},{\"x\":23,\"y\":14,\"roomName\":\"W1N1\"},{\"x\":23,\"y\":15,\"roomName\":\"W1N1\"}],\"spawn\":[{\"x\":5,\"y\":5,\"roomName\":\"W1N1\"},{\"x\":6,\"y\":6,\"roomName\":\"W1N1\"},{\"x\":8,\"y\":6,\"roomName\":\"W1N1\"}],\"nuker\":[{\"x\":22,\"y\":17,\"roomName\":\"W1N1\"}],\"observer\":[{\"x\":25,\"y\":16,\"roomName\":\"W1N1\"}],\"factory\":[{\"x\":26,\"y\":17,\"roomName\":\"W1N1\"}],\"lab\":[{\"x\":18,\"y\":6,\"roomName\":\"W1N1\"},{\"x\":19,\"y\":7,\"roomName\":\"W1N1\"},{\"x\":17,\"y\":6,\"roomName\":\"W1N1\"},{\"x\":17,\"y\":7,\"roomName\":\"W1N1\"},{\"x\":18,\"y\":5,\"roomName\":\"W1N1\"},{\"x\":18,\"y\":8,\"roomName\":\"W1N1\"},{\"x\":19,\"y\":5,\"roomName\":\"W1N1\"},{\"x\":19,\"y\":8,\"roomName\":\"W1N1\"},{\"x\":20,\"y\":6,\"roomName\":\"W1N1\"},{\"x\":20,\"y\":7,\"roomName\":\"W1N1\"}]},\"pathEndLevel\":[0,0,2,4,8,11,14,16,19],\"pathEnd\":{\"x\":26,\"y\":18,\"roomName\":\"W1N1\"},\"version\":22}}},\"layoutsCost\":{},\"skippedRoomsLog\":{},\"players\":{}}",
+        "raw_memory": "{\"creeps\":{\"builder-381315\":{\"role\":\"builder\",\"routing\":{\"targetRoom\":\"W1N1\",\"reached\":true,\"reverse\":false,\"targetId\":\"kk00000000000001ac\"},\"time\":319,\"ttl\":242,\"number\":381315,\"step\":22001,\"base\":\"W1N1\",\"born\":551,\"room\":\"W1N1\",\"boosted\":true,\"hasEnergy\":true,\"source\":\"kk0000000000000003\",\"lastPositions\":[{\"x\":5,\"y\":4,\"roomName\":\"W1N1\"},{\"x\":4,\"y\":3,\"roomName\":\"W1N1\"},{\"x\":5,\"y\":4,\"roomName\":\"W1N1\"},{\"x\":5,\"y\":4,\"roomName\":\"W1N1\"},{\"x\":5,\"y\":4,\"roomName\":\"W1N1\"},{\"x\":4,\"y\":3,\"roomName\":\"W1N1\"},{\"x\":5,\"y\":4,\"roomName\":\"W1N1\"}],\"_move\":{\"dest\":{\"x\":10,\"y\":10,\"room\":\"W1N1\"},\"time\":1891,\"path\":\"100945\",\"room\":\"W1N1\"}},\"carry-826310\":{\"role\":\"carry\",\"routing\":{\"targetRoom\":\"W1N1\",\"targetId\":\"kk0000000000000004\",\"route\":[{\"room\":\"W1N1\"}],\"routePos\":0,\"pathPos\":7,\"reverse\":false},\"level\":{\"param\":[\"energyCapacityAvailable\"],\"prefixString\":\"\",\"layoutString\":\"CM\",\"amount\":[3,3],\"maxLayoutAmount\":1},\"time\":728,\"number\":826310,\"step\":0,\"base\":\"W1N1\",\"born\":729,\"flee\":true,\"buildRoad\":true,\"room\":\"W1N1\",\"boosted\":true,\"lastPositions\":[{\"x\":9,\"y\":6,\"roomName\":\"W1N1\"},{\"x\":8,\"y\":5,\"roomName\":\"W1N1\"},{\"x\":7,\"y\":6,\"roomName\":\"W1N1\"},{\"x\":6,\"y\":5,\"roomName\":\"W1N1\"},{\"x\":7,\"y\":6,\"roomName\":\"W1N1\"},{\"x\":8,\"y\":5,\"roomName\":\"W1N1\"},{\"x\":9,\"y\":6,\"roomName\":\"W1N1\"}]},\"carry-617819\":{\"role\":\"carry\",\"routing\":{\"targetRoom\":\"W1N1\",\"targetId\":\"kk0000000000000004\",\"route\":[{\"room\":\"W1N1\"}],\"routePos\":0,\"pathPos\":4,\"reverse\":false},\"level\":{\"param\":[\"energyCapacityAvailable\"],\"prefixString\":\"\",\"layoutString\":\"CM\",\"amount\":[3,3],\"maxLayoutAmount\":1},\"time\":931,\"number\":617819,\"step\":0,\"base\":\"W1N1\",\"born\":932,\"flee\":true,\"buildRoad\":true,\"room\":\"W1N1\",\"boosted\":true,\"lastPositions\":[{\"x\":6,\"y\":5,\"roomName\":\"W1N1\"},{\"x\":5,\"y\":4,\"roomName\":\"W1N1\"},{\"x\":4,\"y\":3,\"roomName\":\"W1N1\"},{\"x\":3,\"y\":2,\"roomName\":\"W1N1\"},{\"x\":4,\"y\":3,\"roomName\":\"W1N1\"},{\"x\":5,\"y\":4,\"roomName\":\"W1N1\"},{\"x\":6,\"y\":5,\"roomName\":\"W1N1\"}]},\"carry-304561\":{\"role\":\"carry\",\"routing\":{\"targetRoom\":\"W1N1\",\"targetId\":\"kk0000000000000004\",\"route\":[{\"room\":\"W1N1\"}],\"routePos\":0,\"pathPos\":11,\"reverse\":true},\"level\":{\"param\":[\"energyCapacityAvailable\"],\"prefixString\":\"\",\"layoutString\":\"CM\",\"amount\":[3,3],\"maxLayoutAmount\":1},\"time\":1134,\"number\":304561,\"step\":0,\"base\":\"W1N1\",\"born\":1135,\"flee\":true,\"buildRoad\":true,\"room\":\"W1N1\",\"boosted\":true,\"lastPositions\":[{\"x\":15,\"y\":8,\"roomName\":\"W1N1\"},{\"x\":16,\"y\":9,\"roomName\":\"W1N1\"},{\"x\":17,\"y\":10,\"roomName\":\"W1N1\"},{\"x\":18,\"y\":11,\"roomName\":\"W1N1\"},{\"x\":19,\"y\":12,\"roomName\":\"W1N1\"},{\"x\":20,\"y\":13,\"roomName\":\"W1N1\"},{\"x\":21,\"y\":14,\"roomName\":\"W1N1\"}]},\"universal-850097\":{\"role\":\"universal\",\"routing\":{\"targetRoom\":\"W1N1\",\"reached\":false,\"reverse\":false,\"route\":[{\"room\":\"W1N1\"}],\"routePos\":0,\"pathPos\":-1,\"targetId\":\"kk00000000000001ac\"},\"time\":1314,\"ttl\":250,\"number\":850097,\"step\":0,\"base\":\"W1N1\",\"born\":1338,\"buildRoad\":true,\"room\":\"W1N1\",\"boosted\":true,\"hasEnergy\":false,\"source\":\"kk0000000000000003\",\"lastPositions\":[{\"x\":22,\"y\":15,\"roomName\":\"W1N1\"},{\"x\":21,\"y\":14,\"roomName\":\"W1N1\"},{\"x\":20,\"y\":13,\"roomName\":\"W1N1\"},{\"x\":19,\"y\":12,\"roomName\":\"W1N1\"},{\"x\":18,\"y\":11,\"roomName\":\"W1N1\"},{\"x\":17,\"y\":10,\"roomName\":\"W1N1\"},{\"x\":16,\"y\":9,\"roomName\":\"W1N1\"}],\"_move\":{\"dest\":{\"x\":10,\"y\":10,\"room\":\"W1N1\"},\"time\":1838,\"path\":\"090944\",\"room\":\"W1N1\"},\"targetEnergyMy\":\"kk0000000000000002\"},\"universal-229539\":{\"role\":\"universal\",\"routing\":{\"targetRoom\":\"W1N1\",\"reached\":false,\"reverse\":false,\"route\":[{\"room\":\"W1N1\"}],\"routePos\":0,\"pathPos\":-1,\"targetId\":\"kk00000000000001ac\"},\"time\":1338,\"ttl\":239,\"number\":229539,\"step\":0,\"base\":\"W1N1\",\"born\":1422,\"buildRoad\":true,\"room\":\"W1N1\",\"boosted\":true,\"hasEnergy\":true,\"source\":\"kk0000000000000003\",\"lastPositions\":[{\"x\":20,\"y\":13,\"roomName\":\"W1N1\"},{\"x\":19,\"y\":12,\"roomName\":\"W1N1\"},{\"x\":18,\"y\":11,\"roomName\":\"W1N1\"},{\"x\":17,\"y\":10,\"roomName\":\"W1N1\"},{\"x\":16,\"y\":9,\"roomName\":\"W1N1\"},{\"x\":15,\"y\":8,\"roomName\":\"W1N1\"},{\"x\":14,\"y\":7,\"roomName\":\"W1N1\"}],\"_move\":{\"dest\":{\"x\":10,\"y\":10,\"room\":\"W1N1\"},\"time\":1921,\"path\":\"1108456\",\"room\":\"W1N1\"},\"targetEnergyMy\":\"kk0000000000000002\"},\"scout-855249\":{\"role\":\"scout\",\"routing\":{\"targetRoom\":\"W1N1\",\"reached\":true},\"base\":\"W1N1\",\"time\":1497,\"number\":855249,\"step\":0,\"born\":1497,\"room\":\"W1N1\",\"boosted\":true,\"incompleteCount\":0,\"path\":[{\"x\":1,\"y\":0,\"roomName\":\"W1N1\"}],\"lastPositions\":[{\"x\":2,\"y\":1,\"roomName\":\"W1N1\"},{\"x\":1,\"y\":0,\"roomName\":\"W1N1\"},{\"x\":2,\"y\":1,\"roomName\":\"W1N1\"},{\"x\":1,\"y\":0,\"roomName\":\"W1N1\"},{\"x\":2,\"y\":1,\"roomName\":\"W1N1\"},{\"x\":1,\"y\":0,\"roomName\":\"W1N1\"},{\"x\":2,\"y\":1,\"roomName\":\"W1N1\"}]},\"carry-777813\":{\"role\":\"carry\",\"routing\":{\"targetRoom\":\"W1N1\",\"targetId\":\"kk0000000000000004\",\"route\":[{\"room\":\"W1N1\"}],\"routePos\":0,\"pathPos\":37,\"reverse\":false},\"level\":{\"param\":[\"energyCapacityAvailable\"],\"prefixString\":\"\",\"layoutString\":\"CM\",\"amount\":[3,3],\"maxLayoutAmount\":1},\"time\":1337,\"ttl\":237,\"number\":777813,\"step\":0,\"base\":\"W1N1\",\"born\":1551,\"flee\":true,\"buildRoad\":true,\"room\":\"W1N1\",\"boosted\":true,\"lastPositions\":[{\"x\":39,\"y\":32,\"roomName\":\"W1N1\"},{\"x\":38,\"y\":31,\"roomName\":\"W1N1\"},{\"x\":38,\"y\":31,\"roomName\":\"W1N1\"},{\"x\":38,\"y\":31,\"roomName\":\"W1N1\"},{\"x\":37,\"y\":30,\"roomName\":\"W1N1\"},{\"x\":37,\"y\":30,\"roomName\":\"W1N1\"},{\"x\":37,\"y\":30,\"roomName\":\"W1N1\"}]},\"sourcer-155235\":{\"role\":\"sourcer\",\"routing\":{\"targetRoom\":\"W1N1\",\"targetId\":\"kk0000000000000003\",\"route\":[{\"room\":\"W1N1\"}],\"routePos\":0,\"pathPos\":7,\"reverse\":false,\"reached\":true},\"number\":155235,\"step\":0,\"base\":\"W1N1\",\"born\":1830,\"killPrevious\":true,\"flee\":false,\"buildRoad\":true,\"room\":\"W1N1\",\"boosted\":true,\"lastPositions\":[{\"x\":10,\"y\":9,\"roomName\":\"W1N1\"},{\"x\":10,\"y\":9,\"roomName\":\"W1N1\"},{\"x\":10,\"y\":9,\"roomName\":\"W1N1\"},{\"x\":10,\"y\":9,\"roomName\":\"W1N1\"},{\"x\":10,\"y\":9,\"roomName\":\"W1N1\"},{\"x\":10,\"y\":9,\"roomName\":\"W1N1\"},{\"x\":10,\"y\":9,\"roomName\":\"W1N1\"}],\"timeToTravel\":68,\"nextSpawn\":79,\"wait\":137},\"sourcer-876496\":{\"role\":\"sourcer\",\"routing\":{\"targetRoom\":\"W1N1\",\"targetId\":\"kk0000000000000004\",\"route\":[{\"room\":\"W1N1\"}],\"routePos\":0,\"pathPos\":37,\"reverse\":false},\"ttl\":250,\"number\":876496,\"step\":0,\"base\":\"W1N1\",\"born\":1945,\"killPrevious\":true,\"flee\":false,\"buildRoad\":true,\"room\":\"W1N1\",\"boosted\":true,\"lastPositions\":[{\"x\":39,\"y\":32,\"roomName\":\"W1N1\"},{\"x\":38,\"y\":31,\"roomName\":\"W1N1\"},{\"x\":37,\"y\":30,\"roomName\":\"W1N1\"},{\"x\":36,\"y\":29,\"roomName\":\"W1N1\"},{\"x\":35,\"y\":28,\"roomName\":\"W1N1\"},{\"x\":34,\"y\":27,\"roomName\":\"W1N1\"},{\"x\":33,\"y\":26,\"roomName\":\"W1N1\"}]}},\"__kkAcceptance\":{\"loops\":2000,\"births\":15,\"birthsAfterDeath\":3,\"deaths\":5,\"harvested\":12862,\"transferred\":14001,\"built\":6755,\"upgraded\":200,\"seen\":{\"kk0000000000000006\":true,\"kk0000000000000007\":true,\"kk0000000000000009\":true,\"kk000000000000000b\":true,\"kk000000000000000d\":true,\"kk000000000000003d\":true,\"kk0000000000000087\":true,\"kk000000000000009e\":true,\"kk00000000000000af\":true,\"kk00000000000000b6\":true,\"kk00000000000000df\":true,\"kk0000000000000113\":true,\"kk0000000000000128\":true,\"kk00000000000001b7\":true,\"kk00000000000001e0\":true},\"caughtErrors\":0,\"errorSamples\":[],\"eventsThroughTick\":1999},\"time\":2000,\"username\":\"bot\",\"myRooms\":[\"W1N1\"],\"squads\":{},\"powerBanks\":{},\"skippedRooms\":[],\"orders\":{\"buy\":{},\"sell\":{}},\"constructionSites\":{},\"quests\":{},\"rooms\":{\"W1N1\":{\"setup\":{\"steps\":{\"cleanupMemory\":true,\"updatePosition\":true,\"costMatrixSetMineralPath\":true,\"costMatrixPathFromStartToExit\":true,\"costMatrixPathCrossings\":true,\"addTerminal\":true,\"setupStructures\":true,\"checkForMisplacedSpawn\":true},\"completed\":true},\"routing\":{\"pathStart-kk0000000000000001\":{\"path\":\"W1N1:03027\",\"created\":1,\"name\":\"pathStart-kk0000000000000001\"},\"pathStart-kk0000000000000003\":{\"path\":\"W1N1:03024444444\",\"created\":1,\"name\":\"pathStart-kk0000000000000003\"},\"pathStart-kk0000000000000004\":{\"path\":\"W1N1:03024444244224444444444444444444444444444464466\",\"created\":1,\"name\":\"pathStart-kk0000000000000004\"},\"pathStart-filler\":{\"path\":\"W1N1:030246\",\"created\":1,\"name\":\"pathStart-filler\"},\"pathStart-kk0000000000000005\":{\"path\":\"W1N1:0302444424242444444444444444444444666\",\"created\":1,\"name\":\"pathStart-kk0000000000000005\"},\"pathStart-W1N2\":{\"path\":\"W1N1:03024444242424444222222222\",\"created\":1,\"name\":\"pathStart-W1N2\"},\"pathStart-W0N1\":{\"path\":\"W1N1:03024444242424444444444444444444444444444222222223\",\"created\":1,\"name\":\"pathStart-W0N1\"},\"pathStart-W1N0\":{\"path\":\"W1N1:030244442424244444444444444444444444444446666666666666665\",\"created\":1,\"name\":\"pathStart-W1N0\"},\"pathStart-W2N1\":{\"path\":\"W1N1:03024444242424444466666666666666776\",\"created\":1,\"name\":\"pathStart-W2N1\"},\"W1N2-W0N1\":{\"path\":\"W1N1:2500666666666444444444444444444444444222222223\",\"created\":1,\"name\":\"W1N2-W0N1\"},\"W1N2-W1N0\":{\"path\":\"W1N1:25006666666664444444444444444444444446666666666666665\",\"created\":1,\"name\":\"W1N2-W1N0\"},\"W1N2-W2N1\":{\"path\":\"W1N1:2500666666666466666666666666776\",\"created\":1,\"name\":\"W1N2-W2N1\"},\"W0N1-W1N2\":{\"path\":\"W1N1:4925766666666888888888888888888888888222222222\",\"created\":1,\"name\":\"W0N1-W1N2\"},\"W0N1-W1N0\":{\"path\":\"W1N1:49257666666666666666666666665\",\"created\":1,\"name\":\"W0N1-W1N0\"},\"W0N1-W2N1\":{\"path\":\"W1N1:49257666666668888888888888888888888866666666666666776\",\"created\":1,\"name\":\"W0N1-W2N1\"},\"W1N0-W1N2\":{\"path\":\"W1N1:25491222222222222222888888888888888888888888222222222\",\"created\":1,\"name\":\"W1N0-W1N2\"},\"W1N0-W0N1\":{\"path\":\"W1N1:25491222222222222222222222223\",\"created\":1,\"name\":\"W1N0-W0N1\"},\"W1N0-W2N1\":{\"path\":\"W1N1:254912222222222222228888888888888888888888866666666666666776\",\"created\":1,\"name\":\"W1N0-W2N1\"},\"W2N1-W1N2\":{\"path\":\"W1N1:0025233222222222222228222222222\",\"created\":1,\"name\":\"W2N1-W1N2\"},\"W2N1-W0N1\":{\"path\":\"W1N1:00252332222222222222244444444444444444444444222222223\",\"created\":1,\"name\":\"W2N1-W0N1\"},\"W2N1-W1N0\":{\"path\":\"W1N1:002523322222222222222444444444444444444444446666666666666665\",\"created\":1,\"name\":\"W2N1-W1N0\"},\"pathStart-universal\":{\"path\":\"W1N1:03024444242424444444444444\",\"created\":1,\"name\":\"pathStart-universal\"}},\"misplacedSpawn\":true,\"position\":{\"creep\":{\"kk0000000000000001\":[{\"x\":2,\"y\":2,\"roomName\":\"W1N1\"}],\"kk0000000000000003\":[{\"x\":10,\"y\":9,\"roomName\":\"W1N1\"}],\"kk0000000000000004\":[{\"x\":40,\"y\":39,\"roomName\":\"W1N1\"}],\"kk0000000000000005\":[{\"x\":30,\"y\":29,\"roomName\":\"W1N1\"}],\"pathStart\":[{\"x\":3,\"y\":2,\"roomName\":\"W1N1\"}],\"filler\":[{\"x\":3,\"y\":4,\"roomName\":\"W1N1\"}],\"kk0000000000000008\":[{\"x\":4,\"y\":2,\"roomName\":\"W1N1\"}]},\"structure\":{\"link\":[{\"x\":4,\"y\":4,\"roomName\":\"W1N1\"},{\"x\":10,\"y\":8,\"roomName\":\"W1N1\"},{\"x\":40,\"y\":38,\"roomName\":\"W1N1\"},{\"x\":25,\"y\":17,\"roomName\":\"W1N1\"},{\"x\":24,\"y\":18,\"roomName\":\"W1N1\"},{\"x\":23,\"y\":18,\"roomName\":\"W1N1\"}],\"extractor\":[{\"x\":30,\"y\":30,\"roomName\":\"W1N1\"}],\"storage\":[{\"x\":3,\"y\":3,\"roomName\":\"W1N1\"}],\"powerSpawn\":[{\"x\":4,\"y\":5,\"roomName\":\"W1N1\"}],\"tower\":[{\"x\":3,\"y\":5,\"roomName\":\"W1N1\"},{\"x\":22,\"y\":16,\"roomName\":\"W1N1\"},{\"x\":21,\"y\":16,\"roomName\":\"W1N1\"},{\"x\":24,\"y\":15,\"roomName\":\"W1N1\"},{\"x\":24,\"y\":16,\"roomName\":\"W1N1\"},{\"x\":23,\"y\":17,\"roomName\":\"W1N1\"}],\"terminal\":[{\"x\":30,\"y\":28,\"roomName\":\"W1N1\"}],\"extension\":[{\"x\":4,\"y\":2,\"roomName\":\"W1N1\"},{\"x\":2,\"y\":3,\"roomName\":\"W1N1\"},{\"x\":5,\"y\":2,\"roomName\":\"W1N1\"},{\"x\":5,\"y\":3,\"roomName\":\"W1N1\"},{\"x\":6,\"y\":3,\"roomName\":\"W1N1\"},{\"x\":6,\"y\":4,\"roomName\":\"W1N1\"},{\"x\":7,\"y\":4,\"roomName\":\"W1N1\"},{\"x\":7,\"y\":5,\"roomName\":\"W1N1\"},{\"x\":5,\"y\":6,\"roomName\":\"W1N1\"},{\"x\":7,\"y\":7,\"roomName\":\"W1N1\"},{\"x\":6,\"y\":7,\"roomName\":\"W1N1\"},{\"x\":8,\"y\":4,\"roomName\":\"W1N1\"},{\"x\":9,\"y\":4,\"roomName\":\"W1N1\"},{\"x\":9,\"y\":5,\"roomName\":\"W1N1\"},{\"x\":10,\"y\":6,\"roomName\":\"W1N1\"},{\"x\":9,\"y\":7,\"roomName\":\"W1N1\"},{\"x\":10,\"y\":4,\"roomName\":\"W1N1\"},{\"x\":11,\"y\":4,\"roomName\":\"W1N1\"},{\"x\":11,\"y\":5,\"roomName\":\"W1N1\"},{\"x\":12,\"y\":6,\"roomName\":\"W1N1\"},{\"x\":12,\"y\":7,\"roomName\":\"W1N1\"},{\"x\":11,\"y\":7,\"roomName\":\"W1N1\"},{\"x\":12,\"y\":4,\"roomName\":\"W1N1\"},{\"x\":13,\"y\":4,\"roomName\":\"W1N1\"},{\"x\":13,\"y\":5,\"roomName\":\"W1N1\"},{\"x\":14,\"y\":5,\"roomName\":\"W1N1\"},{\"x\":14,\"y\":6,\"roomName\":\"W1N1\"},{\"x\":13,\"y\":7,\"roomName\":\"W1N1\"},{\"x\":15,\"y\":6,\"roomName\":\"W1N1\"},{\"x\":15,\"y\":7,\"roomName\":\"W1N1\"},{\"x\":14,\"y\":8,\"roomName\":\"W1N1\"},{\"x\":13,\"y\":8,\"roomName\":\"W1N1\"},{\"x\":16,\"y\":7,\"roomName\":\"W1N1\"},{\"x\":16,\"y\":8,\"roomName\":\"W1N1\"},{\"x\":15,\"y\":9,\"roomName\":\"W1N1\"},{\"x\":14,\"y\":9,\"roomName\":\"W1N1\"},{\"x\":17,\"y\":9,\"roomName\":\"W1N1\"},{\"x\":16,\"y\":10,\"roomName\":\"W1N1\"},{\"x\":15,\"y\":10,\"roomName\":\"W1N1\"},{\"x\":18,\"y\":9,\"roomName\":\"W1N1\"},{\"x\":18,\"y\":10,\"roomName\":\"W1N1\"},{\"x\":17,\"y\":11,\"roomName\":\"W1N1\"},{\"x\":19,\"y\":10,\"roomName\":\"W1N1\"},{\"x\":19,\"y\":11,\"roomName\":\"W1N1\"},{\"x\":18,\"y\":12,\"roomName\":\"W1N1\"},{\"x\":17,\"y\":12,\"roomName\":\"W1N1\"},{\"x\":20,\"y\":11,\"roomName\":\"W1N1\"},{\"x\":20,\"y\":12,\"roomName\":\"W1N1\"},{\"x\":19,\"y\":13,\"roomName\":\"W1N1\"},{\"x\":18,\"y\":13,\"roomName\":\"W1N1\"},{\"x\":21,\"y\":12,\"roomName\":\"W1N1\"},{\"x\":21,\"y\":13,\"roomName\":\"W1N1\"},{\"x\":20,\"y\":14,\"roomName\":\"W1N1\"},{\"x\":19,\"y\":14,\"roomName\":\"W1N1\"},{\"x\":22,\"y\":13,\"roomName\":\"W1N1\"},{\"x\":22,\"y\":14,\"roomName\":\"W1N1\"},{\"x\":21,\"y\":15,\"roomName\":\"W1N1\"},{\"x\":20,\"y\":15,\"roomName\":\"W1N1\"},{\"x\":23,\"y\":14,\"roomName\":\"W1N1\"},{\"x\":23,\"y\":15,\"roomName\":\"W1N1\"}],\"spawn\":[{\"x\":5,\"y\":5,\"roomName\":\"W1N1\"},{\"x\":6,\"y\":6,\"roomName\":\"W1N1\"},{\"x\":8,\"y\":6,\"roomName\":\"W1N1\"}],\"nuker\":[{\"x\":22,\"y\":17,\"roomName\":\"W1N1\"}],\"observer\":[{\"x\":25,\"y\":16,\"roomName\":\"W1N1\"}],\"factory\":[{\"x\":26,\"y\":17,\"roomName\":\"W1N1\"}],\"lab\":[{\"x\":18,\"y\":6,\"roomName\":\"W1N1\"},{\"x\":19,\"y\":7,\"roomName\":\"W1N1\"},{\"x\":17,\"y\":6,\"roomName\":\"W1N1\"},{\"x\":17,\"y\":7,\"roomName\":\"W1N1\"},{\"x\":18,\"y\":5,\"roomName\":\"W1N1\"},{\"x\":18,\"y\":8,\"roomName\":\"W1N1\"},{\"x\":19,\"y\":5,\"roomName\":\"W1N1\"},{\"x\":19,\"y\":8,\"roomName\":\"W1N1\"},{\"x\":20,\"y\":6,\"roomName\":\"W1N1\"},{\"x\":20,\"y\":7,\"roomName\":\"W1N1\"}]},\"pathEndLevel\":[0,0,2,4,8,11,14,16,19],\"pathEnd\":{\"x\":26,\"y\":18,\"roomName\":\"W1N1\"},\"version\":22},\"costMatrix\":[4294967295,4294967295,4294967295,4294967295,4294967295,4294967295,4294902271,4294967295,4294967295,4294967295,4294967295,4294967295,687865855,673720360,673720360,673720360,673720360,673720360,671164456,673720360,673720360,673720360,673720360,673720360,4280821800,4294912255,673720360,673720360,673720360,673720360,673720360,673720321,673720360,673720360,673720360,673720360,673720360,687865640,687810561,673720360,673720360,673720360,673720360,671164456,673720360,673720360,673720360,673720360,673720360,4280821800,33499391,673720360,673720360,673720360,673720360,19408936,673720360,673720360,673720360,673720360,673720360,673720360,687865640,4278321151,168430090,168430090,168430090,168430090,168430081,168430090,168430090,168430090,168430090,671746570,4280821800,4280822015,168427816,168430090,168430090,168430090,168427786,168430090,168430090,168430090,168430090,168430090,673720330,687865640,170403880,1010580481,1010580540,168430090,167840266,168430090,168430090,168430090,168430090,168430090,671746570,4280821800,673720575,17432872,1010580540,168442940,17435146,168430090,168430090,168430090,168430090,168430090,168430090,673720330,687865640,170403880,1006713857,1010580540,168430090,168430081,168430090,168430090,168430090,168430090,168430090,671746570,4280821800,673720575,17432872,1010630460,168442940,168427786,168430090,168430090,168430090,168430090,168430090,168430090,673720330,687865640,170403880,1010580481,1010580540,167840266,168430090,168430090,168430090,168430090,168430090,168430090,671746570,4280821800,673720575,1007288616,1010580540,17447996,168430090,168430090,168430090,168430090,168430090,168430090,168430090,673720330,687865640,170403880,1010580481,1010580540,168430081,168430090,168430090,168430090,168430090,168430090,168430090,671746570,4280821800,673720575,17435176,168430090,168427786,168430090,168430090,168430090,168430090,168430090,168430090,168430090,673720330,687865640,170403880,167840266,167840266,168430090,168430090,168430090,168430090,168430090,168430090,168430090,671746570,4280821800,673720575,168430120,17432842,168430090,168430090,168430090,168430090,168430090,168430090,168430090,168430090,673720330,687865640,170403880,167840266,168430081,168430090,168430090,168430090,168430090,168430090,168430090,168430090,671746570,4280821800,673720575,17435176,17435146,168430090,168430090,168430090,168430090,168430090,168430090,168430090,168430090,673720330,687865640,170403880,168430081,167840266,168430090,168430090,168430090,168430090,168430090,168430090,168430090,671746570,4280821800,673720575,168427816,168430090,168427786,168430090,168430090,168430090,168430090,168430090,168430090,168430090,673720330,687865640,167847976,168430090,168430090,168430081,168430090,168430090,168430090,168430090,168430090,168430090,671746570,4280821800,19409151,168430120,168430090,17435146,168430090,168430090,168430090,168430090,168430090,168430090,168430090,673720330,687865640,170403841,168430090,168430090,167840266,168430090,168430090,168430090,168430090,168430090,168430090,671746570,4280821800,673710591,168430120,168430090,168430090,168427786,168430090,168430090,168430090,168430090,168430090,168430090,673720330,671219496,170403880,168430090,168430090,168430090,168430081,4278848010,168430090,168430090,168430090,168430090,671746570,16853032,673720575,168430120,168430090,168430090,17435146,168430090,168430090,168430090,168430090,168430090,168430090,19408906,687865640,170403880,168430090,168430090,168430090,167840266,168430090,168430090,168430090,168430090,168430090,671746570,4280821761,673720575,168430120,168430090,168430090,168430090,168427786,168430090,168430090,168430090,168430090,168430090,673710346,687865640,170403880,168430090,168430090,168430090,168430090,168430081,168430090,168430090,168430090,168430090,671156746,4280821800,673720575,168430120,168430090,168430090,168430090,17435146,168430090,168492810,168430090,168430090,17435146,673720330,687865640,170403880,168430090,168430090,168430090,168430090,167840266,167840266,168430090,168430090,168430090,671746561,4280821800,673720575,168430120,168430090,168430090,168430090,168430090,17432842,168430090,168430090,168430090,168427786,673720330,687865640,170403880,168430090,168430090,168430090,168430090,168430090,168430081,168430090,168430090,167840266,671746570,4280821800,673720575,168430120,168430090,168430090,168430090,168430090,17435146,168430090,168430090,17435146,168430090,673720330,687865640,170403880,168430090,168430090,168430090,168430090,168430090,167840266,168430090,168430090,168430081,671746570,4280821800,673720575,168430120,168430090,168430090,168430090,168430090,168430090,168427786,168430090,168427786,168430090,673720330,687865640,170403880,168430090,168430090,168430090,168430090,168430090,168430090,168430081,1006701066,1010580540,671759420,4280821800,673720575,168430120,168430090,168430090,168430090,168430090,168430090,17435146,17435146,1010580490,1010580540,673720330,687865640,170403880,168430090,168430090,168430090,168430090,168430090,168430090,167840266,1007290881,1010580540,671759420,4280821800,673720575,168430120,168430090,168430090,168430090,168430090,168430090,168430090,17432842,4282137610,1010580540,673720330,687865640,170403880,168430090,168430090,168430090,168430090,168430090,168430090,167840266,1006701057,1010580481,671759420,4280821800,673720575,168430120,168430090,168430090,168430090,168430090,168430090,17435146,168430090,1010565386,1010580540,673720330,687865640,170403880,168430090,168430090,168430090,168430090,168430090,168430090,168430081,1007290890,1010580540,671759420,4280821800,673720575,168430120,168430090,168430090,168430090,168430090,168430090,168427786,168430090,168430090,168430090,673720330,687865640,673720360,673720360,673720360,673720360,673720360,673720360,671164456,673720360,673720360,673720360,673720360,4280821800,673720575,673720360,673720360,673720360,673720360,673720360,19408936,673720360,673720360,673720360,673720360,673720360,687865640,673720360,673720360,673720360,673720360,673720360,673720360,673720321,673720360,673720360,673720360,673720360,4280821800,673720575,673720360,673720360,673720360,673720360,673720360,673710376,673720360,673720360,673720360,673720360,673720360,4294967080,4294967295,4294967295,4294967295,4294967295,4294967295,33554431,4294967295,4294967295,4294967295,4294967295,4294967295,4294967295],\"controllerLevel\":{\"checkPathInterval\":1,\"checkWrongStructureInterval\":96,\"buildStructuresInterval\":1,\"buildBlockersInterval\":1,\"setup_level_1\":1,\"checkBlockersInterval\":160,\"setup_level_2\":318},\"attackTimer\":0,\"underSiege\":false,\"queue\":[],\"roles\":{\"universal\":true,\"sourcer\":true,\"builder\":true},\"lastSeen\":2000,\"spawnIdle\":0.785395643112119,\"constants\":{}}},\"layoutsCost\":{},\"skippedRoomsLog\":{},\"players\":{}}",
         "cpu_bucket": 10000.0
       }
     },
@@ -2968,9 +3044,9 @@
           "y": 10,
           "roomName": "W1N1"
         },
-        "energy": 2214,
+        "energy": 2212,
         "energyCapacity": 3000,
-        "ticksToRegeneration": 126
+        "ticksToRegeneration": 135
       },
       "source2": {
         "kind": "source",
@@ -2982,7 +3058,7 @@
         },
         "energy": 1968,
         "energyCapacity": 3000,
-        "ticksToRegeneration": 23
+        "ticksToRegeneration": 24
       },
       "spawn": {
         "kind": "structure",
@@ -2998,7 +3074,7 @@
         "hitsMax": 5000,
         "name": "Spawn1",
         "store": {
-          "energy": 168
+          "energy": 106
         },
         "storeCapacity": null,
         "spawning": null
@@ -3018,7 +3094,7 @@
           "level": 2,
           "progress": 0,
           "progressTotal": 45000,
-          "ticksToDowngrade": 3415,
+          "ticksToDowngrade": 3417,
           "safeMode": null,
           "safeModeAvailable": 1,
           "safeModeCooldown": null,
@@ -3049,14 +3125,14 @@
             "rev": 1,
             "payload": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQ=="
           },
-          "energyAvailable": 268,
+          "energyAvailable": 206,
           "energyCapacityAvailable": 400,
           "events": [
             {
               "event": 4,
               "objectId": "kk000000000000000d",
               "data": {
-                "targetId": "kk000000000000016f",
+                "targetId": "kk00000000000001ac",
                 "amount": 5,
                 "structureType": "extension",
                 "x": 5,
@@ -3066,7 +3142,7 @@
             },
             {
               "event": 5,
-              "objectId": "kk0000000000000189",
+              "objectId": "kk00000000000001b7",
               "data": {
                 "targetId": "kk0000000000000003",
                 "amount": 6
@@ -3074,11 +3150,11 @@
             },
             {
               "event": 10,
-              "objectId": "kk00000000000000f0",
+              "objectId": "kk0000000000000113",
               "data": {
-                "room": "W0N1",
-                "x": 0,
-                "y": 28
+                "room": "W1N2",
+                "x": 1,
+                "y": 49
               }
             }
           ]
@@ -3097,7 +3173,7 @@
           "progressTotal": 45000,
           "safeMode": 0,
           "safeModeAvailable": 1,
-          "downgradeTime": 5416,
+          "downgradeTime": 5418,
           "isPowerEnabled": false,
           "upgradeBlocked": null,
           "safeModeCooldown": null,
@@ -3120,9 +3196,9 @@
           "name": "Spawn1",
           "owner": "bot",
           "store": {
-            "energy": 168
+            "energy": 106
           },
-          "energy": 168,
+          "energy": 106,
           "energyCapacity": 300,
           "storeCapacityResource": {
             "energy": 300
@@ -3145,9 +3221,9 @@
           "room": "W1N1",
           "x": 10,
           "y": 10,
-          "energy": 2214,
+          "energy": 2212,
           "energyCapacity": 3000,
-          "ticksToRegeneration": 126,
+          "ticksToRegeneration": 135,
           "pos": {
             "x": 10,
             "y": 10,
@@ -3163,7 +3239,7 @@
           "y": 40,
           "energy": 1968,
           "energyCapacity": 3000,
-          "ticksToRegeneration": 23,
+          "ticksToRegeneration": 24,
           "pos": {
             "x": 40,
             "y": 40,
@@ -3191,9 +3267,9 @@
           "type": "creep",
           "id": "kk000000000000000d",
           "room": "W1N1",
-          "x": 5,
-          "y": 4,
-          "name": "builder-543255",
+          "x": 4,
+          "y": 3,
+          "name": "builder-381315",
           "owner": "bot",
           "body": [
             {
@@ -3218,25 +3294,25 @@
           "hits": 400,
           "hitsMax": 400,
           "store": {
-            "energy": 45
+            "energy": 40
           },
           "storeCapacity": 50,
           "spawning": false,
           "ticksToLive": 61,
           "notifyWhenAttacked": true,
           "pos": {
-            "x": 5,
-            "y": 4,
+            "x": 4,
+            "y": 3,
             "roomName": "W1N1"
           }
         },
         {
           "type": "creep",
-          "id": "kk0000000000000047",
+          "id": "kk000000000000003d",
           "room": "W1N1",
-          "x": 40,
-          "y": 35,
-          "name": "carry-394407",
+          "x": 10,
+          "y": 7,
+          "name": "carry-826310",
           "owner": "bot",
           "body": [
             {
@@ -3265,7 +3341,58 @@
             }
           ],
           "fatigue": 0,
-          "ageTime": 2245,
+          "ageTime": 2246,
+          "hits": 600,
+          "hitsMax": 600,
+          "store": {
+            "energy": 9
+          },
+          "storeCapacity": 150,
+          "spawning": false,
+          "ticksToLive": 245,
+          "notifyWhenAttacked": true,
+          "pos": {
+            "x": 10,
+            "y": 7,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk0000000000000087",
+          "room": "W1N1",
+          "x": 7,
+          "y": 6,
+          "name": "carry-617819",
+          "owner": "bot",
+          "body": [
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 2449,
           "hits": 600,
           "hitsMax": 600,
           "store": {
@@ -3273,21 +3400,21 @@
           },
           "storeCapacity": 150,
           "spawning": false,
-          "ticksToLive": 244,
+          "ticksToLive": 448,
           "notifyWhenAttacked": true,
           "pos": {
-            "x": 40,
-            "y": 35,
+            "x": 7,
+            "y": 6,
             "roomName": "W1N1"
           }
         },
         {
           "type": "creep",
-          "id": "kk0000000000000066",
+          "id": "kk000000000000009e",
           "room": "W1N1",
           "x": 14,
           "y": 7,
-          "name": "carry-498111",
+          "name": "carry-304561",
           "owner": "bot",
           "body": [
             {
@@ -3316,15 +3443,15 @@
             }
           ],
           "fatigue": 0,
-          "ageTime": 2448,
+          "ageTime": 2652,
           "hits": 600,
           "hitsMax": 600,
           "store": {
-            "energy": 142
+            "energy": 40
           },
           "storeCapacity": 150,
           "spawning": false,
-          "ticksToLive": 447,
+          "ticksToLive": 651,
           "notifyWhenAttacked": true,
           "pos": {
             "x": 14,
@@ -3333,60 +3460,9 @@
           }
         },
         {
-          "type": "creep",
-          "id": "kk0000000000000080",
-          "room": "W1N1",
-          "x": 41,
-          "y": 36,
-          "name": "carry-469685",
-          "owner": "bot",
-          "body": [
-            {
-              "type": "move",
-              "hits": 100
-            },
-            {
-              "type": "carry",
-              "hits": 100
-            },
-            {
-              "type": "carry",
-              "hits": 100
-            },
-            {
-              "type": "move",
-              "hits": 100
-            },
-            {
-              "type": "carry",
-              "hits": 100
-            },
-            {
-              "type": "move",
-              "hits": 100
-            }
-          ],
-          "fatigue": 0,
-          "ageTime": 2651,
-          "hits": 600,
-          "hitsMax": 600,
-          "store": {
-            "energy": 0
-          },
-          "storeCapacity": 150,
-          "spawning": false,
-          "ticksToLive": 650,
-          "notifyWhenAttacked": true,
-          "pos": {
-            "x": 41,
-            "y": 36,
-            "roomName": "W1N1"
-          }
-        },
-        {
           "type": "structure",
           "structureType": "extension",
-          "id": "kk0000000000000096",
+          "id": "kk00000000000000b0",
           "room": "W1N1",
           "x": 4,
           "y": 2,
@@ -3410,11 +3486,11 @@
         },
         {
           "type": "creep",
-          "id": "kk0000000000000099",
+          "id": "kk00000000000000b6",
           "room": "W1N1",
-          "x": 24,
-          "y": 17,
-          "name": "universal-774778",
+          "x": 23,
+          "y": 16,
+          "name": "universal-850097",
           "owner": "bot",
           "body": [
             {
@@ -3435,50 +3511,7 @@
             }
           ],
           "fatigue": 0,
-          "ageTime": 2845,
-          "hits": 400,
-          "hitsMax": 400,
-          "store": {
-            "energy": 0
-          },
-          "storeCapacity": 50,
-          "spawning": false,
-          "ticksToLive": 844,
-          "notifyWhenAttacked": true,
-          "pos": {
-            "x": 24,
-            "y": 17,
-            "roomName": "W1N1"
-          }
-        },
-        {
-          "type": "creep",
-          "id": "kk00000000000000c0",
-          "room": "W1N1",
-          "x": 25,
-          "y": 24,
-          "name": "universal-49035",
-          "owner": "bot",
-          "body": [
-            {
-              "type": "move",
-              "hits": 100
-            },
-            {
-              "type": "work",
-              "hits": 100
-            },
-            {
-              "type": "carry",
-              "hits": 100
-            },
-            {
-              "type": "move",
-              "hits": 100
-            }
-          ],
-          "fatigue": 0,
-          "ageTime": 2907,
+          "ageTime": 2849,
           "hits": 400,
           "hitsMax": 400,
           "store": {
@@ -3486,21 +3519,64 @@
           },
           "storeCapacity": 50,
           "spawning": false,
-          "ticksToLive": 906,
+          "ticksToLive": 848,
           "notifyWhenAttacked": true,
           "pos": {
-            "x": 25,
-            "y": 24,
+            "x": 23,
+            "y": 16,
             "roomName": "W1N1"
           }
         },
         {
           "type": "creep",
-          "id": "kk00000000000000f0",
+          "id": "kk00000000000000df",
           "room": "W1N1",
-          "x": 49,
-          "y": 28,
-          "name": "scout-551304",
+          "x": 21,
+          "y": 14,
+          "name": "universal-229539",
+          "owner": "bot",
+          "body": [
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "work",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 2933,
+          "hits": 400,
+          "hitsMax": 400,
+          "store": {
+            "energy": 50
+          },
+          "storeCapacity": 50,
+          "spawning": false,
+          "ticksToLive": 932,
+          "notifyWhenAttacked": true,
+          "pos": {
+            "x": 21,
+            "y": 14,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk0000000000000113",
+          "room": "W1N1",
+          "x": 1,
+          "y": 0,
+          "name": "scout-855249",
           "owner": "bot",
           "body": [
             {
@@ -3520,15 +3596,66 @@
           "ticksToLive": 998,
           "notifyWhenAttacked": false,
           "pos": {
-            "x": 49,
-            "y": 28,
+            "x": 1,
+            "y": 0,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk0000000000000128",
+          "room": "W1N1",
+          "x": 39,
+          "y": 32,
+          "name": "carry-777813",
+          "owner": "bot",
+          "body": [
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 3068,
+          "hits": 600,
+          "hitsMax": 600,
+          "store": {
+            "energy": 0
+          },
+          "storeCapacity": 150,
+          "spawning": false,
+          "ticksToLive": 1067,
+          "notifyWhenAttacked": true,
+          "pos": {
+            "x": 39,
+            "y": 32,
             "roomName": "W1N1"
           }
         },
         {
           "type": "structure",
           "structureType": "extension",
-          "id": "kk000000000000016e",
+          "id": "kk00000000000001ab",
           "room": "W1N1",
           "x": 2,
           "y": 3,
@@ -3553,11 +3680,11 @@
         {
           "type": "constructionSite",
           "structureType": "extension",
-          "id": "kk000000000000016f",
+          "id": "kk00000000000001ac",
           "room": "W1N1",
           "x": 5,
           "y": 2,
-          "progress": 841,
+          "progress": 760,
           "progressTotal": 3000,
           "owner": "bot",
           "pos": {
@@ -3568,11 +3695,11 @@
         },
         {
           "type": "creep",
-          "id": "kk0000000000000189",
+          "id": "kk00000000000001b7",
           "room": "W1N1",
           "x": 10,
           "y": 9,
-          "name": "sourcer-454592",
+          "name": "sourcer-155235",
           "owner": "bot",
           "body": [
             {
@@ -3593,7 +3720,7 @@
             }
           ],
           "fatigue": 0,
-          "ageTime": 3340,
+          "ageTime": 3341,
           "hits": 400,
           "hitsMax": 400,
           "store": {
@@ -3601,7 +3728,7 @@
           },
           "storeCapacity": 0,
           "spawning": false,
-          "ticksToLive": 1339,
+          "ticksToLive": 1340,
           "notifyWhenAttacked": true,
           "pos": {
             "x": 10,
@@ -3610,12 +3737,27 @@
           }
         },
         {
-          "type": "creep",
-          "id": "kk00000000000001a2",
+          "type": "resource",
+          "resourceType": "energy",
+          "id": "kk00000000000001df",
           "room": "W1N1",
-          "x": 42,
-          "y": 37,
-          "name": "sourcer-7395",
+          "x": 10,
+          "y": 9,
+          "amount": 98,
+          "energy": 98,
+          "pos": {
+            "x": 10,
+            "y": 9,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk00000000000001e0",
+          "room": "W1N1",
+          "x": 40,
+          "y": 33,
+          "name": "sourcer-876496",
           "owner": "bot",
           "body": [
             {
@@ -3635,8 +3777,8 @@
               "hits": 100
             }
           ],
-          "fatigue": 4,
-          "ageTime": 3444,
+          "fatigue": 2,
+          "ageTime": 3456,
           "hits": 400,
           "hitsMax": 400,
           "store": {
@@ -3644,41 +3786,41 @@
           },
           "storeCapacity": 0,
           "spawning": false,
-          "ticksToLive": 1443,
+          "ticksToLive": 1455,
           "notifyWhenAttacked": true,
           "pos": {
-            "x": 42,
-            "y": 37,
+            "x": 40,
+            "y": 33,
             "roomName": "W1N1"
           }
         },
         {
           "type": "resource",
           "resourceType": "energy",
-          "id": "kk00000000000001a8",
-          "room": "W1N1",
-          "x": 10,
-          "y": 9,
-          "amount": 95,
-          "energy": 95,
-          "pos": {
-            "x": 10,
-            "y": 9,
-            "roomName": "W1N1"
-          }
-        },
-        {
-          "type": "resource",
-          "resourceType": "energy",
-          "id": "kk00000000000001aa",
+          "id": "kk00000000000001e2",
           "room": "W1N1",
           "x": 40,
           "y": 39,
-          "amount": 17,
-          "energy": 17,
+          "amount": 21,
+          "energy": 21,
           "pos": {
             "x": 40,
             "y": 39,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "resource",
+          "resourceType": "energy",
+          "id": "kk00000000000001e4",
+          "room": "W1N1",
+          "x": 3,
+          "y": 2,
+          "amount": 86,
+          "energy": 86,
+          "pos": {
+            "x": 3,
+            "y": 2,
             "roomName": "W1N1"
           }
         }

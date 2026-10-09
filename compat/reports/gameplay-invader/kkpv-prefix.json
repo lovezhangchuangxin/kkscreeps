@@ -1,0 +1,1616 @@
+{
+  "report_version": 10,
+  "success": true,
+  "status": "passed",
+  "engine_version": "0.1.0",
+  "executable_sha256": "8043ad71137dd6d3ea11ccc8aa7304527ef5e8a3bb3da4cf79492dd9670834cc",
+  "scenario": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/sim-invader-battle/scenario.json",
+  "scenario_sha256": "fac5f716a0179008b377ebb0acf6caa8c4945f471da62bcefa3c396df6ad5197",
+  "modules": {
+    "bot": {
+      "directory": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/sim-invader-battle",
+      "sha256": "a42627740552a9c8e1f69106cff84ef1081a6a316b49c5e3c4ecca96d9998970",
+      "files": [
+        {
+          "name": "main",
+          "kind": "js",
+          "bytes": 2090,
+          "sha256": "076f0467ed45c00569e62978f10d105932832f2b5e9dacb9dc34651508fb5075"
+        }
+      ]
+    }
+  },
+  "mods": {
+    "packages": {}
+  },
+  "mods_switches": [],
+  "plan_hash": "e931198f10bc0e3f36a044862caa8428fe456eef9c0d425d6e61c895f0daa251",
+  "composition": null,
+  "execution_strategy": null,
+  "disabled_mods": [],
+  "channel": "kkpv",
+  "concurrency": 2,
+  "ticks_requested": 100,
+  "ticks_attempted": 100,
+  "world_ticks_committed": 100,
+  "seed": 0,
+  "start_time": 1,
+  "end_time": 101,
+  "checkpoint_loaded": null,
+  "checkpoint_saved": "/tmp/kkscreeps-invader-battle-20261009/kkpv-split.checkpoint.json",
+  "run_wall_ms": 772.079417,
+  "phases": {
+    "ticks": 100,
+    "phases": {
+      "project": {
+        "count": 100,
+        "p50_ms": 0.240833,
+        "p95_ms": 0.572208,
+        "p99_ms": 0.59,
+        "max_ms": 0.65325,
+        "total_ms": 26.624079000000002
+      },
+      "run": {
+        "count": 100,
+        "p50_ms": 0.465792,
+        "p95_ms": 1.327749,
+        "p99_ms": 3.043457,
+        "max_ms": 3.445833,
+        "total_ms": 67.943252
+      },
+      "settle": {
+        "count": 100,
+        "p50_ms": 6.771833,
+        "p95_ms": 8.244709,
+        "p99_ms": 9.294875,
+        "max_ms": 9.53875,
+        "total_ms": 675.7599590000003
+      },
+      "wall": {
+        "count": 100,
+        "p50_ms": 7.928583,
+        "p95_ms": 9.012333000000002,
+        "p99_ms": 10.007,
+        "max_ms": 10.880709000000001,
+        "total_ms": 770.7811690000002
+      }
+    }
+  },
+  "input_log": {
+    "path": "/tmp/kkscreeps-invader-battle-20261009/kkpv-split.jsonl",
+    "segments": 100,
+    "read_back_segments": 100,
+    "first_tick": 1,
+    "last_tick": 100,
+    "validation": "ok"
+  },
+  "auto_checkpoint": null,
+  "recovery": null,
+  "failure": null,
+  "players": {
+    "bot": {
+      "successful_ticks": 100,
+      "error_ticks": 0,
+      "not_evaluated_ticks": 0,
+      "errors_head": [],
+      "console_head": []
+    }
+  },
+  "aliases": {
+    "fighter": "kk0000000000000003",
+    "guard": "kk0000000000000002",
+    "healer": "kk0000000000000004",
+    "ranger": "kk0000000000000005"
+  },
+  "assertions": [
+    {
+      "pointer": "/objects/guard",
+      "op": "exists",
+      "expected": null,
+      "before": {
+        "kind": "creep",
+        "id": "kk0000000000000002",
+        "name": "guard",
+        "pos": {
+          "x": 10,
+          "y": 10,
+          "roomName": "W1N1"
+        },
+        "hits": 2100,
+        "hitsMax": 2100,
+        "fatigue": 0,
+        "body": [
+          {
+            "type": "tough",
+            "hits": 100
+          },
+          {
+            "type": "tough",
+            "hits": 100
+          },
+          {
+            "type": "tough",
+            "hits": 100
+          },
+          {
+            "type": "tough",
+            "hits": 100
+          },
+          {
+            "type": "attack",
+            "hits": 100
+          },
+          {
+            "type": "attack",
+            "hits": 100
+          },
+          {
+            "type": "attack",
+            "hits": 100
+          },
+          {
+            "type": "attack",
+            "hits": 100
+          },
+          {
+            "type": "attack",
+            "hits": 100
+          },
+          {
+            "type": "attack",
+            "hits": 100
+          },
+          {
+            "type": "heal",
+            "hits": 100
+          },
+          {
+            "type": "heal",
+            "hits": 100
+          },
+          {
+            "type": "heal",
+            "hits": 100
+          },
+          {
+            "type": "heal",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          }
+        ],
+        "owner": "bot",
+        "ticksToLive": 1500,
+        "spawning": false,
+        "store": {},
+        "storeCapacity": null
+      },
+      "actual": {
+        "kind": "creep",
+        "id": "kk0000000000000002",
+        "name": "guard",
+        "pos": {
+          "x": 14,
+          "y": 9,
+          "roomName": "W1N1"
+        },
+        "hits": 2100,
+        "hitsMax": 2100,
+        "fatigue": 0,
+        "body": [
+          {
+            "type": "tough",
+            "hits": 100
+          },
+          {
+            "type": "tough",
+            "hits": 100
+          },
+          {
+            "type": "tough",
+            "hits": 100
+          },
+          {
+            "type": "tough",
+            "hits": 100
+          },
+          {
+            "type": "attack",
+            "hits": 100
+          },
+          {
+            "type": "attack",
+            "hits": 100
+          },
+          {
+            "type": "attack",
+            "hits": 100
+          },
+          {
+            "type": "attack",
+            "hits": 100
+          },
+          {
+            "type": "attack",
+            "hits": 100
+          },
+          {
+            "type": "attack",
+            "hits": 100
+          },
+          {
+            "type": "heal",
+            "hits": 100
+          },
+          {
+            "type": "heal",
+            "hits": 100
+          },
+          {
+            "type": "heal",
+            "hits": 100
+          },
+          {
+            "type": "heal",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          }
+        ],
+        "owner": "bot",
+        "ticksToLive": 1400,
+        "spawning": false,
+        "store": {},
+        "storeCapacity": null
+      },
+      "delta": null,
+      "passed": true
+    },
+    {
+      "pointer": "/players/bot/memory/stats/npcMoved",
+      "op": "gte",
+      "expected": 1,
+      "before": null,
+      "actual": 114,
+      "delta": null,
+      "passed": true
+    },
+    {
+      "pointer": "/players/bot/memory/stats/npcMelee",
+      "op": "gte",
+      "expected": 30,
+      "before": null,
+      "actual": 450,
+      "delta": null,
+      "passed": true
+    },
+    {
+      "pointer": "/players/bot/memory/stats/npcRanged",
+      "op": "gte",
+      "expected": 10,
+      "before": null,
+      "actual": 2270,
+      "delta": null,
+      "passed": true
+    },
+    {
+      "pointer": "/players/bot/memory/stats/npcHealed",
+      "op": "gte",
+      "expected": 12,
+      "before": null,
+      "actual": 2200,
+      "delta": null,
+      "passed": true
+    },
+    {
+      "pointer": "/players/bot/memory/stats/npcRecovered",
+      "op": "gte",
+      "expected": 100,
+      "before": null,
+      "actual": 1720,
+      "delta": null,
+      "passed": true
+    },
+    {
+      "pointer": "/players/bot/memory/stats/guardInjured",
+      "op": "gte",
+      "expected": 100,
+      "before": null,
+      "actual": 180,
+      "delta": null,
+      "passed": true
+    },
+    {
+      "pointer": "/players/bot/memory/loops",
+      "op": "gte",
+      "expected": 100,
+      "before": null,
+      "actual": 100,
+      "delta": null,
+      "passed": true
+    }
+  ],
+  "mod_fault": null,
+  "mod_trace": null,
+  "initial": {
+    "time": 1,
+    "seed": 0,
+    "players": {
+      "bot": {
+        "gcl": 1000000,
+        "rooms": [
+          "W1N1"
+        ],
+        "memory": {},
+        "raw_memory": "{}",
+        "cpu_bucket": 10000.0
+      }
+    },
+    "objects": {
+      "fighter": {
+        "kind": "creep",
+        "id": "kk0000000000000003",
+        "name": "fighter",
+        "pos": {
+          "x": 25,
+          "y": 10,
+          "roomName": "W1N1"
+        },
+        "hits": 600,
+        "hitsMax": 600,
+        "fatigue": 0,
+        "body": [
+          {
+            "type": "tough",
+            "hits": 100
+          },
+          {
+            "type": "attack",
+            "hits": 100
+          },
+          {
+            "type": "attack",
+            "hits": 100
+          },
+          {
+            "type": "ranged_attack",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          }
+        ],
+        "owner": "Invader",
+        "ticksToLive": 1500,
+        "spawning": false,
+        "store": {},
+        "storeCapacity": null
+      },
+      "guard": {
+        "kind": "creep",
+        "id": "kk0000000000000002",
+        "name": "guard",
+        "pos": {
+          "x": 10,
+          "y": 10,
+          "roomName": "W1N1"
+        },
+        "hits": 2100,
+        "hitsMax": 2100,
+        "fatigue": 0,
+        "body": [
+          {
+            "type": "tough",
+            "hits": 100
+          },
+          {
+            "type": "tough",
+            "hits": 100
+          },
+          {
+            "type": "tough",
+            "hits": 100
+          },
+          {
+            "type": "tough",
+            "hits": 100
+          },
+          {
+            "type": "attack",
+            "hits": 100
+          },
+          {
+            "type": "attack",
+            "hits": 100
+          },
+          {
+            "type": "attack",
+            "hits": 100
+          },
+          {
+            "type": "attack",
+            "hits": 100
+          },
+          {
+            "type": "attack",
+            "hits": 100
+          },
+          {
+            "type": "attack",
+            "hits": 100
+          },
+          {
+            "type": "heal",
+            "hits": 100
+          },
+          {
+            "type": "heal",
+            "hits": 100
+          },
+          {
+            "type": "heal",
+            "hits": 100
+          },
+          {
+            "type": "heal",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          }
+        ],
+        "owner": "bot",
+        "ticksToLive": 1500,
+        "spawning": false,
+        "store": {},
+        "storeCapacity": null
+      },
+      "healer": {
+        "kind": "creep",
+        "id": "kk0000000000000004",
+        "name": "healer",
+        "pos": {
+          "x": 25,
+          "y": 12,
+          "roomName": "W1N1"
+        },
+        "hits": 500,
+        "hitsMax": 500,
+        "fatigue": 0,
+        "body": [
+          {
+            "type": "tough",
+            "hits": 100
+          },
+          {
+            "type": "heal",
+            "hits": 100
+          },
+          {
+            "type": "heal",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          }
+        ],
+        "owner": "Invader",
+        "ticksToLive": 1500,
+        "spawning": false,
+        "store": {},
+        "storeCapacity": null
+      },
+      "ranger": {
+        "kind": "creep",
+        "id": "kk0000000000000005",
+        "name": "ranger",
+        "pos": {
+          "x": 25,
+          "y": 14,
+          "roomName": "W1N1"
+        },
+        "hits": 500,
+        "hitsMax": 500,
+        "fatigue": 0,
+        "body": [
+          {
+            "type": "tough",
+            "hits": 100
+          },
+          {
+            "type": "ranged_attack",
+            "hits": 100
+          },
+          {
+            "type": "ranged_attack",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          }
+        ],
+        "owner": "Invader",
+        "ticksToLive": 1500,
+        "spawning": false,
+        "store": {},
+        "storeCapacity": null
+      }
+    },
+    "rooms": {
+      "W1N1": {
+        "controller": {
+          "kind": "structure",
+          "structureType": "controller",
+          "id": "kk0000000000000001",
+          "pos": {
+            "x": 1,
+            "y": 1,
+            "roomName": "W1N1"
+          },
+          "level": 6,
+          "progress": 0,
+          "progressTotal": 3645000,
+          "ticksToDowngrade": 120000,
+          "safeMode": null,
+          "safeModeAvailable": 0,
+          "safeModeCooldown": null,
+          "reservation": null,
+          "sign": null,
+          "upgradeBlocked": null,
+          "isPowerEnabled": false,
+          "owner": "bot"
+        }
+      }
+    },
+    "world": {
+      "time": 1,
+      "cpu": {
+        "limit": 20,
+        "tickLimit": 500,
+        "bucket": 10000
+      },
+      "user": null,
+      "gcl": 0,
+      "visibleRooms": [
+        "W1N1"
+      ],
+      "rooms": {
+        "W1N1": {
+          "name": "W1N1",
+          "terrain": {
+            "rev": 1,
+            "payload": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQ=="
+          },
+          "energyAvailable": 0,
+          "energyCapacityAvailable": 0
+        }
+      },
+      "objects": [
+        {
+          "type": "structure",
+          "structureType": "controller",
+          "id": "kk0000000000000001",
+          "room": "W1N1",
+          "x": 1,
+          "y": 1,
+          "level": 6,
+          "progress": 0,
+          "progressTotal": 3645000,
+          "safeMode": 0,
+          "safeModeAvailable": 0,
+          "downgradeTime": 120001,
+          "isPowerEnabled": false,
+          "upgradeBlocked": null,
+          "safeModeCooldown": null,
+          "reservation": null,
+          "sign": null,
+          "owner": "bot",
+          "pos": {
+            "x": 1,
+            "y": 1,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk0000000000000002",
+          "room": "W1N1",
+          "x": 10,
+          "y": 10,
+          "name": "guard",
+          "owner": "bot",
+          "body": [
+            {
+              "type": "tough",
+              "hits": 100
+            },
+            {
+              "type": "tough",
+              "hits": 100
+            },
+            {
+              "type": "tough",
+              "hits": 100
+            },
+            {
+              "type": "tough",
+              "hits": 100
+            },
+            {
+              "type": "attack",
+              "hits": 100
+            },
+            {
+              "type": "attack",
+              "hits": 100
+            },
+            {
+              "type": "attack",
+              "hits": 100
+            },
+            {
+              "type": "attack",
+              "hits": 100
+            },
+            {
+              "type": "attack",
+              "hits": 100
+            },
+            {
+              "type": "attack",
+              "hits": 100
+            },
+            {
+              "type": "heal",
+              "hits": 100
+            },
+            {
+              "type": "heal",
+              "hits": 100
+            },
+            {
+              "type": "heal",
+              "hits": 100
+            },
+            {
+              "type": "heal",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 1501,
+          "hits": 2100,
+          "hitsMax": 2100,
+          "store": {
+            "energy": 0
+          },
+          "storeCapacity": 0,
+          "spawning": false,
+          "ticksToLive": 1500,
+          "pos": {
+            "x": 10,
+            "y": 10,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk0000000000000003",
+          "room": "W1N1",
+          "x": 25,
+          "y": 10,
+          "name": "fighter",
+          "owner": "Invader",
+          "body": [
+            {
+              "type": "tough",
+              "hits": 100
+            },
+            {
+              "type": "attack",
+              "hits": 100
+            },
+            {
+              "type": "attack",
+              "hits": 100
+            },
+            {
+              "type": "ranged_attack",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 1501,
+          "hits": 600,
+          "hitsMax": 600,
+          "store": {
+            "energy": 0
+          },
+          "storeCapacity": 0,
+          "spawning": false,
+          "ticksToLive": 1500,
+          "pos": {
+            "x": 25,
+            "y": 10,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk0000000000000004",
+          "room": "W1N1",
+          "x": 25,
+          "y": 12,
+          "name": "healer",
+          "owner": "Invader",
+          "body": [
+            {
+              "type": "tough",
+              "hits": 100
+            },
+            {
+              "type": "heal",
+              "hits": 100
+            },
+            {
+              "type": "heal",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 1501,
+          "hits": 500,
+          "hitsMax": 500,
+          "store": {
+            "energy": 0
+          },
+          "storeCapacity": 0,
+          "spawning": false,
+          "ticksToLive": 1500,
+          "pos": {
+            "x": 25,
+            "y": 12,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk0000000000000005",
+          "room": "W1N1",
+          "x": 25,
+          "y": 14,
+          "name": "ranger",
+          "owner": "Invader",
+          "body": [
+            {
+              "type": "tough",
+              "hits": 100
+            },
+            {
+              "type": "ranged_attack",
+              "hits": 100
+            },
+            {
+              "type": "ranged_attack",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 1501,
+          "hits": 500,
+          "hitsMax": 500,
+          "store": {
+            "energy": 0
+          },
+          "storeCapacity": 0,
+          "spawning": false,
+          "ticksToLive": 1500,
+          "pos": {
+            "x": 25,
+            "y": 14,
+            "roomName": "W1N1"
+          }
+        }
+      ]
+    },
+    "mod_objects": [],
+    "mod_states": {}
+  },
+  "final": {
+    "time": 101,
+    "seed": 0,
+    "players": {
+      "bot": {
+        "gcl": 1000000,
+        "rooms": [
+          "W1N1"
+        ],
+        "memory": {
+          "stats": {
+            "melee": 450,
+            "ranged": 2270,
+            "healed": 6952,
+            "npcMelee": 450,
+            "npcRanged": 2270,
+            "npcHealed": 2200,
+            "npcMoved": 114,
+            "deaths": 0,
+            "npcRecovered": 1720,
+            "guardInjured": 180,
+            "previousGuardHits": 2100,
+            "lastHits": {
+              "kk0000000000000003": 260,
+              "kk0000000000000004": 500,
+              "kk0000000000000005": 500
+            },
+            "last": {
+              "kk0000000000000003": "15,8",
+              "kk0000000000000004": "15,9",
+              "kk0000000000000005": "13,13"
+            },
+            "eventsThroughTick": 99
+          },
+          "guardId": "kk0000000000000002",
+          "creeps": {
+            "guard": {
+              "_move": {
+                "dest": {
+                  "x": 15,
+                  "y": 8,
+                  "room": "W1N1"
+                },
+                "time": 99,
+                "path": "14098",
+                "room": "W1N1"
+              }
+            }
+          },
+          "loops": 100
+        },
+        "raw_memory": "{\"stats\":{\"melee\":450,\"ranged\":2270,\"healed\":6952,\"npcMelee\":450,\"npcRanged\":2270,\"npcHealed\":2200,\"npcMoved\":114,\"deaths\":0,\"npcRecovered\":1720,\"guardInjured\":180,\"previousGuardHits\":2100,\"lastHits\":{\"kk0000000000000003\":260,\"kk0000000000000004\":500,\"kk0000000000000005\":500},\"last\":{\"kk0000000000000003\":\"15,8\",\"kk0000000000000004\":\"15,9\",\"kk0000000000000005\":\"13,13\"},\"eventsThroughTick\":99},\"guardId\":\"kk0000000000000002\",\"creeps\":{\"guard\":{\"_move\":{\"dest\":{\"x\":15,\"y\":8,\"room\":\"W1N1\"},\"time\":99,\"path\":\"14098\",\"room\":\"W1N1\"}}},\"loops\":100}",
+        "cpu_bucket": 10000.0
+      }
+    },
+    "objects": {
+      "fighter": {
+        "kind": "creep",
+        "id": "kk0000000000000003",
+        "name": "fighter",
+        "pos": {
+          "x": 15,
+          "y": 7,
+          "roomName": "W1N1"
+        },
+        "hits": 284,
+        "hitsMax": 600,
+        "fatigue": 4,
+        "body": [
+          {
+            "type": "tough",
+            "hits": 0
+          },
+          {
+            "type": "attack",
+            "hits": 0
+          },
+          {
+            "type": "attack",
+            "hits": 0
+          },
+          {
+            "type": "ranged_attack",
+            "hits": 84
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          }
+        ],
+        "owner": "Invader",
+        "ticksToLive": 1400,
+        "spawning": false,
+        "store": {},
+        "storeCapacity": null
+      },
+      "guard": {
+        "kind": "creep",
+        "id": "kk0000000000000002",
+        "name": "guard",
+        "pos": {
+          "x": 14,
+          "y": 9,
+          "roomName": "W1N1"
+        },
+        "hits": 2100,
+        "hitsMax": 2100,
+        "fatigue": 0,
+        "body": [
+          {
+            "type": "tough",
+            "hits": 100
+          },
+          {
+            "type": "tough",
+            "hits": 100
+          },
+          {
+            "type": "tough",
+            "hits": 100
+          },
+          {
+            "type": "tough",
+            "hits": 100
+          },
+          {
+            "type": "attack",
+            "hits": 100
+          },
+          {
+            "type": "attack",
+            "hits": 100
+          },
+          {
+            "type": "attack",
+            "hits": 100
+          },
+          {
+            "type": "attack",
+            "hits": 100
+          },
+          {
+            "type": "attack",
+            "hits": 100
+          },
+          {
+            "type": "attack",
+            "hits": 100
+          },
+          {
+            "type": "heal",
+            "hits": 100
+          },
+          {
+            "type": "heal",
+            "hits": 100
+          },
+          {
+            "type": "heal",
+            "hits": 100
+          },
+          {
+            "type": "heal",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          }
+        ],
+        "owner": "bot",
+        "ticksToLive": 1400,
+        "spawning": false,
+        "store": {},
+        "storeCapacity": null
+      },
+      "healer": {
+        "kind": "creep",
+        "id": "kk0000000000000004",
+        "name": "healer",
+        "pos": {
+          "x": 15,
+          "y": 8,
+          "roomName": "W1N1"
+        },
+        "hits": 500,
+        "hitsMax": 500,
+        "fatigue": 2,
+        "body": [
+          {
+            "type": "tough",
+            "hits": 100
+          },
+          {
+            "type": "heal",
+            "hits": 100
+          },
+          {
+            "type": "heal",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          }
+        ],
+        "owner": "Invader",
+        "ticksToLive": 1400,
+        "spawning": false,
+        "store": {},
+        "storeCapacity": null
+      },
+      "ranger": {
+        "kind": "creep",
+        "id": "kk0000000000000005",
+        "name": "ranger",
+        "pos": {
+          "x": 14,
+          "y": 12,
+          "roomName": "W1N1"
+        },
+        "hits": 500,
+        "hitsMax": 500,
+        "fatigue": 2,
+        "body": [
+          {
+            "type": "tough",
+            "hits": 100
+          },
+          {
+            "type": "ranged_attack",
+            "hits": 100
+          },
+          {
+            "type": "ranged_attack",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          }
+        ],
+        "owner": "Invader",
+        "ticksToLive": 1400,
+        "spawning": false,
+        "store": {},
+        "storeCapacity": null
+      }
+    },
+    "rooms": {
+      "W1N1": {
+        "controller": {
+          "kind": "structure",
+          "structureType": "controller",
+          "id": "kk0000000000000001",
+          "pos": {
+            "x": 1,
+            "y": 1,
+            "roomName": "W1N1"
+          },
+          "level": 6,
+          "progress": 0,
+          "progressTotal": 3645000,
+          "ticksToDowngrade": 119900,
+          "safeMode": null,
+          "safeModeAvailable": 0,
+          "safeModeCooldown": null,
+          "reservation": null,
+          "sign": null,
+          "upgradeBlocked": null,
+          "isPowerEnabled": false,
+          "owner": "bot"
+        }
+      }
+    },
+    "world": {
+      "time": 101,
+      "cpu": {
+        "limit": 20,
+        "tickLimit": 500,
+        "bucket": 10000
+      },
+      "user": null,
+      "gcl": 0,
+      "visibleRooms": [
+        "W1N1"
+      ],
+      "rooms": {
+        "W1N1": {
+          "name": "W1N1",
+          "terrain": {
+            "rev": 1,
+            "payload": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQ=="
+          },
+          "energyAvailable": 0,
+          "energyCapacityAvailable": 0,
+          "events": [
+            {
+              "event": 1,
+              "objectId": "kk0000000000000003",
+              "data": {
+                "targetId": "kk0000000000000002",
+                "damage": 10,
+                "attackType": 2
+              }
+            },
+            {
+              "event": 6,
+              "objectId": "kk0000000000000004",
+              "data": {
+                "targetId": "kk0000000000000003",
+                "amount": 24,
+                "healType": 1
+              }
+            },
+            {
+              "event": 6,
+              "objectId": "kk0000000000000002",
+              "data": {
+                "targetId": "kk0000000000000002",
+                "amount": 48,
+                "healType": 1
+              }
+            }
+          ]
+        }
+      },
+      "objects": [
+        {
+          "type": "structure",
+          "structureType": "controller",
+          "id": "kk0000000000000001",
+          "room": "W1N1",
+          "x": 1,
+          "y": 1,
+          "level": 6,
+          "progress": 0,
+          "progressTotal": 3645000,
+          "safeMode": 0,
+          "safeModeAvailable": 0,
+          "downgradeTime": 120001,
+          "isPowerEnabled": false,
+          "upgradeBlocked": null,
+          "safeModeCooldown": null,
+          "reservation": null,
+          "sign": null,
+          "owner": "bot",
+          "pos": {
+            "x": 1,
+            "y": 1,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk0000000000000002",
+          "room": "W1N1",
+          "x": 14,
+          "y": 9,
+          "name": "guard",
+          "owner": "bot",
+          "body": [
+            {
+              "type": "tough",
+              "hits": 100
+            },
+            {
+              "type": "tough",
+              "hits": 100
+            },
+            {
+              "type": "tough",
+              "hits": 100
+            },
+            {
+              "type": "tough",
+              "hits": 100
+            },
+            {
+              "type": "attack",
+              "hits": 100
+            },
+            {
+              "type": "attack",
+              "hits": 100
+            },
+            {
+              "type": "attack",
+              "hits": 100
+            },
+            {
+              "type": "attack",
+              "hits": 100
+            },
+            {
+              "type": "attack",
+              "hits": 100
+            },
+            {
+              "type": "attack",
+              "hits": 100
+            },
+            {
+              "type": "heal",
+              "hits": 100
+            },
+            {
+              "type": "heal",
+              "hits": 100
+            },
+            {
+              "type": "heal",
+              "hits": 100
+            },
+            {
+              "type": "heal",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 1501,
+          "hits": 2100,
+          "hitsMax": 2100,
+          "store": {
+            "energy": 0
+          },
+          "storeCapacity": 0,
+          "spawning": false,
+          "ticksToLive": 1400,
+          "pos": {
+            "x": 14,
+            "y": 9,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk0000000000000003",
+          "room": "W1N1",
+          "x": 15,
+          "y": 7,
+          "name": "fighter",
+          "owner": "Invader",
+          "body": [
+            {
+              "type": "tough",
+              "hits": 0
+            },
+            {
+              "type": "attack",
+              "hits": 0
+            },
+            {
+              "type": "attack",
+              "hits": 0
+            },
+            {
+              "type": "ranged_attack",
+              "hits": 84
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 4,
+          "ageTime": 1501,
+          "hits": 284,
+          "hitsMax": 600,
+          "store": {
+            "energy": 0
+          },
+          "storeCapacity": 0,
+          "spawning": false,
+          "ticksToLive": 1400,
+          "pos": {
+            "x": 15,
+            "y": 7,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk0000000000000004",
+          "room": "W1N1",
+          "x": 15,
+          "y": 8,
+          "name": "healer",
+          "owner": "Invader",
+          "body": [
+            {
+              "type": "tough",
+              "hits": 100
+            },
+            {
+              "type": "heal",
+              "hits": 100
+            },
+            {
+              "type": "heal",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 2,
+          "ageTime": 1501,
+          "hits": 500,
+          "hitsMax": 500,
+          "store": {
+            "energy": 0
+          },
+          "storeCapacity": 0,
+          "spawning": false,
+          "ticksToLive": 1400,
+          "pos": {
+            "x": 15,
+            "y": 8,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk0000000000000005",
+          "room": "W1N1",
+          "x": 14,
+          "y": 12,
+          "name": "ranger",
+          "owner": "Invader",
+          "body": [
+            {
+              "type": "tough",
+              "hits": 100
+            },
+            {
+              "type": "ranged_attack",
+              "hits": 100
+            },
+            {
+              "type": "ranged_attack",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 2,
+          "ageTime": 1501,
+          "hits": 500,
+          "hitsMax": 500,
+          "store": {
+            "energy": 0
+          },
+          "storeCapacity": 0,
+          "spawning": false,
+          "ticksToLive": 1400,
+          "pos": {
+            "x": 14,
+            "y": 12,
+            "roomName": "W1N1"
+          }
+        }
+      ]
+    },
+    "mod_objects": [],
+    "mod_states": {}
+  },
+  "verify_replay": {
+    "status": "passed",
+    "segments": 100,
+    "first_tick": 1,
+    "last_tick": 100,
+    "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
+  }
+}

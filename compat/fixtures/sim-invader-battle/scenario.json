@@ -1,0 +1,166 @@
+{
+  "version": 1,
+  "shard": {
+    "players": [
+      "bot"
+    ],
+    "rooms": [
+      {
+        "name": "W1N1",
+        "owner": "bot",
+        "rcl": 6
+      }
+    ]
+  },
+  "bots": [
+    {
+      "player": "bot",
+      "modules": ".",
+      "memory": {}
+    }
+  ],
+  "objects": [
+    {
+      "alias": "guard",
+      "room": "W1N1",
+      "kind": "creep",
+      "spec": {
+        "name": "guard",
+        "owner": "bot",
+        "pos": [
+          10,
+          10
+        ],
+        "body": [
+          "tough",
+          "tough",
+          "tough",
+          "tough",
+          "attack",
+          "attack",
+          "attack",
+          "attack",
+          "attack",
+          "attack",
+          "heal",
+          "heal",
+          "heal",
+          "heal",
+          "move",
+          "move",
+          "move",
+          "move",
+          "move",
+          "move",
+          "move"
+        ],
+        "ticksToLive": 1500
+      }
+    },
+    {
+      "alias": "fighter",
+      "room": "W1N1",
+      "kind": "creep",
+      "spec": {
+        "name": "fighter",
+        "owner": "Invader",
+        "pos": [
+          25,
+          10
+        ],
+        "body": [
+          "tough",
+          "attack",
+          "attack",
+          "ranged_attack",
+          "move",
+          "move"
+        ],
+        "ticksToLive": 1500
+      }
+    },
+    {
+      "alias": "healer",
+      "room": "W1N1",
+      "kind": "creep",
+      "spec": {
+        "name": "healer",
+        "owner": "Invader",
+        "pos": [
+          25,
+          12
+        ],
+        "body": [
+          "tough",
+          "heal",
+          "heal",
+          "move",
+          "move"
+        ],
+        "ticksToLive": 1500
+      }
+    },
+    {
+      "alias": "ranger",
+      "room": "W1N1",
+      "kind": "creep",
+      "spec": {
+        "name": "ranger",
+        "owner": "Invader",
+        "pos": [
+          25,
+          14
+        ],
+        "body": [
+          "tough",
+          "ranged_attack",
+          "ranged_attack",
+          "move",
+          "move"
+        ],
+        "ticksToLive": 1500
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "pointer": "/objects/guard",
+      "op": "exists"
+    },
+    {
+      "pointer": "/players/bot/memory/stats/npcMoved",
+      "op": "gte",
+      "value": 1
+    },
+    {
+      "pointer": "/players/bot/memory/stats/npcMelee",
+      "op": "gte",
+      "value": 30
+    },
+    {
+      "pointer": "/players/bot/memory/stats/npcRanged",
+      "op": "gte",
+      "value": 10
+    },
+    {
+      "pointer": "/players/bot/memory/stats/npcHealed",
+      "op": "gte",
+      "value": 12
+    },
+    {
+      "pointer": "/players/bot/memory/stats/npcRecovered",
+      "op": "gte",
+      "value": 100
+    },
+    {
+      "pointer": "/players/bot/memory/stats/guardInjured",
+      "op": "gte",
+      "value": 100
+    },
+    {
+      "pointer": "/players/bot/memory/loops",
+      "op": "gte",
+      "value": 100
+    }
+  ]
+}

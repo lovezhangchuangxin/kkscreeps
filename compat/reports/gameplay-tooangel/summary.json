@@ -10,7 +10,7 @@
       "channel": "json",
       "exit_code": 0,
       "report": "json-continuous.json",
-      "executable_sha256": "47f39eae6119d3c7fd0391436489f9c76b091699702d799d0fe23536403a63fd",
+      "executable_sha256": "8043ad71137dd6d3ea11ccc8aa7304527ef5e8a3bb3da4cf79492dd9670834cc",
       "success": true,
       "checks": [
         {
@@ -34,1023 +34,7 @@
             "console_head": [
               {
                 "tick": 1,
-                "text": "1 Script reload - Load: 5 tickLimit: 500 limit: 20 Bucket: 10000"
-              },
-              {
-                "tick": 1,
-                "text": "1 W1N1                        Setting misplacedSpawn"
-              },
-              {
-                "tick": 1,
-                "text": "1 W1N1                        Setup complete - storing data"
-              },
-              {
-                "tick": 1,
-                "text": "1 W1N1                        Setup completed - storing data"
-              }
-            ]
-          }
-        },
-        {
-          "name": "世界时间接续",
-          "passed": true,
-          "actual": [
-            1,
-            2001
-          ]
-        },
-        {
-          "name": "公开观察 Memory 跨恢复接续",
-          "passed": true,
-          "actual": 2000
-        },
-        {
-          "name": "上一拍事件观察窗口完整",
-          "passed": true,
-          "actual": 1999
-        },
-        {
-          "name": "bot 未记录捕获异常",
-          "passed": true,
-          "actual": []
-        },
-        {
-          "name": "输入日志完整",
-          "passed": true,
-          "actual": {
-            "path": "/private/tmp/kkscreeps-tooangel-gameplay-20261009-final/json-continuous.jsonl",
-            "segments": 2000,
-            "read_back_segments": 2000,
-            "first_tick": 1,
-            "last_tick": 2000,
-            "validation": "ok"
-          }
-        },
-        {
-          "name": "整份检查点输入回放相等",
-          "passed": true,
-          "actual": {
-            "status": "passed",
-            "segments": 2000,
-            "first_tick": 1,
-            "last_tick": 2000,
-            "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
-          }
-        },
-        {
-          "name": "场景断言通过",
-          "passed": true,
-          "actual": [
-            {
-              "pointer": "/objects/spawn",
-              "op": "exists",
-              "expected": null,
-              "before": {
-                "kind": "structure",
-                "structureType": "spawn",
-                "id": "kk0000000000000002",
-                "pos": {
-                  "x": 25,
-                  "y": 25,
-                  "roomName": "W1N1"
-                },
-                "owner": "bot",
-                "hits": 5000,
-                "hitsMax": 5000,
-                "name": "Spawn1",
-                "store": {
-                  "energy": 300
-                },
-                "storeCapacity": null,
-                "spawning": null
-              },
-              "actual": {
-                "kind": "structure",
-                "structureType": "spawn",
-                "id": "kk0000000000000002",
-                "pos": {
-                  "x": 25,
-                  "y": 25,
-                  "roomName": "W1N1"
-                },
-                "owner": "bot",
-                "hits": 5000,
-                "hitsMax": 5000,
-                "name": "Spawn1",
-                "store": {
-                  "energy": 104
-                },
-                "storeCapacity": null,
-                "spawning": null
-              },
-              "delta": null,
-              "passed": true
-            },
-            {
-              "pointer": "/rooms/W1N1/controller/owner",
-              "op": "eq",
-              "expected": "bot",
-              "before": "bot",
-              "actual": "bot",
-              "delta": null,
-              "passed": true
-            }
-          ]
-        },
-        {
-          "name": "初始无 creep 或预建 extension",
-          "passed": true,
-          "actual": 5
-        },
-        {
-          "name": "实际结算/观察 births",
-          "passed": true,
-          "actual": 14
-        },
-        {
-          "name": "实际结算/观察 deaths",
-          "passed": true,
-          "actual": 5
-        },
-        {
-          "name": "实际结算/观察 birthsAfterDeath",
-          "passed": true,
-          "actual": 2
-        },
-        {
-          "name": "实际结算/观察 harvested",
-          "passed": true,
-          "actual": 12898
-        },
-        {
-          "name": "实际结算/观察 transferred",
-          "passed": true,
-          "actual": 12055
-        },
-        {
-          "name": "实际结算/观察 built",
-          "passed": true,
-          "actual": 6872
-        },
-        {
-          "name": "实际结算/观察 upgraded",
-          "passed": true,
-          "actual": 200
-        },
-        {
-          "name": "终态至少两只已出生 creep 存活",
-          "passed": true,
-          "actual": 9
-        },
-        {
-          "name": "实际建成 extension",
-          "passed": true,
-          "actual": 3
-        },
-        {
-          "name": "控制器升级并保持所有权",
-          "passed": true,
-          "actual": {
-            "kind": "structure",
-            "structureType": "controller",
-            "id": "kk0000000000000001",
-            "pos": {
-              "x": 1,
-              "y": 1,
-              "roomName": "W1N1"
-            },
-            "level": 2,
-            "progress": 0,
-            "progressTotal": 45000,
-            "ticksToDowngrade": 3417,
-            "safeMode": null,
-            "safeModeAvailable": 1,
-            "safeModeCooldown": null,
-            "reservation": null,
-            "sign": null,
-            "upgradeBlocked": null,
-            "isPowerEnabled": false,
-            "owner": "bot"
-          }
-        },
-        {
-          "name": "账户 GCL 实际增长",
-          "passed": true,
-          "actual": 200
-        },
-        {
-          "name": "实际投影通道",
-          "passed": true,
-          "actual": "json"
-        },
-        {
-          "name": "CLI 成功退出",
-          "passed": true,
-          "actual": 0
-        },
-        {
-          "name": "CLI 二进制身份一致",
-          "passed": true,
-          "actual": "47f39eae6119d3c7fd0391436489f9c76b091699702d799d0fe23536403a63fd"
-        }
-      ],
-      "metrics": {
-        "loops": 2000,
-        "births": 14,
-        "birthsAfterDeath": 2,
-        "deaths": 5,
-        "harvested": 12898,
-        "transferred": 12055,
-        "built": 6872,
-        "upgraded": 200,
-        "seen": {
-          "kk0000000000000006": true,
-          "kk0000000000000007": true,
-          "kk0000000000000009": true,
-          "kk000000000000000b": true,
-          "kk000000000000000d": true,
-          "kk000000000000004b": true,
-          "kk000000000000008d": true,
-          "kk000000000000009b": true,
-          "kk00000000000000aa": true,
-          "kk00000000000000b3": true,
-          "kk00000000000000d2": true,
-          "kk000000000000010d": true,
-          "kk000000000000018c": true,
-          "kk00000000000001af": true
-        },
-        "caughtErrors": 0,
-        "errorSamples": [],
-        "eventsThroughTick": 1999
-      }
-    },
-    {
-      "name": "json-prefix",
-      "channel": "json",
-      "exit_code": 0,
-      "report": "json-prefix.json",
-      "executable_sha256": "47f39eae6119d3c7fd0391436489f9c76b091699702d799d0fe23536403a63fd",
-      "success": true,
-      "checks": [
-        {
-          "name": "运行成功",
-          "passed": true,
-          "actual": "passed"
-        },
-        {
-          "name": "提交完整轮数",
-          "passed": true,
-          "actual": 1000
-        },
-        {
-          "name": "玩家无执行失败或跳帧",
-          "passed": true,
-          "actual": {
-            "successful_ticks": 1000,
-            "error_ticks": 0,
-            "not_evaluated_ticks": 0,
-            "errors_head": [],
-            "console_head": [
-              {
-                "tick": 1,
-                "text": "1 Script reload - Load: 5 tickLimit: 500 limit: 20 Bucket: 10000"
-              },
-              {
-                "tick": 1,
-                "text": "1 W1N1                        Setting misplacedSpawn"
-              },
-              {
-                "tick": 1,
-                "text": "1 W1N1                        Setup complete - storing data"
-              },
-              {
-                "tick": 1,
-                "text": "1 W1N1                        Setup completed - storing data"
-              }
-            ]
-          }
-        },
-        {
-          "name": "世界时间接续",
-          "passed": true,
-          "actual": [
-            1,
-            1001
-          ]
-        },
-        {
-          "name": "公开观察 Memory 跨恢复接续",
-          "passed": true,
-          "actual": 1000
-        },
-        {
-          "name": "上一拍事件观察窗口完整",
-          "passed": true,
-          "actual": 999
-        },
-        {
-          "name": "bot 未记录捕获异常",
-          "passed": true,
-          "actual": []
-        },
-        {
-          "name": "输入日志完整",
-          "passed": true,
-          "actual": {
-            "path": "/private/tmp/kkscreeps-tooangel-gameplay-20261009-final/json-resume.jsonl",
-            "segments": 1000,
-            "read_back_segments": 1000,
-            "first_tick": 1,
-            "last_tick": 1000,
-            "validation": "ok"
-          }
-        },
-        {
-          "name": "整份检查点输入回放相等",
-          "passed": true,
-          "actual": {
-            "status": "passed",
-            "segments": 1000,
-            "first_tick": 1,
-            "last_tick": 1000,
-            "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
-          }
-        },
-        {
-          "name": "场景断言通过",
-          "passed": true,
-          "actual": [
-            {
-              "pointer": "/objects/spawn",
-              "op": "exists",
-              "expected": null,
-              "before": {
-                "kind": "structure",
-                "structureType": "spawn",
-                "id": "kk0000000000000002",
-                "pos": {
-                  "x": 25,
-                  "y": 25,
-                  "roomName": "W1N1"
-                },
-                "owner": "bot",
-                "hits": 5000,
-                "hitsMax": 5000,
-                "name": "Spawn1",
-                "store": {
-                  "energy": 300
-                },
-                "storeCapacity": null,
-                "spawning": null
-              },
-              "actual": {
-                "kind": "structure",
-                "structureType": "spawn",
-                "id": "kk0000000000000002",
-                "pos": {
-                  "x": 25,
-                  "y": 25,
-                  "roomName": "W1N1"
-                },
-                "owner": "bot",
-                "hits": 5000,
-                "hitsMax": 5000,
-                "name": "Spawn1",
-                "store": {
-                  "energy": 216
-                },
-                "storeCapacity": null,
-                "spawning": null
-              },
-              "delta": null,
-              "passed": true
-            },
-            {
-              "pointer": "/rooms/W1N1/controller/owner",
-              "op": "eq",
-              "expected": "bot",
-              "before": "bot",
-              "actual": "bot",
-              "delta": null,
-              "passed": true
-            }
-          ]
-        },
-        {
-          "name": "实际投影通道",
-          "passed": true,
-          "actual": "json"
-        },
-        {
-          "name": "CLI 成功退出",
-          "passed": true,
-          "actual": 0
-        },
-        {
-          "name": "CLI 二进制身份一致",
-          "passed": true,
-          "actual": "47f39eae6119d3c7fd0391436489f9c76b091699702d799d0fe23536403a63fd"
-        }
-      ],
-      "metrics": {
-        "loops": 1000,
-        "births": 7,
-        "birthsAfterDeath": 0,
-        "deaths": 0,
-        "harvested": 4596,
-        "transferred": 1120,
-        "built": 1455,
-        "upgraded": 200,
-        "seen": {
-          "kk0000000000000006": true,
-          "kk0000000000000007": true,
-          "kk0000000000000009": true,
-          "kk000000000000000b": true,
-          "kk000000000000000d": true,
-          "kk0000000000000047": true,
-          "kk000000000000006b": true
-        },
-        "caughtErrors": 0,
-        "errorSamples": [],
-        "eventsThroughTick": 999
-      }
-    },
-    {
-      "name": "json-resumed",
-      "channel": "json",
-      "exit_code": 0,
-      "report": "json-resumed.json",
-      "executable_sha256": "47f39eae6119d3c7fd0391436489f9c76b091699702d799d0fe23536403a63fd",
-      "success": true,
-      "checks": [
-        {
-          "name": "运行成功",
-          "passed": true,
-          "actual": "passed"
-        },
-        {
-          "name": "提交完整轮数",
-          "passed": true,
-          "actual": 1000
-        },
-        {
-          "name": "玩家无执行失败或跳帧",
-          "passed": true,
-          "actual": {
-            "successful_ticks": 1000,
-            "error_ticks": 0,
-            "not_evaluated_ticks": 0,
-            "errors_head": [],
-            "console_head": [
-              {
-                "tick": 1001,
-                "text": "1001 Script reload - Load: 6 tickLimit: 500 limit: 20 Bucket: 10000"
-              }
-            ]
-          }
-        },
-        {
-          "name": "世界时间接续",
-          "passed": true,
-          "actual": [
-            1001,
-            2001
-          ]
-        },
-        {
-          "name": "公开观察 Memory 跨恢复接续",
-          "passed": true,
-          "actual": 2000
-        },
-        {
-          "name": "上一拍事件观察窗口完整",
-          "passed": true,
-          "actual": 1999
-        },
-        {
-          "name": "bot 未记录捕获异常",
-          "passed": true,
-          "actual": []
-        },
-        {
-          "name": "输入日志完整",
-          "passed": true,
-          "actual": {
-            "path": "/private/tmp/kkscreeps-tooangel-gameplay-20261009-final/json-resume.jsonl",
-            "segments": 2000,
-            "read_back_segments": 2000,
-            "first_tick": 1,
-            "last_tick": 2000,
-            "validation": "ok"
-          }
-        },
-        {
-          "name": "整份检查点输入回放相等",
-          "passed": true,
-          "actual": {
-            "status": "passed",
-            "segments": 1000,
-            "first_tick": 1001,
-            "last_tick": 2000,
-            "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
-          }
-        },
-        {
-          "name": "场景断言通过",
-          "passed": true,
-          "actual": [
-            {
-              "pointer": "/objects/spawn",
-              "op": "exists",
-              "expected": null,
-              "before": {
-                "kind": "structure",
-                "structureType": "spawn",
-                "id": "kk0000000000000002",
-                "pos": {
-                  "x": 25,
-                  "y": 25,
-                  "roomName": "W1N1"
-                },
-                "owner": "bot",
-                "hits": 5000,
-                "hitsMax": 5000,
-                "name": "Spawn1",
-                "store": {
-                  "energy": 300
-                },
-                "storeCapacity": null,
-                "spawning": null
-              },
-              "actual": {
-                "kind": "structure",
-                "structureType": "spawn",
-                "id": "kk0000000000000002",
-                "pos": {
-                  "x": 25,
-                  "y": 25,
-                  "roomName": "W1N1"
-                },
-                "owner": "bot",
-                "hits": 5000,
-                "hitsMax": 5000,
-                "name": "Spawn1",
-                "store": {
-                  "energy": 164
-                },
-                "storeCapacity": null,
-                "spawning": null
-              },
-              "delta": null,
-              "passed": true
-            },
-            {
-              "pointer": "/rooms/W1N1/controller/owner",
-              "op": "eq",
-              "expected": "bot",
-              "before": "bot",
-              "actual": "bot",
-              "delta": null,
-              "passed": true
-            }
-          ]
-        },
-        {
-          "name": "初始无 creep 或预建 extension",
-          "passed": true,
-          "actual": 5
-        },
-        {
-          "name": "实际结算/观察 births",
-          "passed": true,
-          "actual": 14
-        },
-        {
-          "name": "实际结算/观察 deaths",
-          "passed": true,
-          "actual": 5
-        },
-        {
-          "name": "实际结算/观察 birthsAfterDeath",
-          "passed": true,
-          "actual": 2
-        },
-        {
-          "name": "实际结算/观察 harvested",
-          "passed": true,
-          "actual": 12962
-        },
-        {
-          "name": "实际结算/观察 transferred",
-          "passed": true,
-          "actual": 11223
-        },
-        {
-          "name": "实际结算/观察 built",
-          "passed": true,
-          "actual": 6885
-        },
-        {
-          "name": "实际结算/观察 upgraded",
-          "passed": true,
-          "actual": 201
-        },
-        {
-          "name": "终态至少两只已出生 creep 存活",
-          "passed": true,
-          "actual": 9
-        },
-        {
-          "name": "实际建成 extension",
-          "passed": true,
-          "actual": 3
-        },
-        {
-          "name": "控制器升级并保持所有权",
-          "passed": true,
-          "actual": {
-            "kind": "structure",
-            "structureType": "controller",
-            "id": "kk0000000000000001",
-            "pos": {
-              "x": 1,
-              "y": 1,
-              "roomName": "W1N1"
-            },
-            "level": 2,
-            "progress": 1,
-            "progressTotal": 45000,
-            "ticksToDowngrade": 3521,
-            "safeMode": null,
-            "safeModeAvailable": 1,
-            "safeModeCooldown": null,
-            "reservation": null,
-            "sign": null,
-            "upgradeBlocked": null,
-            "isPowerEnabled": false,
-            "owner": "bot"
-          }
-        },
-        {
-          "name": "账户 GCL 实际增长",
-          "passed": true,
-          "actual": 201
-        },
-        {
-          "name": "实际投影通道",
-          "passed": true,
-          "actual": "json"
-        },
-        {
-          "name": "CLI 成功退出",
-          "passed": true,
-          "actual": 0
-        },
-        {
-          "name": "CLI 二进制身份一致",
-          "passed": true,
-          "actual": "47f39eae6119d3c7fd0391436489f9c76b091699702d799d0fe23536403a63fd"
-        }
-      ],
-      "metrics": {
-        "loops": 2000,
-        "births": 14,
-        "birthsAfterDeath": 2,
-        "deaths": 5,
-        "harvested": 12962,
-        "transferred": 11223,
-        "built": 6885,
-        "upgraded": 201,
-        "seen": {
-          "kk0000000000000006": true,
-          "kk0000000000000007": true,
-          "kk0000000000000009": true,
-          "kk000000000000000b": true,
-          "kk000000000000000d": true,
-          "kk0000000000000047": true,
-          "kk000000000000006b": true,
-          "kk0000000000000085": true,
-          "kk000000000000008b": true,
-          "kk00000000000000a4": true,
-          "kk00000000000000dc": true,
-          "kk0000000000000143": true,
-          "kk00000000000001cd": true,
-          "kk00000000000001ec": true
-        },
-        "caughtErrors": 0,
-        "errorSamples": [],
-        "eventsThroughTick": 1999
-      }
-    },
-    {
-      "name": "kkpv-continuous",
-      "channel": "kkpv",
-      "exit_code": 0,
-      "report": "kkpv-continuous.json",
-      "executable_sha256": "47f39eae6119d3c7fd0391436489f9c76b091699702d799d0fe23536403a63fd",
-      "success": true,
-      "checks": [
-        {
-          "name": "运行成功",
-          "passed": true,
-          "actual": "passed"
-        },
-        {
-          "name": "提交完整轮数",
-          "passed": true,
-          "actual": 2000
-        },
-        {
-          "name": "玩家无执行失败或跳帧",
-          "passed": true,
-          "actual": {
-            "successful_ticks": 2000,
-            "error_ticks": 0,
-            "not_evaluated_ticks": 0,
-            "errors_head": [],
-            "console_head": [
-              {
-                "tick": 1,
-                "text": "1 Script reload - Load: 6 tickLimit: 500 limit: 20 Bucket: 10000"
-              },
-              {
-                "tick": 1,
-                "text": "1 W1N1                        Setting misplacedSpawn"
-              },
-              {
-                "tick": 1,
-                "text": "1 W1N1                        Setup complete - storing data"
-              },
-              {
-                "tick": 1,
-                "text": "1 W1N1                        Setup completed - storing data"
-              }
-            ]
-          }
-        },
-        {
-          "name": "世界时间接续",
-          "passed": true,
-          "actual": [
-            1,
-            2001
-          ]
-        },
-        {
-          "name": "公开观察 Memory 跨恢复接续",
-          "passed": true,
-          "actual": 2000
-        },
-        {
-          "name": "上一拍事件观察窗口完整",
-          "passed": true,
-          "actual": 1999
-        },
-        {
-          "name": "bot 未记录捕获异常",
-          "passed": true,
-          "actual": []
-        },
-        {
-          "name": "输入日志完整",
-          "passed": true,
-          "actual": {
-            "path": "/private/tmp/kkscreeps-tooangel-gameplay-20261009-final/kkpv-continuous.jsonl",
-            "segments": 2000,
-            "read_back_segments": 2000,
-            "first_tick": 1,
-            "last_tick": 2000,
-            "validation": "ok"
-          }
-        },
-        {
-          "name": "整份检查点输入回放相等",
-          "passed": true,
-          "actual": {
-            "status": "passed",
-            "segments": 2000,
-            "first_tick": 1,
-            "last_tick": 2000,
-            "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
-          }
-        },
-        {
-          "name": "场景断言通过",
-          "passed": true,
-          "actual": [
-            {
-              "pointer": "/objects/spawn",
-              "op": "exists",
-              "expected": null,
-              "before": {
-                "kind": "structure",
-                "structureType": "spawn",
-                "id": "kk0000000000000002",
-                "pos": {
-                  "x": 25,
-                  "y": 25,
-                  "roomName": "W1N1"
-                },
-                "owner": "bot",
-                "hits": 5000,
-                "hitsMax": 5000,
-                "name": "Spawn1",
-                "store": {
-                  "energy": 300
-                },
-                "storeCapacity": null,
-                "spawning": null
-              },
-              "actual": {
-                "kind": "structure",
-                "structureType": "spawn",
-                "id": "kk0000000000000002",
-                "pos": {
-                  "x": 25,
-                  "y": 25,
-                  "roomName": "W1N1"
-                },
-                "owner": "bot",
-                "hits": 5000,
-                "hitsMax": 5000,
-                "name": "Spawn1",
-                "store": {
-                  "energy": 63
-                },
-                "storeCapacity": null,
-                "spawning": null
-              },
-              "delta": null,
-              "passed": true
-            },
-            {
-              "pointer": "/rooms/W1N1/controller/owner",
-              "op": "eq",
-              "expected": "bot",
-              "before": "bot",
-              "actual": "bot",
-              "delta": null,
-              "passed": true
-            }
-          ]
-        },
-        {
-          "name": "初始无 creep 或预建 extension",
-          "passed": true,
-          "actual": 5
-        },
-        {
-          "name": "实际结算/观察 births",
-          "passed": true,
-          "actual": 14
-        },
-        {
-          "name": "实际结算/观察 deaths",
-          "passed": true,
-          "actual": 4
-        },
-        {
-          "name": "实际结算/观察 birthsAfterDeath",
-          "passed": true,
-          "actual": 5
-        },
-        {
-          "name": "实际结算/观察 harvested",
-          "passed": true,
-          "actual": 12294
-        },
-        {
-          "name": "实际结算/观察 transferred",
-          "passed": true,
-          "actual": 11008
-        },
-        {
-          "name": "实际结算/观察 built",
-          "passed": true,
-          "actual": 6482
-        },
-        {
-          "name": "实际结算/观察 upgraded",
-          "passed": true,
-          "actual": 200
-        },
-        {
-          "name": "终态至少两只已出生 creep 存活",
-          "passed": true,
-          "actual": 10
-        },
-        {
-          "name": "实际建成 extension",
-          "passed": true,
-          "actual": 3
-        },
-        {
-          "name": "控制器升级并保持所有权",
-          "passed": true,
-          "actual": {
-            "kind": "structure",
-            "structureType": "controller",
-            "id": "kk0000000000000001",
-            "pos": {
-              "x": 1,
-              "y": 1,
-              "roomName": "W1N1"
-            },
-            "level": 2,
-            "progress": 0,
-            "progressTotal": 45000,
-            "ticksToDowngrade": 3419,
-            "safeMode": null,
-            "safeModeAvailable": 1,
-            "safeModeCooldown": null,
-            "reservation": null,
-            "sign": null,
-            "upgradeBlocked": null,
-            "isPowerEnabled": false,
-            "owner": "bot"
-          }
-        },
-        {
-          "name": "账户 GCL 实际增长",
-          "passed": true,
-          "actual": 200
-        },
-        {
-          "name": "实际投影通道",
-          "passed": true,
-          "actual": "kkpv"
-        },
-        {
-          "name": "CLI 成功退出",
-          "passed": true,
-          "actual": 0
-        },
-        {
-          "name": "CLI 二进制身份一致",
-          "passed": true,
-          "actual": "47f39eae6119d3c7fd0391436489f9c76b091699702d799d0fe23536403a63fd"
-        }
-      ],
-      "metrics": {
-        "loops": 2000,
-        "births": 14,
-        "birthsAfterDeath": 5,
-        "deaths": 4,
-        "harvested": 12294,
-        "transferred": 11008,
-        "built": 6482,
-        "upgraded": 200,
-        "seen": {
-          "kk0000000000000006": true,
-          "kk0000000000000007": true,
-          "kk0000000000000009": true,
-          "kk000000000000000d": true,
-          "kk000000000000000f": true,
-          "kk0000000000000046": true,
-          "kk0000000000000081": true,
-          "kk0000000000000096": true,
-          "kk00000000000000cf": true,
-          "kk00000000000000e1": true,
-          "kk00000000000000f3": true,
-          "kk00000000000000f6": true,
-          "kk0000000000000105": true,
-          "kk000000000000010c": true
-        },
-        "caughtErrors": 0,
-        "errorSamples": [],
-        "eventsThroughTick": 1999
-      }
-    },
-    {
-      "name": "kkpv-prefix",
-      "channel": "kkpv",
-      "exit_code": 0,
-      "report": "kkpv-prefix.json",
-      "executable_sha256": "47f39eae6119d3c7fd0391436489f9c76b091699702d799d0fe23536403a63fd",
-      "success": true,
-      "checks": [
-        {
-          "name": "运行成功",
-          "passed": true,
-          "actual": "passed"
-        },
-        {
-          "name": "提交完整轮数",
-          "passed": true,
-          "actual": 1000
-        },
-        {
-          "name": "玩家无执行失败或跳帧",
-          "passed": true,
-          "actual": {
-            "successful_ticks": 1000,
-            "error_ticks": 0,
-            "not_evaluated_ticks": 0,
-            "errors_head": [],
-            "console_head": [
-              {
-                "tick": 1,
-                "text": "1 Script reload - Load: 6 tickLimit: 500 limit: 20 Bucket: 10000"
+                "text": "1 Script reload - Load: 8 tickLimit: 500 limit: 20 Bucket: 10000"
               },
               {
                 "tick": 1,
@@ -1076,6 +60,286 @@
           "passed": true,
           "actual": [
             1,
+            2001
+          ]
+        },
+        {
+          "name": "公开观察 Memory 跨恢复接续",
+          "passed": true,
+          "actual": 2000
+        },
+        {
+          "name": "上一拍事件观察窗口完整",
+          "passed": true,
+          "actual": 1999
+        },
+        {
+          "name": "bot 未记录捕获异常",
+          "passed": true,
+          "actual": []
+        },
+        {
+          "name": "输入日志完整",
+          "passed": true,
+          "actual": {
+            "path": "/private/tmp/kkscreeps-tooangel-v6-20261009/json-continuous.jsonl",
+            "segments": 2000,
+            "read_back_segments": 2000,
+            "first_tick": 1,
+            "last_tick": 2000,
+            "validation": "ok"
+          }
+        },
+        {
+          "name": "整份检查点输入回放相等",
+          "passed": true,
+          "actual": {
+            "status": "passed",
+            "segments": 2000,
+            "first_tick": 1,
+            "last_tick": 2000,
+            "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
+          }
+        },
+        {
+          "name": "场景断言通过",
+          "passed": true,
+          "actual": [
+            {
+              "pointer": "/objects/spawn",
+              "op": "exists",
+              "expected": null,
+              "before": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 300
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "actual": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 167
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/rooms/W1N1/controller/owner",
+              "op": "eq",
+              "expected": "bot",
+              "before": "bot",
+              "actual": "bot",
+              "delta": null,
+              "passed": true
+            }
+          ]
+        },
+        {
+          "name": "初始无 creep 或预建 extension",
+          "passed": true,
+          "actual": 5
+        },
+        {
+          "name": "实际结算/观察 births",
+          "passed": true,
+          "actual": 15
+        },
+        {
+          "name": "实际结算/观察 deaths",
+          "passed": true,
+          "actual": 5
+        },
+        {
+          "name": "实际结算/观察 birthsAfterDeath",
+          "passed": true,
+          "actual": 2
+        },
+        {
+          "name": "实际结算/观察 harvested",
+          "passed": true,
+          "actual": 13034
+        },
+        {
+          "name": "实际结算/观察 transferred",
+          "passed": true,
+          "actual": 11451
+        },
+        {
+          "name": "实际结算/观察 built",
+          "passed": true,
+          "actual": 7149
+        },
+        {
+          "name": "实际结算/观察 upgraded",
+          "passed": true,
+          "actual": 201
+        },
+        {
+          "name": "终态至少两只已出生 creep 存活",
+          "passed": true,
+          "actual": 10
+        },
+        {
+          "name": "实际建成 extension",
+          "passed": true,
+          "actual": 3
+        },
+        {
+          "name": "控制器升级并保持所有权",
+          "passed": true,
+          "actual": {
+            "kind": "structure",
+            "structureType": "controller",
+            "id": "kk0000000000000001",
+            "pos": {
+              "x": 1,
+              "y": 1,
+              "roomName": "W1N1"
+            },
+            "level": 2,
+            "progress": 1,
+            "progressTotal": 45000,
+            "ticksToDowngrade": 3518,
+            "safeMode": null,
+            "safeModeAvailable": 1,
+            "safeModeCooldown": null,
+            "reservation": null,
+            "sign": null,
+            "upgradeBlocked": null,
+            "isPowerEnabled": false,
+            "owner": "bot"
+          }
+        },
+        {
+          "name": "账户 GCL 实际增长",
+          "passed": true,
+          "actual": 201
+        },
+        {
+          "name": "实际投影通道",
+          "passed": true,
+          "actual": "json"
+        },
+        {
+          "name": "CLI 成功退出",
+          "passed": true,
+          "actual": 0
+        },
+        {
+          "name": "CLI 二进制身份一致",
+          "passed": true,
+          "actual": "8043ad71137dd6d3ea11ccc8aa7304527ef5e8a3bb3da4cf79492dd9670834cc"
+        }
+      ],
+      "metrics": {
+        "loops": 2000,
+        "births": 15,
+        "birthsAfterDeath": 2,
+        "deaths": 5,
+        "harvested": 13034,
+        "transferred": 11451,
+        "built": 7149,
+        "upgraded": 201,
+        "seen": {
+          "kk0000000000000006": true,
+          "kk0000000000000007": true,
+          "kk0000000000000009": true,
+          "kk000000000000000b": true,
+          "kk000000000000000d": true,
+          "kk000000000000003d": true,
+          "kk0000000000000086": true,
+          "kk00000000000000a1": true,
+          "kk00000000000000a9": true,
+          "kk00000000000000af": true,
+          "kk0000000000000107": true,
+          "kk0000000000000149": true,
+          "kk0000000000000181": true,
+          "kk0000000000000224": true,
+          "kk000000000000025e": true
+        },
+        "caughtErrors": 0,
+        "errorSamples": [],
+        "eventsThroughTick": 1999
+      }
+    },
+    {
+      "name": "json-prefix",
+      "channel": "json",
+      "exit_code": 0,
+      "report": "json-prefix.json",
+      "executable_sha256": "8043ad71137dd6d3ea11ccc8aa7304527ef5e8a3bb3da4cf79492dd9670834cc",
+      "success": true,
+      "checks": [
+        {
+          "name": "运行成功",
+          "passed": true,
+          "actual": "passed"
+        },
+        {
+          "name": "提交完整轮数",
+          "passed": true,
+          "actual": 1000
+        },
+        {
+          "name": "玩家无执行失败或跳帧",
+          "passed": true,
+          "actual": {
+            "successful_ticks": 1000,
+            "error_ticks": 0,
+            "not_evaluated_ticks": 0,
+            "errors_head": [],
+            "console_head": [
+              {
+                "tick": 1,
+                "text": "1 Script reload - Load: 5 tickLimit: 500 limit: 20 Bucket: 10000"
+              },
+              {
+                "tick": 1,
+                "text": "1 W1N1                        Setting misplacedSpawn"
+              },
+              {
+                "tick": 1,
+                "text": "1 W1N1                        Setup complete - storing data"
+              },
+              {
+                "tick": 1,
+                "text": "1 W1N1                        Setup completed - storing data"
+              }
+            ]
+          }
+        },
+        {
+          "name": "世界时间接续",
+          "passed": true,
+          "actual": [
+            1,
             1001
           ]
         },
@@ -1098,7 +362,7 @@
           "name": "输入日志完整",
           "passed": true,
           "actual": {
-            "path": "/private/tmp/kkscreeps-tooangel-gameplay-20261009-final/kkpv-resume.jsonl",
+            "path": "/private/tmp/kkscreeps-tooangel-v6-20261009/json-resume.jsonl",
             "segments": 1000,
             "read_back_segments": 1000,
             "first_tick": 1,
@@ -1180,7 +444,7 @@
         {
           "name": "实际投影通道",
           "passed": true,
-          "actual": "kkpv"
+          "actual": "json"
         },
         {
           "name": "CLI 成功退出",
@@ -1190,7 +454,7 @@
         {
           "name": "CLI 二进制身份一致",
           "passed": true,
-          "actual": "47f39eae6119d3c7fd0391436489f9c76b091699702d799d0fe23536403a63fd"
+          "actual": "8043ad71137dd6d3ea11ccc8aa7304527ef5e8a3bb3da4cf79492dd9670834cc"
         }
       ],
       "metrics": {
@@ -1198,9 +462,9 @@
         "births": 7,
         "birthsAfterDeath": 0,
         "deaths": 0,
-        "harvested": 4594,
-        "transferred": 1349,
-        "built": 1455,
+        "harvested": 4606,
+        "transferred": 1364,
+        "built": 1466,
         "upgraded": 200,
         "seen": {
           "kk0000000000000006": true,
@@ -1208,7 +472,7 @@
           "kk0000000000000009": true,
           "kk000000000000000b": true,
           "kk000000000000000d": true,
-          "kk0000000000000047": true,
+          "kk0000000000000046": true,
           "kk0000000000000066": true
         },
         "caughtErrors": 0,
@@ -1217,11 +481,11 @@
       }
     },
     {
-      "name": "kkpv-resumed",
-      "channel": "kkpv",
+      "name": "json-resumed",
+      "channel": "json",
       "exit_code": 0,
-      "report": "kkpv-resumed.json",
-      "executable_sha256": "47f39eae6119d3c7fd0391436489f9c76b091699702d799d0fe23536403a63fd",
+      "report": "json-resumed.json",
+      "executable_sha256": "8043ad71137dd6d3ea11ccc8aa7304527ef5e8a3bb3da4cf79492dd9670834cc",
       "success": true,
       "checks": [
         {
@@ -1245,7 +509,7 @@
             "console_head": [
               {
                 "tick": 1001,
-                "text": "1001 Script reload - Load: 6 tickLimit: 500 limit: 20 Bucket: 10000"
+                "text": "1001 Script reload - Load: 5 tickLimit: 500 limit: 20 Bucket: 10000"
               }
             ]
           }
@@ -1277,7 +541,7 @@
           "name": "输入日志完整",
           "passed": true,
           "actual": {
-            "path": "/private/tmp/kkscreeps-tooangel-gameplay-20261009-final/kkpv-resume.jsonl",
+            "path": "/private/tmp/kkscreeps-tooangel-v6-20261009/json-resume.jsonl",
             "segments": 2000,
             "read_back_segments": 2000,
             "first_tick": 1,
@@ -1379,17 +643,17 @@
         {
           "name": "实际结算/观察 harvested",
           "passed": true,
-          "actual": 12808
+          "actual": 12868
         },
         {
           "name": "实际结算/观察 transferred",
           "passed": true,
-          "actual": 12097
+          "actual": 11958
         },
         {
           "name": "实际结算/观察 built",
           "passed": true,
-          "actual": 6836
+          "actual": 6898
         },
         {
           "name": "实际结算/观察 upgraded",
@@ -1421,7 +685,745 @@
             "level": 2,
             "progress": 0,
             "progressTotal": 45000,
-            "ticksToDowngrade": 3415,
+            "ticksToDowngrade": 3417,
+            "safeMode": null,
+            "safeModeAvailable": 1,
+            "safeModeCooldown": null,
+            "reservation": null,
+            "sign": null,
+            "upgradeBlocked": null,
+            "isPowerEnabled": false,
+            "owner": "bot"
+          }
+        },
+        {
+          "name": "账户 GCL 实际增长",
+          "passed": true,
+          "actual": 200
+        },
+        {
+          "name": "实际投影通道",
+          "passed": true,
+          "actual": "json"
+        },
+        {
+          "name": "CLI 成功退出",
+          "passed": true,
+          "actual": 0
+        },
+        {
+          "name": "CLI 二进制身份一致",
+          "passed": true,
+          "actual": "8043ad71137dd6d3ea11ccc8aa7304527ef5e8a3bb3da4cf79492dd9670834cc"
+        }
+      ],
+      "metrics": {
+        "loops": 2000,
+        "births": 14,
+        "birthsAfterDeath": 2,
+        "deaths": 5,
+        "harvested": 12868,
+        "transferred": 11958,
+        "built": 6898,
+        "upgraded": 200,
+        "seen": {
+          "kk0000000000000006": true,
+          "kk0000000000000007": true,
+          "kk0000000000000009": true,
+          "kk000000000000000b": true,
+          "kk000000000000000d": true,
+          "kk0000000000000046": true,
+          "kk0000000000000066": true,
+          "kk0000000000000083": true,
+          "kk0000000000000098": true,
+          "kk00000000000000a0": true,
+          "kk00000000000000cc": true,
+          "kk00000000000000fe": true,
+          "kk0000000000000185": true,
+          "kk0000000000000193": true
+        },
+        "caughtErrors": 0,
+        "errorSamples": [],
+        "eventsThroughTick": 1999
+      }
+    },
+    {
+      "name": "kkpv-continuous",
+      "channel": "kkpv",
+      "exit_code": 0,
+      "report": "kkpv-continuous.json",
+      "executable_sha256": "8043ad71137dd6d3ea11ccc8aa7304527ef5e8a3bb3da4cf79492dd9670834cc",
+      "success": true,
+      "checks": [
+        {
+          "name": "运行成功",
+          "passed": true,
+          "actual": "passed"
+        },
+        {
+          "name": "提交完整轮数",
+          "passed": true,
+          "actual": 2000
+        },
+        {
+          "name": "玩家无执行失败或跳帧",
+          "passed": true,
+          "actual": {
+            "successful_ticks": 2000,
+            "error_ticks": 0,
+            "not_evaluated_ticks": 0,
+            "errors_head": [],
+            "console_head": [
+              {
+                "tick": 1,
+                "text": "1 Script reload - Load: 5 tickLimit: 500 limit: 20 Bucket: 10000"
+              },
+              {
+                "tick": 1,
+                "text": "1 W1N1                        Setting misplacedSpawn"
+              },
+              {
+                "tick": 1,
+                "text": "1 W1N1                        Setup complete - storing data"
+              },
+              {
+                "tick": 1,
+                "text": "1 W1N1                        Setup completed - storing data"
+              }
+            ]
+          }
+        },
+        {
+          "name": "世界时间接续",
+          "passed": true,
+          "actual": [
+            1,
+            2001
+          ]
+        },
+        {
+          "name": "公开观察 Memory 跨恢复接续",
+          "passed": true,
+          "actual": 2000
+        },
+        {
+          "name": "上一拍事件观察窗口完整",
+          "passed": true,
+          "actual": 1999
+        },
+        {
+          "name": "bot 未记录捕获异常",
+          "passed": true,
+          "actual": []
+        },
+        {
+          "name": "输入日志完整",
+          "passed": true,
+          "actual": {
+            "path": "/private/tmp/kkscreeps-tooangel-v6-20261009/kkpv-continuous.jsonl",
+            "segments": 2000,
+            "read_back_segments": 2000,
+            "first_tick": 1,
+            "last_tick": 2000,
+            "validation": "ok"
+          }
+        },
+        {
+          "name": "整份检查点输入回放相等",
+          "passed": true,
+          "actual": {
+            "status": "passed",
+            "segments": 2000,
+            "first_tick": 1,
+            "last_tick": 2000,
+            "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
+          }
+        },
+        {
+          "name": "场景断言通过",
+          "passed": true,
+          "actual": [
+            {
+              "pointer": "/objects/spawn",
+              "op": "exists",
+              "expected": null,
+              "before": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 300
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "actual": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 75
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/rooms/W1N1/controller/owner",
+              "op": "eq",
+              "expected": "bot",
+              "before": "bot",
+              "actual": "bot",
+              "delta": null,
+              "passed": true
+            }
+          ]
+        },
+        {
+          "name": "初始无 creep 或预建 extension",
+          "passed": true,
+          "actual": 5
+        },
+        {
+          "name": "实际结算/观察 births",
+          "passed": true,
+          "actual": 15
+        },
+        {
+          "name": "实际结算/观察 deaths",
+          "passed": true,
+          "actual": 5
+        },
+        {
+          "name": "实际结算/观察 birthsAfterDeath",
+          "passed": true,
+          "actual": 4
+        },
+        {
+          "name": "实际结算/观察 harvested",
+          "passed": true,
+          "actual": 12676
+        },
+        {
+          "name": "实际结算/观察 transferred",
+          "passed": true,
+          "actual": 11070
+        },
+        {
+          "name": "实际结算/观察 built",
+          "passed": true,
+          "actual": 6700
+        },
+        {
+          "name": "实际结算/观察 upgraded",
+          "passed": true,
+          "actual": 201
+        },
+        {
+          "name": "终态至少两只已出生 creep 存活",
+          "passed": true,
+          "actual": 9
+        },
+        {
+          "name": "实际建成 extension",
+          "passed": true,
+          "actual": 3
+        },
+        {
+          "name": "控制器升级并保持所有权",
+          "passed": true,
+          "actual": {
+            "kind": "structure",
+            "structureType": "controller",
+            "id": "kk0000000000000001",
+            "pos": {
+              "x": 1,
+              "y": 1,
+              "roomName": "W1N1"
+            },
+            "level": 2,
+            "progress": 1,
+            "progressTotal": 45000,
+            "ticksToDowngrade": 3519,
+            "safeMode": null,
+            "safeModeAvailable": 1,
+            "safeModeCooldown": null,
+            "reservation": null,
+            "sign": null,
+            "upgradeBlocked": null,
+            "isPowerEnabled": false,
+            "owner": "bot"
+          }
+        },
+        {
+          "name": "账户 GCL 实际增长",
+          "passed": true,
+          "actual": 201
+        },
+        {
+          "name": "实际投影通道",
+          "passed": true,
+          "actual": "kkpv"
+        },
+        {
+          "name": "CLI 成功退出",
+          "passed": true,
+          "actual": 0
+        },
+        {
+          "name": "CLI 二进制身份一致",
+          "passed": true,
+          "actual": "8043ad71137dd6d3ea11ccc8aa7304527ef5e8a3bb3da4cf79492dd9670834cc"
+        }
+      ],
+      "metrics": {
+        "loops": 2000,
+        "births": 15,
+        "birthsAfterDeath": 4,
+        "deaths": 5,
+        "harvested": 12676,
+        "transferred": 11070,
+        "built": 6700,
+        "upgraded": 201,
+        "seen": {
+          "kk0000000000000006": true,
+          "kk0000000000000007": true,
+          "kk0000000000000009": true,
+          "kk000000000000000b": true,
+          "kk000000000000000d": true,
+          "kk0000000000000042": true,
+          "kk0000000000000081": true,
+          "kk0000000000000094": true,
+          "kk00000000000000b8": true,
+          "kk00000000000000ba": true,
+          "kk0000000000000102": true,
+          "kk0000000000000164": true,
+          "kk0000000000000176": true,
+          "kk0000000000000191": true,
+          "kk00000000000001b0": true
+        },
+        "caughtErrors": 0,
+        "errorSamples": [],
+        "eventsThroughTick": 1999
+      }
+    },
+    {
+      "name": "kkpv-prefix",
+      "channel": "kkpv",
+      "exit_code": 0,
+      "report": "kkpv-prefix.json",
+      "executable_sha256": "8043ad71137dd6d3ea11ccc8aa7304527ef5e8a3bb3da4cf79492dd9670834cc",
+      "success": true,
+      "checks": [
+        {
+          "name": "运行成功",
+          "passed": true,
+          "actual": "passed"
+        },
+        {
+          "name": "提交完整轮数",
+          "passed": true,
+          "actual": 1000
+        },
+        {
+          "name": "玩家无执行失败或跳帧",
+          "passed": true,
+          "actual": {
+            "successful_ticks": 1000,
+            "error_ticks": 0,
+            "not_evaluated_ticks": 0,
+            "errors_head": [],
+            "console_head": [
+              {
+                "tick": 1,
+                "text": "1 Script reload - Load: 5 tickLimit: 500 limit: 20 Bucket: 10000"
+              },
+              {
+                "tick": 1,
+                "text": "1 W1N1                        Setting misplacedSpawn"
+              },
+              {
+                "tick": 1,
+                "text": "1 W1N1                        Setup complete - storing data"
+              },
+              {
+                "tick": 1,
+                "text": "1 W1N1                        Setup completed - storing data"
+              }
+            ]
+          }
+        },
+        {
+          "name": "世界时间接续",
+          "passed": true,
+          "actual": [
+            1,
+            1001
+          ]
+        },
+        {
+          "name": "公开观察 Memory 跨恢复接续",
+          "passed": true,
+          "actual": 1000
+        },
+        {
+          "name": "上一拍事件观察窗口完整",
+          "passed": true,
+          "actual": 999
+        },
+        {
+          "name": "bot 未记录捕获异常",
+          "passed": true,
+          "actual": []
+        },
+        {
+          "name": "输入日志完整",
+          "passed": true,
+          "actual": {
+            "path": "/private/tmp/kkscreeps-tooangel-v6-20261009/kkpv-resume.jsonl",
+            "segments": 1000,
+            "read_back_segments": 1000,
+            "first_tick": 1,
+            "last_tick": 1000,
+            "validation": "ok"
+          }
+        },
+        {
+          "name": "整份检查点输入回放相等",
+          "passed": true,
+          "actual": {
+            "status": "passed",
+            "segments": 1000,
+            "first_tick": 1,
+            "last_tick": 1000,
+            "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
+          }
+        },
+        {
+          "name": "场景断言通过",
+          "passed": true,
+          "actual": [
+            {
+              "pointer": "/objects/spawn",
+              "op": "exists",
+              "expected": null,
+              "before": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 300
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "actual": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 269
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/rooms/W1N1/controller/owner",
+              "op": "eq",
+              "expected": "bot",
+              "before": "bot",
+              "actual": "bot",
+              "delta": null,
+              "passed": true
+            }
+          ]
+        },
+        {
+          "name": "实际投影通道",
+          "passed": true,
+          "actual": "kkpv"
+        },
+        {
+          "name": "CLI 成功退出",
+          "passed": true,
+          "actual": 0
+        },
+        {
+          "name": "CLI 二进制身份一致",
+          "passed": true,
+          "actual": "8043ad71137dd6d3ea11ccc8aa7304527ef5e8a3bb3da4cf79492dd9670834cc"
+        }
+      ],
+      "metrics": {
+        "loops": 1000,
+        "births": 7,
+        "birthsAfterDeath": 0,
+        "deaths": 0,
+        "harvested": 4610,
+        "transferred": 1408,
+        "built": 1421,
+        "upgraded": 200,
+        "seen": {
+          "kk0000000000000006": true,
+          "kk0000000000000007": true,
+          "kk0000000000000009": true,
+          "kk000000000000000b": true,
+          "kk000000000000000d": true,
+          "kk000000000000003d": true,
+          "kk0000000000000087": true
+        },
+        "caughtErrors": 0,
+        "errorSamples": [],
+        "eventsThroughTick": 999
+      }
+    },
+    {
+      "name": "kkpv-resumed",
+      "channel": "kkpv",
+      "exit_code": 0,
+      "report": "kkpv-resumed.json",
+      "executable_sha256": "8043ad71137dd6d3ea11ccc8aa7304527ef5e8a3bb3da4cf79492dd9670834cc",
+      "success": true,
+      "checks": [
+        {
+          "name": "运行成功",
+          "passed": true,
+          "actual": "passed"
+        },
+        {
+          "name": "提交完整轮数",
+          "passed": true,
+          "actual": 1000
+        },
+        {
+          "name": "玩家无执行失败或跳帧",
+          "passed": true,
+          "actual": {
+            "successful_ticks": 1000,
+            "error_ticks": 0,
+            "not_evaluated_ticks": 0,
+            "errors_head": [],
+            "console_head": [
+              {
+                "tick": 1001,
+                "text": "1001 Script reload - Load: 6 tickLimit: 500 limit: 20 Bucket: 10000"
+              }
+            ]
+          }
+        },
+        {
+          "name": "世界时间接续",
+          "passed": true,
+          "actual": [
+            1001,
+            2001
+          ]
+        },
+        {
+          "name": "公开观察 Memory 跨恢复接续",
+          "passed": true,
+          "actual": 2000
+        },
+        {
+          "name": "上一拍事件观察窗口完整",
+          "passed": true,
+          "actual": 1999
+        },
+        {
+          "name": "bot 未记录捕获异常",
+          "passed": true,
+          "actual": []
+        },
+        {
+          "name": "输入日志完整",
+          "passed": true,
+          "actual": {
+            "path": "/private/tmp/kkscreeps-tooangel-v6-20261009/kkpv-resume.jsonl",
+            "segments": 2000,
+            "read_back_segments": 2000,
+            "first_tick": 1,
+            "last_tick": 2000,
+            "validation": "ok"
+          }
+        },
+        {
+          "name": "整份检查点输入回放相等",
+          "passed": true,
+          "actual": {
+            "status": "passed",
+            "segments": 1000,
+            "first_tick": 1001,
+            "last_tick": 2000,
+            "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
+          }
+        },
+        {
+          "name": "场景断言通过",
+          "passed": true,
+          "actual": [
+            {
+              "pointer": "/objects/spawn",
+              "op": "exists",
+              "expected": null,
+              "before": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 300
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "actual": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 106
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/rooms/W1N1/controller/owner",
+              "op": "eq",
+              "expected": "bot",
+              "before": "bot",
+              "actual": "bot",
+              "delta": null,
+              "passed": true
+            }
+          ]
+        },
+        {
+          "name": "初始无 creep 或预建 extension",
+          "passed": true,
+          "actual": 5
+        },
+        {
+          "name": "实际结算/观察 births",
+          "passed": true,
+          "actual": 15
+        },
+        {
+          "name": "实际结算/观察 deaths",
+          "passed": true,
+          "actual": 5
+        },
+        {
+          "name": "实际结算/观察 birthsAfterDeath",
+          "passed": true,
+          "actual": 3
+        },
+        {
+          "name": "实际结算/观察 harvested",
+          "passed": true,
+          "actual": 12862
+        },
+        {
+          "name": "实际结算/观察 transferred",
+          "passed": true,
+          "actual": 14001
+        },
+        {
+          "name": "实际结算/观察 built",
+          "passed": true,
+          "actual": 6755
+        },
+        {
+          "name": "实际结算/观察 upgraded",
+          "passed": true,
+          "actual": 200
+        },
+        {
+          "name": "终态至少两只已出生 creep 存活",
+          "passed": true,
+          "actual": 10
+        },
+        {
+          "name": "实际建成 extension",
+          "passed": true,
+          "actual": 3
+        },
+        {
+          "name": "控制器升级并保持所有权",
+          "passed": true,
+          "actual": {
+            "kind": "structure",
+            "structureType": "controller",
+            "id": "kk0000000000000001",
+            "pos": {
+              "x": 1,
+              "y": 1,
+              "roomName": "W1N1"
+            },
+            "level": 2,
+            "progress": 0,
+            "progressTotal": 45000,
+            "ticksToDowngrade": 3417,
             "safeMode": null,
             "safeModeAvailable": 1,
             "safeModeCooldown": null,
@@ -1450,17 +1452,17 @@
         {
           "name": "CLI 二进制身份一致",
           "passed": true,
-          "actual": "47f39eae6119d3c7fd0391436489f9c76b091699702d799d0fe23536403a63fd"
+          "actual": "8043ad71137dd6d3ea11ccc8aa7304527ef5e8a3bb3da4cf79492dd9670834cc"
         }
       ],
       "metrics": {
         "loops": 2000,
-        "births": 14,
-        "birthsAfterDeath": 2,
+        "births": 15,
+        "birthsAfterDeath": 3,
         "deaths": 5,
-        "harvested": 12808,
-        "transferred": 12097,
-        "built": 6836,
+        "harvested": 12862,
+        "transferred": 14001,
+        "built": 6755,
         "upgraded": 200,
         "seen": {
           "kk0000000000000006": true,
@@ -1468,15 +1470,16 @@
           "kk0000000000000009": true,
           "kk000000000000000b": true,
           "kk000000000000000d": true,
-          "kk0000000000000047": true,
-          "kk0000000000000066": true,
-          "kk0000000000000080": true,
-          "kk0000000000000094": true,
-          "kk0000000000000099": true,
-          "kk00000000000000c0": true,
-          "kk00000000000000f0": true,
-          "kk0000000000000189": true,
-          "kk00000000000001a2": true
+          "kk000000000000003d": true,
+          "kk0000000000000087": true,
+          "kk000000000000009e": true,
+          "kk00000000000000af": true,
+          "kk00000000000000b6": true,
+          "kk00000000000000df": true,
+          "kk0000000000000113": true,
+          "kk0000000000000128": true,
+          "kk00000000000001b7": true,
+          "kk00000000000001e0": true
         },
         "caughtErrors": 0,
         "errorSamples": [],
@@ -1484,6 +1487,7 @@
       }
     }
   ],
+  "executable_sha256": "8043ad71137dd6d3ea11ccc8aa7304527ef5e8a3bb3da4cf79492dd9670834cc",
   "upstream": {
     "commit": "87645a0b933360224737cca3b18ae9d112f46fef",
     "source": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/tooangel/src",
@@ -1848,6 +1852,6 @@
     "observer_sha256": "897da40633cb08e6aeff4d7261a1484058603e0415d7cd8ab45d67009cdc3963"
   },
   "validated_harness_sha256": "c6fd9757ee099f891a9431390aacc97c8e6589608f5ae83df92ae12c0afe88a8",
-  "evidence_note": "保存实测汇总与六份原始 sim 报告；临时模块/检查点/输入日志不入库，可用固定源码与验收命令重建。汇总逐项条件用最终工具版本复核。",
-  "executable_sha256": "47f39eae6119d3c7fd0391436489f9c76b091699702d799d0fe23536403a63fd"
+  "implementation_commit": "5c544cf",
+  "evidence_note": "普通 Invader 与载荷 v6 接入后重新执行六阶段验收；原始输入日志和检查点在运行输出目录，入库保存汇总与 sim 报告，可按 README 固定来源复现。"
 }

@@ -257,6 +257,7 @@ mod determinism;
 mod incoming_policy;
 mod input_log;
 mod intent_suppression;
+mod invader_battle;
 mod mod_trace;
 mod move_admission;
 mod move_arbitration;
