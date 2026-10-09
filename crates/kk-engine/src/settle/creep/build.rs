@@ -278,6 +278,7 @@ fn complete_construction(
             })
         }
         "storage" => RoomObject::Storage(kk_schema::room::StorageObj {
+            store_capacity: kk_core::constants::STORAGE_CAPACITY,
             id: 0,
             x: site.x,
             y: site.y,

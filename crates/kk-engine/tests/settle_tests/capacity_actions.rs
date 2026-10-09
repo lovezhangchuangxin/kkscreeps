@@ -17,6 +17,7 @@ fn operate_extension_rejected_while_disrupt_terminal_active() {
         .insert(
             "W1N1",
             RoomObject::Storage(kk_schema::room::StorageObj {
+                store_capacity: kk_core::constants::STORAGE_CAPACITY,
                 id: 0,
                 x: 20,
                 y: 20,
@@ -111,6 +112,48 @@ fn operate_extension_rejected_while_disrupt_terminal_active() {
     assert_eq!(events.len(), 1);
     match f.obj(ext) {
         RoomObject::Extension(e) => assert_eq!(e.store.energy, 40),
+        _ => panic!(),
+    }
+}
+
+/// 无控制器时官方不更新容量，即使存在 OPERATE_STORAGE 效果。
+#[test]
+fn storage_without_controller_preserves_saved_capacity() {
+    let mut f = Fixture::new(1, terrain_plain());
+    let storage = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Storage(kk_schema::room::StorageObj {
+                id: 0,
+                x: 20,
+                y: 20,
+                hits: 10_000,
+                owner: "p1".into(),
+                store: Default::default(),
+                notify_when_attacked: None,
+                store_extra: vec![],
+                store_capacity: 1_500_000,
+            }),
+        )
+        .unwrap();
+    f.world
+        .edit_room("W1N1", |room| {
+            room.effects.insert(
+                storage,
+                vec![kk_world::EffectEntry {
+                    effect: Some(4),
+                    power: 4,
+                    level: 5,
+                    end_time: 100,
+                }],
+            );
+            Ok(())
+        })
+        .unwrap();
+    f.settle(IntentBatch::default());
+    match f.obj(storage) {
+        RoomObject::Storage(s) => assert_eq!(s.store_capacity, 1_500_000),
         _ => panic!(),
     }
 }

@@ -114,6 +114,7 @@ fn transfer_mixed_holdings_respect_total_capacity() {
         .insert(
             "W1N1",
             RoomObject::Storage(kk_schema::room::StorageObj {
+                store_capacity: kk_core::constants::STORAGE_CAPACITY,
                 id: 0,
                 x: 20,
                 y: 20,
@@ -600,6 +601,7 @@ fn mineral_multislot_transfer_storage_and_drop_chain() {
         .insert(
             "W1N1",
             RoomObject::Storage(kk_schema::room::StorageObj {
+                store_capacity: kk_core::constants::STORAGE_CAPACITY,
                 id: 0,
                 x: 10,
                 y: 12,
@@ -795,6 +797,7 @@ fn ghodium_resource_family_settles() {
         .insert(
             "W1N1",
             RoomObject::Storage(kk_schema::room::StorageObj {
+                store_capacity: kk_core::constants::STORAGE_CAPACITY,
                 id: 0,
                 x: 20,
                 y: 20,

@@ -178,6 +178,7 @@ fn rich_world() -> World {
         &mut world,
         "W1N1",
         RoomObject::Storage(StorageObj {
+            store_capacity: kk_core::constants::STORAGE_CAPACITY,
             id: 0,
             x: 12,
             y: 10,

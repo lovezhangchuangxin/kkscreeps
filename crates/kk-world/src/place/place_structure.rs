@@ -164,6 +164,7 @@ pub(super) fn normalize_structure(
             notify_when_attacked: spec.get("notifyWhenAttacked").and_then(Value::as_bool),
         })),
         "storage" => Ok(RoomObject::Storage(StorageObj {
+            store_capacity: kk_core::constants::STORAGE_CAPACITY,
             id: 0,
             x,
             y,

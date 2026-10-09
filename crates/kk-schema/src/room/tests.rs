@@ -426,3 +426,22 @@ fn offsets_match_encoding() {
     assert_eq!(bytes[body_start + RoomHeader::OFFSET_terrain], 0);
     assert_eq!(bytes[body_start + RoomHeader::OFFSET_terrain + 7], 1);
 }
+
+#[test]
+fn version_one_without_authoritative_storage_capacity_is_rejected() {
+    let mut bytes = encode_snapshot(&RoomSnapshot {
+        header: RoomHeader {
+            time: 0,
+            seed: 0,
+            next_obj_id: 1,
+            terrain: [0; 2500],
+        },
+        objects: vec![],
+        events: vec![],
+    });
+    bytes[4..6].copy_from_slice(&1u16.to_le_bytes());
+    assert!(matches!(
+        decode_snapshot(&bytes),
+        Err(SchemaError::UnsupportedVersion(1))
+    ));
+}

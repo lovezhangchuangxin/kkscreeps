@@ -51,11 +51,11 @@ fn operate_terminal_send_discount_cooldown_and_boundary_tick() -> anyhow::Result
         for level in 1..=5 {
             let (mut e, src, dst) = fixture(binary)?;
             actor(&mut e, "op", c::PWR_OPERATE_TERMINAL, level)?;
-            e.run_player("p1", &cast("op", c::PWR_OPERATE_TERMINAL, &src))?; // tick 0 → end 1000
+            e.run_player("p1", &cast("op", c::PWR_OPERATE_TERMINAL, &src))?; // 当前 tick 施放，持续 1000 拍
             let rc = e.run_player(
                 "p1",
                 &format!("Game.getObjectById('{src}').send('H', 100, 'W3N1')"),
-            )?; // tick 1：发送结算
+            )?; // 下一 tick 发送结算
             assert_eq!(rc.expr["value"], 0);
             // W1N1→W3N1 距离 2：基费 ceil(100×(1−e^(−2/30))) = ceil(6.44) = 7。
             let base = 7i64;
@@ -70,43 +70,38 @@ fn operate_terminal_send_discount_cooldown_and_boundary_tick() -> anyhow::Result
             let rc = e.run_player("p1", &format!("Game.getObjectById('{src}').cooldown"))?;
             assert_eq!(
                 rc.expr["value"],
-                json!(1 + cooldown - 2),
-                "cooldownTime = 1 + round(10×倍率)，玩家读取时 time 2"
+                json!(cooldown - 1),
+                "发送后读取剩余冷却，已经推进一拍"
             );
         }
-        // 截止拍：施放于 tick 0（end 1000），tick 995 先发一次使冷却恰于
-        // 1000 到期，第二次 send 结算于 endTime == time 的 tick 1000：
-        // 全局相（market.js 严格 >）不折扣——全费 7、冷却回满 10。
-        let (mut e, src, dst) = fixture(binary)?;
-        actor(&mut e, "op", c::PWR_OPERATE_TERMINAL, 5)?;
-        e.run_player("p1", &cast("op", c::PWR_OPERATE_TERMINAL, &src))?; // tick 0，end 1000
-        e.tick(994)?; // time 995
-        let rc = e.run_player(
-            "p1",
-            &format!("Game.getObjectById('{src}').send('H', 100, 'W3N1')"),
-        )?;
-        assert_eq!(rc.expr["value"], 0); // tick 995：折扣链，冷却 995+5=1000
-        assert_eq!(
-            e.get_object(&src).unwrap()["store"]["energy"],
-            json!(100_000 - 4),
-            "等级 5：ceil(7×0.5) = 4"
-        );
-        assert_eq!(e.get_object(&dst).unwrap()["store"]["H"], 100);
-        e.tick(5)?; // time 1000：冷却恰到期且 endTime == time
-        let rc = e.run_player(
-            "p1",
-            &format!("Game.getObjectById('{src}').send('H', 100, 'W3N1')"),
-        )?;
-        assert_eq!(rc.expr["value"], 0); // tick 1000：截止拍
-        assert_eq!(
-            e.get_object(&src).unwrap()["store"]["energy"],
-            json!(100_000 - 4 - 7),
-            "截止拍/过期后全局相全费 7"
-        );
-        assert_eq!(e.get_object(&dst).unwrap()["store"]["H"], 200);
-        // 冷却不折扣：cooldownTime = 1000 + 10 = 1010，玩家读取时 time 1001。
-        let cooldown = e.run_player("p1", &format!("Game.getObjectById('{src}').cooldown"))?;
-        assert_eq!(cooldown.expr["value"], json!(9), "截止拍冷却回满 10");
+        // 用实际施放时间计算截止拍，分别验证前一拍、等号拍和后一拍。
+        // 每个场景独立发送，避免之前的冷却遮住效果边界。
+        for offset in [-1i64, 0, 1] {
+            let (mut e, src, dst) = fixture(binary)?;
+            actor(&mut e, "op", c::PWR_OPERATE_TERMINAL, 5)?;
+            let end_time = e.get_game_time() + 1000;
+            e.run_player("p1", &cast("op", c::PWR_OPERATE_TERMINAL, &src))?;
+            let send_time = (end_time as i64 + offset) as u64;
+            e.tick(send_time - e.get_game_time())?;
+            assert_eq!(e.get_game_time(), send_time);
+            let rc = e.run_player(
+                "p1",
+                &format!("Game.getObjectById('{src}').send('H', 100, 'W3N1')"),
+            )?;
+            assert_eq!(rc.expr["value"], 0);
+            let fee = if offset < 0 { 4 } else { 7 };
+            assert_eq!(
+                e.get_object(&src).unwrap()["store"]["energy"],
+                100_000 - fee
+            );
+            assert_eq!(e.get_object(&dst).unwrap()["store"]["H"], 100);
+            let cooldown = e.run_player("p1", &format!("Game.getObjectById('{src}').cooldown"))?;
+            assert_eq!(
+                cooldown.expr["value"],
+                if offset < 0 { 4 } else { 9 },
+                "endTime 偏移 {offset} 的冷却"
+            );
+        }
     }
     Ok(())
 }
@@ -125,7 +120,8 @@ fn disrupt_terminal_blocks_withdraw_until_strict_expiry() -> anyhow::Result<()> 
                 &json!({"name":"miner","owner":"p1","pos":[25,24],
                     "body":["carry"],"ticksToLive":1500}),
             )?;
-            e.run_player("p1", &cast("dis", c::PWR_DISRUPT_TERMINAL, &src))?; // tick 0 → end 10
+            let end_time = e.get_game_time() + 10;
+            e.run_player("p1", &cast("dis", c::PWR_DISRUPT_TERMINAL, &src))?;
             assert_eq!(
                 e.get_object(&src).unwrap()["effects"][0]["power"],
                 c::PWR_DISRUPT_TERMINAL
@@ -150,17 +146,16 @@ fn disrupt_terminal_blocks_withdraw_until_strict_expiry() -> anyhow::Result<()> 
             // ops 数组按等级扣。
             let pc_ops = e.run_player("p1", "Game.powerCreeps.dis.store[RESOURCE_OPS]")?;
             assert_eq!(pc_ops.expr["value"], json!(ops), "等级 {level} ops");
-            // 严格边界：tick 9（endTime 10 > 9）仍封锁，tick 10（10 > 10
-            // 为假）放行。此前 cast/withdraw/ops 三次 run_player 已推至
-            // time 3。
-            e.tick(6)?; // time 9
+            // 前一拍仍封锁；本次玩家轮推进到 endTime 后立即验证等号拍。
+            e.tick(end_time - 1 - e.get_game_time())?;
+            assert_eq!(e.get_game_time(), end_time - 1);
             let rc = e.run_player(
                 "p1",
                 &format!("Game.creeps.miner.withdraw(Game.getObjectById('{src}'),'H',10)"),
             )?;
-            assert_eq!(rc.expr["value"], c::ERR_INVALID_TARGET, "tick 9 仍封锁");
+            assert_eq!(rc.expr["value"], c::ERR_INVALID_TARGET, "截止前一拍仍封锁");
             assert_eq!(e.get_object(&src).unwrap()["store"]["H"], 1000);
-            e.tick(1)?; // time 10：到期拍
+            assert_eq!(e.get_game_time(), end_time, "精确到期拍");
             let rc = e.run_player(
                 "p1",
                 &format!("Game.creeps.miner.withdraw(Game.getObjectById('{src}'),'H',10)"),
@@ -226,8 +221,8 @@ fn operate_terminal_cast_gates_and_deal_fee_discount() -> anyhow::Result<()> {
         // 否则买单 active=false 从公共市场视图消失——挪订单房前先核此依赖。
         e.tick(1)?;
         actor(&mut e, "op", c::PWR_OPERATE_TERMINAL, 5)?;
-        e.run_player("p1", &cast("op", c::PWR_OPERATE_TERMINAL, &src))?; // tick 1
-        let rc = e.run_player("p1", &format!("Game.market.deal({oid}, 100, 'W1N1')"))?; // tick 2：dealer=p1 src，资源 src → dst
+        e.run_player("p1", &cast("op", c::PWR_OPERATE_TERMINAL, &src))?; // 当前 tick 施放
+        let rc = e.run_player("p1", &format!("Game.market.deal({oid}, 100, 'W1N1')"))?; // dealer=p1 src，资源 src → dst
         assert_eq!(rc.expr["value"], json!(0), "deal OK");
         assert_eq!(e.get_object(&dst).unwrap()["store"]["H"], 100);
         // 距离 2 基费 7；费用端=dealer 终端（p1 src，5 级效果）：
@@ -256,10 +251,11 @@ fn operate_terminal_cast_gates_and_deal_fee_discount() -> anyhow::Result<()> {
             "订单主付款（credits 种子 10M − 100）"
         );
         // deal 冷却在目标 terminal（dealer 的 src，带效果）：round(10×0.5)=5。
+        // 下一拍读取时剩余 4，不依赖 createShard 的初始时间。
         assert_eq!(
             after.expr["value"][1],
-            json!(2 + 5 - 3),
-            "cooldownTime = 2 + 5，玩家读取时 time 3"
+            json!(5 - 1),
+            "deal 后下一拍读取剩余冷却"
         );
     }
     Ok(())

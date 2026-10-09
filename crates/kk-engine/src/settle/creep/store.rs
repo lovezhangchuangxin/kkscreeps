@@ -60,12 +60,7 @@ pub(in crate::settle) fn intent_transfer(w: &mut Working, id: ObjId, data: &Inte
             store_slot(&t.store, resource),
         ),
         Some(RoomObject::Storage(t)) => (
-            kk_world::types::storage_capacity(
-                w.controller(),
-                &t.owner,
-                w.room.effects.get(&target_id),
-                w.time,
-            ),
+            t.store_capacity,
             (t.x, t.y),
             kk_world::types::store_total(&t.store, &t.store_extra),
         ),

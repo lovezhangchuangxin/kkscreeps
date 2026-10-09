@@ -187,13 +187,8 @@ pub(crate) fn object_json(
             "owner": o.owner,
             "store": store_with_extra_json(&o.store, &o.store_extra),
             // storage 使用通用容量，无 storeCapacityResource；容量含
-            // 控制器归属基础门与 PWR_OPERATE_STORAGE 效果加成。
-            "storeCapacity": crate::types::storage_capacity(
-                controller,
-                &o.owner,
-                effects,
-                time,
-            ),
+            // 上轮对象 tick 保存的控制器基础量与 power 加成。
+            "storeCapacity": o.store_capacity,
             "hits": o.hits, "hitsMax": c::STORAGE_HITS,
             });
             if let Some(flag) = o.notify_when_attacked {

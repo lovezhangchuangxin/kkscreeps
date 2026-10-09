@@ -180,6 +180,7 @@ pub(super) fn build_standard(world: &mut World) -> BTreeMap<String, ObjId> {
     ins(
         world,
         RoomObject::Storage(StorageObj {
+            store_capacity: kk_core::constants::STORAGE_CAPACITY,
             id: 0,
             x: 23,
             y: 25,

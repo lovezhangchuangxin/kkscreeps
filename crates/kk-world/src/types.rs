@@ -87,14 +87,9 @@ pub fn extension_energy_capacity(rcl: u8) -> i64 {
         .unwrap_or(0)
 }
 
-/// storage 的当前权威容量：结算、玩家投影与查询快照同源。
-/// 基础量按官方 storages/tick.js——控制器在场时要求 level>0、归属与
-/// storage 一致且 CONTROLLER_STRUCTURES.storage[级]>0，否则 0；无控制器
-/// 房间保持建造时的 1M。PWR_OPERATE_STORAGE 效果仅在基础量 >0 时叠加
-/// （endTime > time 严格有效期）。容器存储快照无该字段，容量恒为派生值。
-/// 已知偏差：官方把权威 storeCapacity 落库并在对象 tick 相（意图相之后）
-/// 重算，意图相读到上一拍末的值；kk 读时派生，同 tick 控制器升级/易主的
-/// 窗口内更宽松，tick 末两侧收敛一致。
+/// storage 对象 tick 的新容量：控制器等级、归属与严格有效的效果共同决定。
+/// 无控制器时调用方保留已保存容量，不调用本函数重算。
+/// 来源：engine/src/processor/intents/storages/tick.js。
 pub fn storage_capacity(
     controller: Option<&kk_schema::room::ControllerObj>,
     storage_owner: &str,

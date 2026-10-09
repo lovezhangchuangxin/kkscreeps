@@ -216,6 +216,7 @@ pub fn settle_room(
                 Some(RoomObject::Mineral(_)) => "mineral",
                 Some(RoomObject::Extractor(_)) => "extractor",
                 Some(RoomObject::Road(_)) => "road",
+                Some(RoomObject::Storage(_)) => "storage",
                 Some(RoomObject::Mod(_)) => "mod",
                 Some(RoomObject::Generic(g)) => {
                     if kk_world::domain::generic::type_name(&g.data).as_deref() == Some("nuke") {
@@ -281,6 +282,7 @@ pub fn settle_room(
                 let contrib = ctx.borrow().plane.contrib.clone();
                 contrib.run_tick(&ctx, id).map_err(SettleError)?
             }
+            "storage" => economy::storage_capacity_tick(&mut ctx.borrow_mut(), id),
             "terminal" => economy::terminal_capacity_tick(&mut ctx.borrow_mut(), id),
             "nuke" => {
                 nukes::nuke_tick(&mut ctx.borrow_mut(), id);

@@ -4,7 +4,7 @@
 
 ## 当前接手位置
 
-- 更新日期：2026-10-09；接手基线 `8d5d63a`。G3 热身拍切片已收口（本提交）：createShard 世界时间从 1 起算、player_ticks 排除装配拍、显式轮次切换/冷恢复保持原语义；2791 passed / 19 failed / 104 skipped。下一片按剩余兼容例逐例归因。
+- 更新日期：2026-10-09；接手基线 `1b452c6`（G3 热身拍已提交）。本次 review 修复已收口、随本提交交付：storage 权威容量按对象 tick 保存，terminal 截止拍测试覆盖等号；2791 passed / 19 failed / 104 skipped。下一片按剩余兼容例逐例归因。
 - 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座、deposit 采集链、observer 限时视野已交付。**M2H.b 19/19 powers 全部接通**。
 - 下一片：**零散红逐例归因**（剩余 19 例 = 11 实现缺口 + 8 官方对齐豁免，清单见最新兼容报告：keeper/NPC 族、模块上下文三例、Room 原型/pull 等散例；adapter contract 组剩 keeper lair snapshot 一例）或 G02.d3 后续；每片贯通真实消费者、玩家投影、失败边界和冷恢复。
 - 兼容率 2791/2914≈95.8%（**95% 中间检查点已越过**；99% 目标需 2885）。
@@ -154,3 +154,12 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - 最终无参数 `pnpm run check` 通过：Rust 1431 passed / 0 failed，JS workspace、维护工具、文档链接与源码规模通过；`pnpm run fmt:js:check` 通过，无 doctest 变更。release CLI 与适配器重建；固定 screeps-ok `34a630e` 全量 2791 passed / 19 failed / 104 skipped，棘轮通过；另相对实际 HEAD 报告核对 +2 转绿 / 0 转红。
 - 三 bot 复验完成 2000/2000/10 tick，无中断/惩罚跳过/missing_api；Overmind 保留既有初始化报错。查询键集合不变、部分计数有少量变化，不宣称逐位等价。持久报告已更新，bot-check 仍不代表实际推进世界验收。
 - 剩余 19 例（11 实现缺口 + 8 官方对齐豁免）继续按执行队列推进；keeper/NPC 应独立拆片，模块上下文三例与 Room 原型/pull 等散例另行逐例核对。G02.d3 结构/rampart 寻路与 G27.a 后台宿主仍未开始，本片不扩大完成范围。
+
+### 2026-10-09 Review 修复（已完成，基线 `1b452c6`，随本提交交付）
+
+- 修复 `f1607b8..1b452c6` 复审发现的 storage 截止拍容量提前回落、terminal 边界测试跳过等号拍两个问题。
+- storage 新增权威 `store_capacity`，对象 tick 在意图相之后更新；无控制器时保留原值。creep/powerCreep 独立 transfer 处理器、Mod 资源读面、JSON/KKPV 玩家投影与管理查询全部消费保存值，截止拍仍允许按上一轮加成容量转入，结算后才回落，不裁剪超存库存。
+- 容量纳入对象候选与房间二进制快照，schema 升至 v2；v1 缺少权威容量，无法无损恢复截止拍/归属窗口，按现有开发期策略显式拒绝，不补造状态。现行 game-loop/checkpoints/state-inventory 已同步。
+- 新增双通道精确截止拍实际转账、晚期写回失败/缓存重试、截止拍检查点冷恢复、无控制器保留容量与 v1 拒绝用例；terminal 按真实施放时间覆盖截止前/等号/后一拍的费用与冷却，DISRUPT_TERMINAL 验证等号拍即恢复提取。
+- 最终无参数 `pnpm run check` 通过：Rust 1434 passed / 0 failed，JS workspace、维护工具、文档链接与源码规模通过，无 doctest 变更。release CLI 与适配器重建，bot 夹具已准备；固定 screeps-ok `34a630e` 全量 2791 passed / 19 failed / 104 skipped，棘轮通过。与实际接手基线 `1b452c6` 逐例比对 0 转红 / 0 转绿；本次未重跑三 bot，不沿用旧结果宣称本批通过。
+- 两条复审问题已解决，本批没有未提交开发残项；剩余兼容红例与后续消费者范围不变，继续按当前执行队列推进。

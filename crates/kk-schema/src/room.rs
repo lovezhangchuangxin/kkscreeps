@@ -12,7 +12,7 @@ use crate::{Cursor, Schema, SchemaError};
 /// 当前快照版本号，写入封套；版本 0 不属于可升级版本。
 /// 字段的增删、顺序、类型或标签变化都会改变二进制格式。需保留旧字节可读性时，
 /// 必须增加版本并提供升级步骤；仅向结构体末尾追加字段也不会自动兼容旧载荷。
-pub const SCHEMA_VERSION: u16 = 1;
+pub const SCHEMA_VERSION: u16 = 2;
 /// 封套的格式标识，小端字节为 `50 53 4B 4B`，即 ASCII "PSKK"。
 pub const SNAPSHOT_MAGIC: u32 = 0x4b4b_5350;
 
@@ -219,7 +219,7 @@ crate::kk_schema! {
 
 crate::kk_schema! {
     /// 仓库，使用固定资源槽和按名称保存的额外资源列表。
-    /// 所有资源共享容量，容量由世界与结算层处理；编码不校验是否超限。
+    /// 所有资源共享 store_capacity，结算对象 tick 更新并保存；编码不校验是否超限。
     /// 通知标志含义见 SpawnObj。
     pub StorageObj {
         (pub id: u64)
@@ -230,6 +230,7 @@ crate::kk_schema! {
         (pub store: Store)
         (pub notify_when_attacked: opt bool)
         (pub store_extra: vec ResourceStack)
+        (pub store_capacity: i64)
     }
 }
 
@@ -469,8 +470,13 @@ pub fn encode_snapshot(s: &RoomSnapshot) -> Vec<u8> {
 /// 接收完整封套字节并输出下一版本的完整封套；必须同时更新头部版本号。
 type UpgradeFn = fn(Vec<u8>) -> Result<Vec<u8>, SchemaError>;
 // 第 n 项把版本 n+1 升为 n+2，数组长度保证每个旧版本都有相邻步骤。
-// 当前版本为 1，尚无历史版本转换函数。
-const UPGRADE_CHAIN: [UpgradeFn; (SCHEMA_VERSION - 1) as usize] = [];
+// v1 未保存 storage 权威容量，无法无损还原截止拍和归属变化窗口；
+// 开发期旧快照显式拒绝，避免猜测容量后改变继续运行的行为。
+const UPGRADE_CHAIN: [UpgradeFn; (SCHEMA_VERSION - 1) as usize] = [reject_v1];
+
+fn reject_v1(_: Vec<u8>) -> Result<Vec<u8>, SchemaError> {
+    Err(SchemaError::UnsupportedVersion(1))
+}
 
 /// 按版本顺序执行升级函数。版本 0 和未来版本始终拒绝，不尝试转换。
 /// 调用方保证 from 与封套头部一致；每一步负责更新载荷和封套版本号。

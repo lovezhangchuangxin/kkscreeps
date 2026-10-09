@@ -586,3 +586,23 @@ pub fn controller_downgrade(level: u8) -> u64 {
         .map(|(_, v)| *v)
         .unwrap_or(0) as u64
 }
+
+/// 官方 storages/tick.js 在意图相之后更新容量；无控制器时保留原值。
+/// 玩家投影和转入检查消费上轮已提交值，不能按新的世界时间重新派生。
+pub fn storage_capacity_tick(w: &mut Working, id: ObjId) {
+    let Some(RoomObject::Storage(storage)) = w.room.objects.get(&id) else {
+        return;
+    };
+    let Some(controller) = w.controller() else {
+        return;
+    };
+    let capacity = kk_world::types::storage_capacity(
+        Some(controller),
+        &storage.owner,
+        w.room.effects.get(&id),
+        w.time,
+    );
+    if let Some(RoomObject::Storage(storage)) = w.room.objects.get_mut(&id) {
+        storage.store_capacity = capacity;
+    }
+}

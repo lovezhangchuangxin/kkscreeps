@@ -19,15 +19,7 @@ impl World {
             return None;
         }
         let state = self.rooms.get(room)?;
-        let mut record = snapshot_json(
-            room,
-            id,
-            object,
-            self.time,
-            &state.terrain,
-            state.controller(),
-            state.effects.get(&id),
-        );
+        let mut record = snapshot_json(room, id, object, self.time, &state.terrain);
         crate::effects::project(&mut record, state.effects.get(&id), self.time);
         Some(record)
     }
@@ -59,15 +51,7 @@ impl World {
                     state.effects.get(id),
                 )?;
                 crate::projection::matches_find(&internal, find_const, None).then(|| {
-                    let mut record = snapshot_json(
-                        room,
-                        *id,
-                        o,
-                        self.time,
-                        terrain,
-                        state.controller(),
-                        state.effects.get(id),
-                    );
+                    let mut record = snapshot_json(room, *id, o, self.time, terrain);
                     crate::effects::project(&mut record, state.effects.get(id), self.time);
                     record
                 })
@@ -174,8 +158,6 @@ fn snapshot_json(
     object: &RoomObject,
     time: u64,
     terrain: &kk_core::Terrain,
-    controller: Option<&kk_schema::room::ControllerObj>,
-    effects: Option<&Vec<crate::EffectEntry>>,
 ) -> Value {
     let id_str = id.as_str();
     match object {
@@ -287,12 +269,7 @@ fn snapshot_json(
             "id": id_str, "pos": snap_pos(room, o.x, o.y), "owner": o.owner,
             "hits": o.hits, "hitsMax": c::STORAGE_HITS,
             "store": snap_store_extra(&o.store, &o.store_extra),
-            "storeCapacity": crate::types::storage_capacity(
-                controller,
-                &o.owner,
-                effects,
-                time,
-            ),
+            "storeCapacity": o.store_capacity,
         }),
         RoomObject::ConstructionSite(o) => {
             let mut v = json!({

@@ -33,6 +33,11 @@ impl World {
                 {
                     return Err("Generic effects 须归一到房间效果表".into());
                 }
+                if let RoomObject::Storage(storage) = object
+                    && !(0..=9_007_199_254_740_991).contains(&storage.store_capacity)
+                {
+                    return Err("storage 容量必须是非负安全整数".into());
+                }
                 let (x, y) = object.pos();
                 if id.0 == 0
                     || id.0 >= next_id

@@ -474,3 +474,61 @@ fn operate_extension_skips_off_extensions_in_fill_and_budget() -> anyhow::Result
     }
     Ok(())
 }
+
+/// 截止拍仍消费上一轮对象 tick 保存的容量；该拍结算后才回落。
+/// 保存于效果已从投影消失但容量仍加成的窗口，恢复不能读时重算。
+#[test]
+fn storage_capacity_exact_expiry_retry_and_cold_restore() -> anyhow::Result<()> {
+    for binary in [false, true] {
+        let (mut e, storage) = fixture(binary, 8, 1_000_000)?;
+        actor(&mut e, "op", c::PWR_OPERATE_STORAGE, 1, [19, 20])?;
+        e.place_object(
+            "W1N1",
+            "creep",
+            &json!({
+                "name":"mover", "owner":"p1", "pos":[20,19], "body":["carry"],
+                "store":{"energy":50}, "ticksToLive":1500
+            }),
+        )?;
+        let end_time = e.get_game_time() + 1000;
+        e.run_player("p1", &cast("op", c::PWR_OPERATE_STORAGE, &storage))?;
+        e.tick(end_time - 1 - e.get_game_time())?;
+        assert_eq!(e.get_game_time(), end_time - 1);
+        assert_eq!(e.get_object(&storage).unwrap()["storeCapacity"], 1_500_000);
+        e.tick(1)?;
+        assert_eq!(e.get_game_time(), end_time);
+        assert_eq!(e.get_object(&storage).unwrap()["storeCapacity"], 1_500_000);
+        let saved = e.checkpoint(Value::Null)?;
+        let mut restored = EmbedEngine::new();
+        restored.set_kkpv_channel(binary);
+        restored.restore_checkpoint(saved.clone(), None)?;
+        assert_eq!(restored.checkpoint(Value::Null)?, saved);
+        let transfer = format!(
+            "[Game.getObjectById('{storage}').store.getCapacity(),Game.creeps.mover.transfer(Game.getObjectById('{storage}'),'energy',50),Game.powerCreeps.op.transfer(Game.getObjectById('{storage}'),'ops',1)]"
+        );
+        e.fail_next_writeback_for_test(kk_engine::WritebackStep::RawMemory);
+        assert!(e.run_player("p1", &transfer).is_err());
+        assert_eq!(
+            e.world_snapshot(),
+            restored.world_snapshot(),
+            "失败不发布容量回落"
+        );
+        let retried = e.run_player("p1", "throw Error('不应重跑')")?;
+        assert_eq!(retried.expr["value"], json!([1_500_000, 0, 0]));
+        assert_eq!(
+            restored.run_player("p1", &transfer)?.expr["value"],
+            json!([1_500_000, 0, 0])
+        );
+        assert_eq!(e.world_snapshot(), restored.world_snapshot());
+        assert_eq!(e.get_game_time(), end_time + 1);
+        assert_eq!(e.get_object(&storage).unwrap()["storeCapacity"], 1_000_000);
+        assert_eq!(
+            e.get_object(&storage).unwrap()["store"]["energy"],
+            1_000_050
+        );
+        assert_eq!(e.get_object(&storage).unwrap()["store"]["ops"], 1);
+        // 回落后 powerCreep 的后续转入也被拒绝。
+        assert_eq!(e.run_player("p1", &format!("[Game.getObjectById('{storage}').store.getCapacity(),Game.powerCreeps.op.transfer(Game.getObjectById('{storage}'),'ops',1)]"))?.expr["value"], json!([1_000_000, c::ERR_FULL]));
+    }
+    Ok(())
+}
