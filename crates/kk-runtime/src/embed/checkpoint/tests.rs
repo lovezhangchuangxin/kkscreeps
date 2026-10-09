@@ -702,6 +702,10 @@ const SCHEMA_DYNAMIC_MAPS: &[&str] = &[
     "engine.players.*.power_creeps",
     "engine.players.*.power_creeps.*.powers",
     "engine.market.orders",
+    // 动作记录导出（actionLog 捕获批）：房间 → 条目数组；条目内
+    // actionLog 是动作键 → 载荷的动态映射。
+    "engine.last_action_log",
+    "engine.last_action_log.*[].actionLog",
     "workers",
     "workers.*.modules",
     "workers.*.constant_overrides",

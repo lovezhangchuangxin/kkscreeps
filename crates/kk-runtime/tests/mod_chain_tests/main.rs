@@ -208,6 +208,7 @@ mod decline;
 
 mod disable;
 
+mod action_log;
 mod auto_disable;
 mod capacity_power_effects;
 mod combat_ranges;

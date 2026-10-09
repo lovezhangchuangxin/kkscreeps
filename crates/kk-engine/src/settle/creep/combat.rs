@@ -237,6 +237,13 @@ pub(in crate::settle) fn intent_repair(w: &mut Working, id: ObjId, data: &Intent
         creep.store.energy -= cost as u32;
         set_action_log(&mut creep.action_log, ACTION_REPAIR);
     }
+    if let Some((tx, ty)) = w.room.objects.get(&target_id).map(|o| o.pos()) {
+        w.record_action(
+            id,
+            "repair",
+            super::super::action_log::ActionLogPayload::Coords { x: tx, y: ty },
+        );
+    }
     w.push_event(
         c::EVENT_REPAIR,
         id,
@@ -480,6 +487,12 @@ fn intent_ranged_mass_attack_policy(
     if let Some(a) = w.creep_mut(id) {
         super::set_action_log(&mut a.action_log, super::ACTION_RANGED_MASS);
     }
+    // 官方 rangedMassAttack.js:58：群体攻击无坐标，写空对象载荷。
+    w.record_action(
+        id,
+        "rangedMassAttack",
+        super::super::action_log::ActionLogPayload::Mass(Default::default()),
+    );
 }
 
 /// 治疗已出生 creep，允许自愈；近程/远程范围为 1/3，基础功率为 12/4。

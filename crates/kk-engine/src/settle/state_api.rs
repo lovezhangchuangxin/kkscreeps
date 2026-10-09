@@ -18,6 +18,42 @@ impl Engine {
         &self.last_events
     }
 
+    /// 上一成功结算拍的房间动作记录导出（embed `captureActionLog` 读面）。
+    /// 返回 `{room, tick, objects}`：objects 只含本拍有动作记录且结算尾
+    /// 仍存活的对象，条目字段对齐套件 `RoomActionLogCapture`。`tick` 报
+    /// 当前世界时间——动作产物属于已推进前的那一拍，与官方 driver 的
+    /// room-history 键位对齐（saveTick 用处理器所见 gameTime，全局阶段
+    /// 已自增；vanilla 适配器读 history[gameTime-1] 报 tick=gameTime）。
+    /// 房间未结算过或本拍无动作时 objects 为空。
+    pub fn capture_action_log_json(&self, room: &str) -> serde_json::Value {
+        let tick = self.world.time();
+        let objects = self
+            .last_action_log
+            .get(room)
+            .map(|entries| {
+                entries
+                    .iter()
+                    .map(|entry| {
+                        let mut object =
+                            serde_json::to_value(entry).expect("ActionLogEntry 序列化不可失败");
+                        if let Some(map) = object.as_object_mut() {
+                            map.insert("room".into(), serde_json::json!(room));
+                            map.insert("tick".into(), serde_json::json!(tick));
+                            let pos = serde_json::json!({
+                                "x": entry.x,
+                                "y": entry.y,
+                                "roomName": room,
+                            });
+                            map.insert("pos".into(), pos);
+                        }
+                        object
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        serde_json::json!({ "room": room, "tick": tick, "objects": objects })
+    }
+
     fn ensure_editable(&self) -> Result<(), String> {
         if !matches!(self.run_state, RunState::Ready | RunState::Committed { .. }) {
             return Err("权威状态编辑被拒：存在开放轮次或待恢复候选".into());

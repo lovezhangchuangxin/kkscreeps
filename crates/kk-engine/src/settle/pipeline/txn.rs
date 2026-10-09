@@ -173,6 +173,9 @@ pub(in crate::settle) struct OwnedTickTxn {
     pub(in crate::settle) rooms: Vec<(String, RoomState)>,
     pub(in crate::settle) events: Vec<Value>,
     pub(in crate::settle) market: market::MarketState,
+    /// 各房本拍动作记录导出（captureActionLog 读面），随候选发布/丢弃。
+    pub(in crate::settle) action_log:
+        BTreeMap<String, Vec<crate::settle::action_log::ActionLogEntry>>,
 }
 
 /// 已完成派生状态处理且不再共享的发布数据。
@@ -183,6 +186,8 @@ pub(in crate::settle) struct PreparedTick {
     pub(in crate::settle) events: Vec<Value>,
     pub(in crate::settle) market: market::MarketState,
     pub(in crate::settle) mod_states: BTreeMap<String, Value>,
+    pub(in crate::settle) action_log:
+        BTreeMap<String, Vec<crate::settle::action_log::ActionLogEntry>>,
 }
 
 impl OwnedTickTxn {
@@ -225,6 +230,7 @@ impl OwnedTickTxn {
             events: self.events,
             market: self.market,
             mod_states,
+            action_log: self.action_log,
         })
     }
 }

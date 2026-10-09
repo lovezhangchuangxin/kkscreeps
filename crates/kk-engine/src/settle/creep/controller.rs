@@ -123,6 +123,13 @@ pub(super) fn intent_upgrade_controller(w: &mut Working, id: ObjId, data: &Inten
         c.store.energy -= effect as u32;
         set_action_log(&mut c.action_log, ACTION_UPGRADE);
     }
+    if let Some((tx, ty)) = w.room.objects.get(&target_id).map(|o| o.pos()) {
+        w.record_action(
+            id,
+            "upgradeController",
+            super::super::action_log::ActionLogPayload::Coords { x: tx, y: ty },
+        );
+    }
     w.push_event(
         c::EVENT_UPGRADE_CONTROLLER,
         id,
@@ -223,6 +230,13 @@ pub(super) fn intent_reserve_controller(w: &mut Working, id: ObjId, data: &Inten
     if let Some(c) = w.creep_mut(id) {
         set_action_log(&mut c.action_log, ACTION_RESERVE);
     }
+    if let Some((tx, ty)) = w.room.objects.get(&target_id).map(|o| o.pos()) {
+        w.record_action(
+            id,
+            "reserveController",
+            super::super::action_log::ActionLogPayload::Coords { x: tx, y: ty },
+        );
+    }
     if let Some(RoomObject::Controller(t)) = w.room.objects.get_mut(&target_id) {
         t.reservation = Some(kk_schema::room::Reservation {
             user: owner,
@@ -315,6 +329,14 @@ pub(super) fn intent_attack_controller(w: &mut Working, id: ObjId, data: &Intent
     }
     if let Some(c) = w.creep_mut(id) {
         set_action_log(&mut c.action_log, ACTION_ATTACK);
+    }
+    // 官方 attackController.js:50 复用 attack 键，坐标=控制器。
+    if let Some((tx, ty)) = w.room.objects.get(&target_id).map(|o| o.pos()) {
+        w.record_action(
+            id,
+            "attack",
+            super::super::action_log::ActionLogPayload::Coords { x: tx, y: ty },
+        );
     }
     // 此事件保留空 data 对象；上游对应事件没有 data 键。
     w.push_event(c::EVENT_ATTACK_CONTROLLER, id, serde_json::json!({}));

@@ -31,6 +31,10 @@
 
 lab 动作顺序为 boost → unboost → runReaction，否则 reverseReaction；已登记 runReaction 时即使结算失败也不回落 reverseReaction。
 
+### 动作记录导出（captureActionLog）
+
+结算期在动作位图（`CreepObj.action_log`，只记"是否发生"）之外经旁路表累积渲染面动作载荷：官方 processor 各 intent 写入点的 `{x,y}` 形状（attack/heal 等记目标坐标，attacked/healed 记来源坐标，lab 反应四坐标，say 三字段，rangedMassAttack 空对象）。旁路表挂 `Working` 每拍自动清空、同键后写覆盖；结算尾按最终对象集装配条目（同拍死亡对象不进导出，官方 saveRoomHistory 同形），随 `SettledRoom → OwnedTickTxn → Engine.last_action_log` 发布，与 `last_events` 同为检查点载荷。embed RPC `captureActionLog(room)` 返回上一成功结算拍的 `{room, tick, objects}`（tick 报当前世界时间，产物属已推进前的那一拍）；非公开 say 不进导出（官方历史快照删除非公开 say）。玩家 API 面尚未暴露 `actionLog`（位图无坐标，投影无该键）——渲染 feed 与玩家面导出见后续批次。
+
 ### power 效果链（当前首片）
 
 `RoomState.effects` 按对象 ID 持有 `effect/power/level/end_time`，与对象候选一起克隆、删除和跨房迁移；同 power 施放替换，异 power 共存。常规消费以 `end_time > time` 判断有效，不逐拍改写或清空过期条目；factory 配方门与 powerSpawn 处理量保留官方 `≥` 边界。管理员 Generic 输入中的 effects 在插入或编辑时归一到此表，发布和恢复拒绝双权威或悬空条目。

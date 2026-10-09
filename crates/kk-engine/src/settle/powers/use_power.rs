@@ -232,4 +232,13 @@ pub(super) fn pc_use_power(w: &mut Working, id: ObjId, d: &IntentData) {
             .map(|t| t.pos())
             .unwrap_or((g.x, g.y));
     set_pc_action_log(w, id, "power", json!({ "id": power, "x": ax, "y": ay }));
+    w.record_action(
+        id,
+        "power",
+        super::super::action_log::ActionLogPayload::Power {
+            id: power,
+            x: ax,
+            y: ay,
+        },
+    );
 }

@@ -47,6 +47,7 @@
 | InterShardMemory 本地段 | `engine.players.*.ism_local`（字符串或 null，≤100×1024 UTF-16 码元） | 随 `engine_version` 硬门；旧检查点缺失按 serde 默认回填 null | 每玩家跨 tick 的 ISM 本地段注入与写回（setLocal 触发拍携带候选） | 拒绝不迁移，G23 负责 |
 | 市场 | `engine.market.orders.*`（订单 12 字段，动态映射）、`transactions[]`、`next_order_seq`、`next_transaction_id` | 随 `engine_version` 硬门；订单生命周期按墙钟判过期，装配时校验市场游标 | 市场状态重建与游标续发 | 拒绝不迁移，G23 负责 |
 | 事件 | `engine.last_events[]` | 无独立版本 | 最近成功轮事件回填 | 拒绝不迁移，G23 负责 |
+| 动作记录导出 | `engine.last_action_log`（房间 → 条目：id/type/structureType/name/x/y/actionLog 动作键→载荷；与 last_events 同为跨拍读面） | 无独立版本 | embed `captureActionLog` 读面（上一成功结算拍的 room-history 形状产物；同拍死亡对象不进导出、非公开 say 裁剪） | 拒绝不迁移，G23 负责 |
 | Mod 提交状态 | `engine.mod_states`（动态映射，载荷不透明——namespace state 是 Mod 自管 JSON） | 无独立版本；与包身份一致性由 realm 重建核对 | Mod namespace state 回填 | 拒绝不迁移，G23 负责 |
 | 引擎杂项 | `engine.next_id`、`engine.plan_hash` | `plan_hash` 恢复时由重新注册实际产生并等值核对，不等即拒 | 对象 ID 游标续发；冻结计划一致性 | 拒绝不迁移，G23 负责 |
 

@@ -221,8 +221,12 @@ export class KkscreepsAdapter {
     return await client().call<number>('getGameTime', {});
   }
 
-  async captureActionLog(_room: string): Promise<never> {
-    throw new Error('captureActionLog 未实装（M0；actionLogCapture capability = false）');
+  /** 上一成功结算拍的房间动作记录导出（runPlayer/tick 结算后调用）。
+   * 形状为套件 RoomActionLogCapture：{room, tick, objects}，objects 只含
+   * 本拍有动作且结算尾仍存活的对象；tick 报当前世界时间（动作产物属于
+   * 已推进前的那一拍，与官方 room-history 键位对齐）。 */
+  async captureActionLog(room: string): Promise<unknown> {
+    return await client().call('captureActionLog', { room });
   }
 
   async setInvaderRaidState(room: string, spec: InvaderRaidRoomStateSpec): Promise<void> {

@@ -57,7 +57,7 @@ export const capabilities: AdapterCapabilities = {
   interShardMemory: true,
   cpuShardLimits: true,
   liveWorldSize: true,
-  actionLogCapture: false,
+  actionLogCapture: true,
   randomInjection: true,
   deprecationNotices: true,
 };

@@ -210,6 +210,13 @@ pub fn run_reaction(w: &mut Working, id: ObjId, d: &IntentData) {
     });
     update_lab(w, lab1, |v| lab_drain(v, &m1, amount, &stores));
     update_lab(w, lab2, |v| lab_drain(v, &m2, amount, &stores));
+    // 官方 run-reaction.js:88：调用 lab 写 runReaction，坐标=两个输入
+    // 试剂 lab。
+    w.record_action(
+        id,
+        "runReaction",
+        super::action_log::ActionLogPayload::Reaction { x1, y1, x2, y2 },
+    );
 }
 
 /// 调用 lab 按有效效果计算批量，分解化合物并向两个输出 lab 各发一份试剂，进入
@@ -279,6 +286,17 @@ pub fn reverse_reaction(w: &mut Working, id: ObjId, d: &IntentData) {
     });
     update_lab(w, lab1, |v| lab_receive(v, &v1, amount, &stores));
     update_lab(w, lab2, |v| lab_receive(v, &v2, amount, &stores));
+    // 官方 reverse-reaction.js:90：调用 lab 写 reverseReaction，坐标=
+    // 两个输出 lab。
+    if let Some((x1, y1)) = w.room.objects.get(&lab1).map(|o| o.pos())
+        && let Some((x2, y2)) = w.room.objects.get(&lab2).map(|o| o.pos())
+    {
+        w.record_action(
+            id,
+            "reverseReaction",
+            super::action_log::ActionLogPayload::Reaction { x1, y1, x2, y2 },
+        );
+    }
 }
 
 /// lab 向相邻 creep 的可强化部件注入矿物：每部件耗 LAB_BOOST_MINERAL 矿物
@@ -354,6 +372,13 @@ pub fn boost_creep(w: &mut Working, id: ObjId, d: &IntentData) {
         if let Some(creep) = w.creep_mut(target) {
             super::creep::set_action_log(&mut creep.action_log, super::creep::ACTION_HEALED);
         }
+        if let Some((lx, ly)) = w.room.objects.get(&id).map(|o| o.pos()) {
+            w.record_action(
+                target,
+                "healed",
+                super::action_log::ActionLogPayload::Coords { x: lx, y: ly },
+            );
+        }
         return;
     }
     let drained = store_amount(&data, &mineral) - mineral_left;
@@ -362,6 +387,13 @@ pub fn boost_creep(w: &mut Working, id: ObjId, d: &IntentData) {
             creep.body[*idx].boost = Some(mineral.clone());
         }
         super::creep::set_action_log(&mut creep.action_log, super::creep::ACTION_HEALED);
+    }
+    if let Some((lx, ly)) = w.room.objects.get(&id).map(|o| o.pos()) {
+        w.record_action(
+            target,
+            "healed",
+            super::action_log::ActionLogPayload::Coords { x: lx, y: ly },
+        );
     }
     let stores = w.plane.stores;
     update_lab(w, id, |v| {

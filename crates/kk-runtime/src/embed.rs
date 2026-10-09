@@ -334,6 +334,12 @@ impl EmbedEngine {
         self.source().game_time()
     }
 
+    /// 上一成功结算拍的房间动作记录导出（适配器 captureActionLog 读面）。
+    /// 形状与语义见 kk_engine::Engine::capture_action_log_json。
+    pub fn capture_action_log(&self, room: &str) -> Value {
+        self.engine.capture_action_log_json(room)
+    }
+
     /// 已提交的显式推进轮数；不包含 createShard 的装配热身拍。
     /// 场景切换按该计数调度，冷恢复从检查点沿用。
     pub fn committed_rounds(&self) -> u64 {

@@ -48,13 +48,15 @@ pub fn energy_resource_name(o: &kk_schema::room::EnergyObj) -> &str {
     }
 }
 
-/// 房间结算产物：候选房间、事件、跨房移动与本拍 fresh-age 集合
-///（portal 传送首拍豁免的输入，见 Working::fresh_age）。
+/// 房间结算产物：候选房间、事件、跨房移动、本拍 fresh-age 集合
+///（portal 传送首拍豁免的输入，见 Working::fresh_age）与动作记录导出
+///（见 settle::action_log 模块注释）。
 pub struct SettledRoom {
     pub room: RoomState,
     pub events: Vec<Value>,
     pub inter_room: Vec<inter_room::InterRoomMove>,
     pub fresh_age: std::collections::BTreeSet<ObjId>,
+    pub action_log: Vec<super::action_log::ActionLogEntry>,
 }
 
 /// 原地结算房间，返回事件并替换 room.events。
@@ -347,10 +349,14 @@ pub fn settle_room(
     // 本拍从 0 初始化寿命的 creep 集合随结算产物带出：官方 portal 门
     //（creeps/tick.js:80）在寿命补设（:88-91）之前求值，首个活跃拍豁免。
     let fresh_age = std::mem::take(&mut w.fresh_age);
+    // 动作记录导出在结算尾按最终对象集装配：同拍死亡的对象不进历史
+    //（官方 saveRoomHistory 只快照最终 roomObjects）。
+    let action_log = super::action_log::collect(&w.room.objects, std::mem::take(&mut w.action_log));
     Ok(SettledRoom {
         room: w.room,
         events: w.events,
         inter_room,
         fresh_age,
+        action_log,
     })
 }

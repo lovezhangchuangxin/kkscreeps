@@ -334,6 +334,22 @@ fn tower_heal(w: &mut Working, id: ObjId, d: &IntentData) {
     }
     *w.heal_to_apply.entry(target_id).or_insert(0) += amount;
     consume_tower_energy(w, id);
+    // 官方 towers/heal.js:48-49 双写：塔 heal 记目标坐标、目标 healed
+    // 记塔坐标（towerAttack 的 attack/attacked 由 apply_damage 的
+    // 非 creep 攻击者分支统一记录）。
+    w.record_action(
+        id,
+        "heal",
+        super::action_log::ActionLogPayload::Coords { x: pos.0, y: pos.1 },
+    );
+    w.record_action(
+        target_id,
+        "healed",
+        super::action_log::ActionLogPayload::Coords {
+            x: tower.x,
+            y: tower.y,
+        },
+    );
     w.push_event(
         c::EVENT_HEAL,
         id,
@@ -378,6 +394,14 @@ fn tower_repair(w: &mut Working, id: ObjId, d: &IntentData) {
     let new_hits = (object_hits(&target) + amount).min(hits_max);
     set_structure_hits(w, target_id, new_hits);
     consume_tower_energy(w, id);
+    {
+        let (tx, ty) = target.pos();
+        w.record_action(
+            id,
+            "repair",
+            super::action_log::ActionLogPayload::Coords { x: tx, y: ty },
+        );
+    }
     w.push_event(
         c::EVENT_REPAIR,
         id,
@@ -490,6 +514,15 @@ pub(crate) fn link_transfer(w: &mut Working, id: ObjId, d: &IntentData) {
             g.data = v.to_string();
         }
     }
+    // 官方 links/transfer.js:48：transferEnergy 记目标 link 坐标。
+    w.record_action(
+        id,
+        "transferEnergy",
+        super::action_log::ActionLogPayload::Coords {
+            x: target.x,
+            y: target.y,
+        },
+    );
     w.push_event(
         c::EVENT_TRANSFER,
         id,

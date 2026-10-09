@@ -227,6 +227,14 @@ fn pc_enable_room(w: &mut Working, id: ObjId, d: &IntentData) {
     }
     // 官方 enableRoom.js:21：成功后记动作（目标=控制器坐标）。
     set_pc_action_log(w, id, "attack", json!({ "x": ctl_obj.x, "y": ctl_obj.y }));
+    w.record_action(
+        id,
+        "attack",
+        super::action_log::ActionLogPayload::Coords {
+            x: ctl_obj.x,
+            y: ctl_obj.y,
+        },
+    );
 }
 
 /// renew：powerBank/powerSpawn 相邻目标重置寿命为 time+5000。
@@ -264,10 +272,15 @@ fn pc_renew(w: &mut Working, id: ObjId, d: &IntentData) {
         && let Ok(mut v) = serde_json::from_str::<Value>(&o.data)
     {
         v["ageTime"] = json!(w.time + c::POWER_CREEP_LIFE_TIME as u64);
-        // 官方 renew.js:22：续命成功记 healed（自身坐标）。
+        // 官方 renew.js:22：续命成功记 healed（自身坐标的官方怪癖）。
         v["actionLog"]["healed"] = json!({ "x": gx, "y": gy });
         o.data = v.to_string();
     }
+    w.record_action(
+        id,
+        "healed",
+        super::action_log::ActionLogPayload::Coords { x: gx, y: gy },
+    );
 }
 
 /// say：写 data.actionLog.say（截 10 字符）；投影透传给 prelude 的
@@ -277,12 +290,21 @@ fn pc_say(w: &mut Working, id: ObjId, d: &IntentData) {
         return;
     };
     let message: String = message.chars().take(10).collect();
+    let is_public = d.is_public.unwrap_or(false);
     if let Some(RoomObject::Generic(o)) = w.room.objects.get_mut(&id)
         && let Ok(mut v) = serde_json::from_str::<Value>(&o.data)
     {
-        v["actionLog"]["say"] =
-            json!({ "message": message, "isPublic": d.is_public.unwrap_or(false) });
+        v["actionLog"]["say"] = json!({ "message": message, "isPublic": is_public });
         o.data = v.to_string();
+    }
+    // 导出面只记公开 say（官方历史快照 processor.js:436-438 删除非公开）；
+    // pc 截断按 Unicode 标量（chars）与 creep 的 UTF-16 口径有已登记差异。
+    if is_public {
+        w.record_action(
+            id,
+            "say",
+            super::action_log::ActionLogPayload::Say { message, is_public },
+        );
     }
 }
 

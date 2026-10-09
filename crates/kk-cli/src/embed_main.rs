@@ -159,6 +159,11 @@ fn handle_line(engine: &mut EmbedEngine, line: &str) -> anyhow::Result<Value> {
             json!(engine.find_in_room(room, find_const))
         }
         "getGameTime" => json!(engine.get_game_time()),
+        // 上一成功结算拍的房间动作记录导出（套件 actionLogCapture 能力）。
+        "captureActionLog" => {
+            let room = s(&params, "room")?;
+            engine.capture_action_log(room)
+        }
         "enableInputLog" => {
             // G25.a：挂载持久输入日志。path 必填；metadata 可选（诊断用，
             // 原样入头段）。重复挂载/有开放轮次由引擎侧拒绝。

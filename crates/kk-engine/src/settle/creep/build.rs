@@ -162,6 +162,13 @@ pub(in crate::settle) fn intent_build(w: &mut Working, id: ObjId, data: &IntentD
         if let Some(creep) = w.creep_mut(id) {
             set_action_log(&mut creep.action_log, ACTION_BUILD);
         }
+        if let Some((tx, ty)) = w.room.objects.get(&target_id).map(|o| o.pos()) {
+            w.record_action(
+                id,
+                "build",
+                super::super::action_log::ActionLogPayload::Coords { x: tx, y: ty },
+            );
+        }
         crate::settle::buildings::build_mod_site(w, id, target_id, &site, building);
         return;
     }
@@ -190,6 +197,13 @@ pub(in crate::settle) fn intent_build(w: &mut Working, id: ObjId, data: &IntentD
     if let Some(c) = w.creep_mut(id) {
         c.store.energy = u32::try_from((c.store.energy as i64 - effect).max(0)).unwrap_or(u32::MAX);
         set_action_log(&mut c.action_log, ACTION_BUILD);
+    }
+    if let Some((tx, ty)) = w.room.objects.get(&target_id).map(|o| o.pos()) {
+        w.record_action(
+            id,
+            "build",
+            super::super::action_log::ActionLogPayload::Coords { x: tx, y: ty },
+        );
     }
     let incomplete = new_progress < total;
     w.push_event(

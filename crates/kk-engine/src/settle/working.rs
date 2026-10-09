@@ -87,6 +87,10 @@ pub struct Working {
     /// 本 tick 登记的跨房过渡：位于边缘格的 creep 在全部房间结算后由
     /// 引擎阶段移入邻房候选。
     pub(crate) pending_inter_room: Vec<inter_room::InterRoomMove>,
+    /// 渲染面动作记录的旁路累积（见 settle::action_log 模块注释）：
+    /// 对象 → 动作键 → 载荷；每拍随 Working 新建清空，同键后写覆盖。
+    /// 与位图/事件通道平行，写入点须与 set_action_log 同处。
+    pub(crate) action_log: BTreeMap<ObjId, BTreeMap<String, super::action_log::ActionLogPayload>>,
     /// 本拍从 0 初始化寿命的 creep（出生后首个活跃拍）——portal 传送的
     /// 官方 `if(object.ageTime)` 门在 ageTime 补设**之前**求值，此类对象
     /// 当拍豁免传送；集合作房间结算产物随跨房管线带给全局收集点。
@@ -141,6 +145,7 @@ impl Working {
                 plane.static_passability,
             ),
             pending_inter_room: Vec::new(),
+            action_log: BTreeMap::new(),
             fresh_age: std::collections::BTreeSet::new(),
             chain_mutations: None,
             plane,
@@ -166,6 +171,22 @@ impl Working {
             RoomObject::Controller(c) => Some(c),
             _ => None,
         })
+    }
+
+    /// 记录渲染面动作载荷（官方 processor 各 intent 写入点的坐标形状）。
+    /// 同键后写覆盖，与官方 actionLog 覆写同形；幂等键（如同拍两次
+    /// attack）后者胜出。与 set_action_log 位图在同一点调用，两通道
+    /// 不得只改其一。
+    pub fn record_action(
+        &mut self,
+        id: ObjId,
+        key: &'static str,
+        payload: super::action_log::ActionLogPayload,
+    ) {
+        self.action_log
+            .entry(id)
+            .or_default()
+            .insert(key.to_string(), payload);
     }
 
     pub fn push_event(&mut self, event: i64, object_id: ObjId, data: Value) {

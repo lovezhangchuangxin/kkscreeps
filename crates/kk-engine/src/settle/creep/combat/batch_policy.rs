@@ -99,6 +99,12 @@ pub fn slot_combat_apply_damage_batch_with_retaliation(
     if let Some(actor) = w.creep_mut(id) {
         super::super::set_action_log(&mut actor.action_log, super::super::ACTION_RANGED_MASS);
     }
+    // 官方 rangedMassAttack.js:58：群体攻击无坐标，写空对象载荷。
+    w.record_action(
+        id,
+        "rangedMassAttack",
+        crate::settle::action_log::ActionLogPayload::Mass(Default::default()),
+    );
     Ok(())
 }
 

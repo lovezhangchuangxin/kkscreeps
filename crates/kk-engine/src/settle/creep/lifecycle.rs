@@ -25,6 +25,18 @@ pub(super) fn intent_say(w: &mut Working, id: ObjId, data: &IntentData) {
         c.say_message = Some(message);
         c.say_public = Some(is_public);
     }
+    // 仅公开 say 进入导出：官方 processor.js:436-438 的历史快照删除
+    // 非公开 say（captureActionLog 读的是 history 产物）。
+    if is_public {
+        w.record_action(
+            id,
+            "say",
+            super::super::action_log::ActionLogPayload::Say {
+                message: utf16_truncate(data.message.as_deref().unwrap_or(""), 10),
+                is_public,
+            },
+        );
+    }
 }
 
 /// 按 UTF-16 码元截断并分配 String。若截断拆开代理对，用 U+FFFD 替换孤立项；

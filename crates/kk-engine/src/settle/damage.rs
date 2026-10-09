@@ -161,6 +161,14 @@ fn apply_damage_inner(
             "attacked",
             json!({ "x": attacker_pos.0, "y": attacker_pos.1 }),
         );
+        w.record_action(
+            target_id,
+            "attacked",
+            super::action_log::ActionLogPayload::Coords {
+                x: attacker_pos.0,
+                y: attacker_pos.1,
+            },
+        );
     } else if let RoomObject::Mod(m) = &target {
         // G09.c：托管结构受击槽（Mod 包覆 builtin:mod.receiveDamage）时
         // 扣减与声明反击挂起，意图阶段后由房间循环经共享句柄跑槽再落地；
@@ -240,20 +248,68 @@ fn apply_damage_inner(
         attack_back = 0;
     }
 
-    if (attack_type == c::EVENT_ATTACK_TYPE_MELEE || attack_type == c::EVENT_ATTACK_TYPE_DISMANTLE)
-        && let Some(a) = w.creep_mut(attacker)
-    {
-        set_action_log(&mut a.action_log, ACTION_ATTACK);
+    // 渲染面动作载荷与位图同点写入（官方 _damage.js:60-91：attack/
+    // rangedAttack 记目标坐标，attacked 记攻击者坐标；反伤的 attacked
+    // 记受击目标坐标）。非 creep 攻击者（塔）远程也写 attack 键
+    //（官方 towers/attack.js:58）；RANGED_MASS 不在此记——群体攻击由
+    // 调用方写 rangedMassAttack {}（rangedMassAttack.js:58）。
+    let target_pos = target.pos();
+    if attack_type == c::EVENT_ATTACK_TYPE_MELEE || attack_type == c::EVENT_ATTACK_TYPE_DISMANTLE {
+        if let Some(a) = w.creep_mut(attacker) {
+            set_action_log(&mut a.action_log, ACTION_ATTACK);
+        }
+        w.record_action(
+            attacker,
+            "attack",
+            super::action_log::ActionLogPayload::Coords {
+                x: target_pos.0,
+                y: target_pos.1,
+            },
+        );
+    } else if attack_type == c::EVENT_ATTACK_TYPE_RANGED {
+        if let Some(a) = w.creep_mut(attacker) {
+            set_action_log(&mut a.action_log, ACTION_RANGED_ATTACK);
+        }
+        let is_creep = matches!(w.room.objects.get(&attacker), Some(RoomObject::Creep(_)));
+        w.record_action(
+            attacker,
+            if is_creep { "rangedAttack" } else { "attack" },
+            super::action_log::ActionLogPayload::Coords {
+                x: target_pos.0,
+                y: target_pos.1,
+            },
+        );
     }
-    if attack_type == c::EVENT_ATTACK_TYPE_RANGED
-        && let Some(a) = w.creep_mut(attacker)
+    if matches!(target, RoomObject::Creep(_)) {
+        if let Some(t) = w.creep_mut(target_id) {
+            set_action_log(&mut t.action_log, ACTION_ATTACKED);
+        }
+        w.record_action(
+            target_id,
+            "attacked",
+            super::action_log::ActionLogPayload::Coords {
+                x: attacker_pos.0,
+                y: attacker_pos.1,
+            },
+        );
+    } else if let RoomObject::Generic(g) = &target
+        && matches!(
+            kk_world::domain::generic::structure_type(&g.data).as_deref(),
+            Some("tower" | "link" | "lab" | "invaderCore" | "factory")
+        )
     {
-        set_action_log(&mut a.action_log, ACTION_RANGED_ATTACK);
-    }
-    if matches!(target, RoomObject::Creep(_))
-        && let Some(t) = w.creep_mut(target_id)
-    {
-        set_action_log(&mut t.action_log, ACTION_ATTACKED);
+        // 官方 _damage.js:73 对持有动作模板的结构目标（processor.js:72-105
+        // 的 tower/link/lab/invaderCore/factory）同写 attacked（坐标=
+        // 攻击者）；无模板的墙/路/容器不写。powerCreep 目标已在上文
+        // 受击分支记录。
+        w.record_action(
+            target_id,
+            "attacked",
+            super::action_log::ActionLogPayload::Coords {
+                x: attacker_pos.0,
+                y: attacker_pos.1,
+            },
+        );
     }
 
     if attack_back > 0 {
@@ -261,6 +317,14 @@ fn apply_damage_inner(
         if let Some(a) = w.creep_mut(attacker) {
             set_action_log(&mut a.action_log, ACTION_ATTACKED);
         }
+        w.record_action(
+            attacker,
+            "attacked",
+            super::action_log::ActionLogPayload::Coords {
+                x: target_pos.0,
+                y: target_pos.1,
+            },
+        );
         w.push_event(
             c::EVENT_ATTACK,
             target_id,
@@ -564,6 +628,15 @@ pub(in crate::settle) fn mod_damage_effects(
                 *w.damage_to_apply.entry(attacker).or_insert(0) += back;
                 if let Some(a) = w.creep_mut(attacker) {
                     set_action_log(&mut a.action_log, ACTION_ATTACKED);
+                }
+                // 与原生反击同形：攻击者 attacked 记 Mod 目标坐标
+                //（_damage.js:86-88 同构）。
+                if let Some((tx, ty)) = w.room.objects.get(&target_id).map(|o| o.pos()) {
+                    w.record_action(
+                        attacker,
+                        "attacked",
+                        super::action_log::ActionLogPayload::Coords { x: tx, y: ty },
+                    );
                 }
             } else {
                 // 无耐久面攻击者（如核弹本体）无处落反击：官方把

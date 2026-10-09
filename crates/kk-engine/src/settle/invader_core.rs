@@ -145,6 +145,15 @@ pub(super) fn reserve_controller(w: &mut Working, id: ObjId, data: &IntentData) 
             end_time: base_end + effect as u64,
         });
     }
+    // 官方 invaderCore 模板（processor.js:74-80）含 reserveController 键；
+    // 坐标=控制器。
+    if let Some((tx, ty)) = w.room.objects.get(&target_id).map(|o| o.pos()) {
+        w.record_action(
+            id,
+            "reserveController",
+            super::action_log::ActionLogPayload::Coords { x: tx, y: ty },
+        );
+    }
     w.push_event(c::EVENT_RESERVE_CONTROLLER, id, json!({ "amount": effect }));
 }
 

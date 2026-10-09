@@ -237,6 +237,15 @@ pub fn intent_renew_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) {
         creep.age_time = creep.age_time.saturating_add(effect.max(0) as u64);
         set_action_log(&mut creep.action_log, ACTION_HEALED);
     }
+    // 官方 renew-creep.js:42：目标写 healed，坐标=spawn。
+    w.record_action(
+        target_id,
+        "healed",
+        super::action_log::ActionLogPayload::Coords {
+            x: spawn.x,
+            y: spawn.y,
+        },
+    );
     if target.body.iter().any(|p| p.boost.is_some()) {
         if let Some(creep) = w.creep_mut(target_id) {
             for p in creep.body.iter_mut() {

@@ -10,6 +10,9 @@ pub struct EngineCheckpoint {
     pub market: market::MarketState,
     pub next_id: u64,
     pub last_events: Vec<Value>,
+    /// 上一成功结算拍的各房动作记录导出（与 last_events 同为跨拍读面，
+    /// 保存恢复对称；ActionLogEntry 可序列化，形状见 settle::action_log）。
+    pub last_action_log: BTreeMap<String, Vec<action_log::ActionLogEntry>>,
     pub mod_states: BTreeMap<String, Value>,
     pub plan_hash: String,
 }
@@ -25,6 +28,7 @@ impl Engine {
             market: self.market.clone(),
             next_id: self.next_id,
             last_events: self.last_events.clone(),
+            last_action_log: self.last_action_log.clone(),
             mod_states: self.mod_states.clone(),
             plan_hash: self.plan_hash().hex(),
         })
@@ -160,6 +164,7 @@ impl Engine {
         self.market = saved.market;
         self.next_id = saved.next_id;
         self.last_events = saved.last_events;
+        self.last_action_log = saved.last_action_log;
         self.mod_states = saved.mod_states;
         Ok(())
     }

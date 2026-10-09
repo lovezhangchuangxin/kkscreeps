@@ -89,6 +89,13 @@ fn intent_harvest_deposit(w: &mut Working, id: ObjId, target_id: ObjId) {
         slots_add(&mut c.store, &mut c.store_extra, &deposit_type, amount);
         set_action_log(&mut c.action_log, ACTION_HARVEST);
     }
+    if let Some((tx, ty)) = w.room.objects.get(&target_id).map(|o| o.pos()) {
+        w.record_action(
+            id,
+            "harvest",
+            super::super::action_log::ActionLogPayload::Coords { x: tx, y: ty },
+        );
+    }
     if sum > store_cap {
         intent_drop_amount_res(w, id, &deposit_type, sum - store_cap);
     }
@@ -157,6 +164,13 @@ fn intent_harvest_source(w: &mut Working, id: ObjId, target_id: ObjId) {
     if let Some(c) = w.creep_mut(id) {
         c.store.energy = energy_after.min(u32::MAX as i64) as u32;
         set_action_log(&mut c.action_log, ACTION_HARVEST);
+    }
+    if let Some((tx, ty)) = w.room.objects.get(&target_id).map(|o| o.pos()) {
+        w.record_action(
+            id,
+            "harvest",
+            super::super::action_log::ActionLogPayload::Coords { x: tx, y: ty },
+        );
     }
     if sum > store_cap {
         let drop_amt = energy_after.min(sum - store_cap);
@@ -229,6 +243,13 @@ fn intent_harvest_mineral(w: &mut Working, id: ObjId, target_id: ObjId) {
     if let Some(c) = w.creep_mut(id) {
         slots_add(&mut c.store, &mut c.store_extra, &m.mineral_type, amount);
         set_action_log(&mut c.action_log, ACTION_HARVEST);
+    }
+    if let Some((tx, ty)) = w.room.objects.get(&target_id).map(|o| o.pos()) {
+        w.record_action(
+            id,
+            "harvest",
+            super::super::action_log::ActionLogPayload::Coords { x: tx, y: ty },
+        );
     }
     if sum > store_cap {
         intent_drop_amount_res(w, id, &m.mineral_type, sum - store_cap);

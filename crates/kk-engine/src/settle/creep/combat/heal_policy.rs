@@ -50,28 +50,49 @@ pub(super) fn apply_heal(
         .checked_add(amount)
         .ok_or("待治疗累计量超出表示域")?;
     w.heal_to_apply.insert(target_id, accumulated);
+    // 官方 heal.js:30-31 / rangedHeal.js:30-31 双写：源侧 heal/rangedHeal
+    // 记目标坐标，目标侧 healed 记治疗者坐标。kk 位图近/远治疗共位，
+    // 导出面按 ranged 分键。
+    let target_pos = w.room.objects.get(&target_id).map(|o| o.pos());
+    let actor_pos = w.room.objects.get(&id).map(|o| o.pos());
     if let Some(actor) = w.creep_mut(id) {
         set_action_log(&mut actor.action_log, ACTION_HEAL);
     }
+    if let Some((tx, ty)) = target_pos {
+        w.record_action(
+            id,
+            if ranged { "rangedHeal" } else { "heal" },
+            crate::settle::action_log::ActionLogPayload::Coords { x: tx, y: ty },
+        );
+    }
     if let Some(target) = w.creep_mut(target_id) {
         set_action_log(&mut target.action_log, ACTION_HEALED);
-    } else {
-        // powerCreep 目标的动作记录在 data.actionLog（官方 heal.js:31 对
-        // creep/powerCreep 目标同写 healed；坐标=治疗者）。
-        let (hx, hy) = match w.room.objects.get(&id) {
-            Some(o) => o.pos(),
-            None => return Ok(()),
-        };
-        if w.room
+    }
+    if let Some((hx, hy)) = actor_pos {
+        if w.creep(target_id).is_some() {
+            w.record_action(
+                target_id,
+                "healed",
+                crate::settle::action_log::ActionLogPayload::Coords { x: hx, y: hy },
+            );
+        } else if w
+            .room
             .objects
             .get(&target_id)
             .is_some_and(crate::settle::powers::is_power_creep)
         {
+            // powerCreep 目标的动作记录在 data.actionLog（官方 heal.js:31
+            // 对 creep/powerCreep 目标同写 healed；坐标=治疗者）。
             crate::settle::powers::set_pc_action_log(
                 w,
                 target_id,
                 "healed",
                 serde_json::json!({ "x": hx, "y": hy }),
+            );
+            w.record_action(
+                target_id,
+                "healed",
+                crate::settle::action_log::ActionLogPayload::Coords { x: hx, y: hy },
             );
         }
     }

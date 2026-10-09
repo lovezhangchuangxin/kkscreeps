@@ -4,6 +4,7 @@
 //! Engine 在副本中结算所有房间和市场，校验成功后统一写回内存并推进
 //! 时间；直接调用 settle_room 则由调用方负责副本和失败处理。
 
+pub mod action_log;
 pub mod buildings;
 pub mod checkpoint;
 pub mod contrib;
@@ -238,6 +239,9 @@ pub struct Engine {
     next_id: u64,
     /// 最近成功 tick 的事件，按房间结算顺序拼接；失败不覆盖。
     pub(crate) last_events: Vec<serde_json::Value>,
+    /// 最近成功 tick 的各房动作记录导出（captureActionLog 读面）；
+    /// 失败不覆盖，冷恢复后为空。见 settle::action_log 模块注释。
+    pub(crate) last_action_log: BTreeMap<String, Vec<action_log::ActionLogEntry>>,
     /// 处理器随机源（tick({random}) 注入期间生效，见类型注释）。
     pub(crate) processor_random: ProcessorRandom,
     /// 持续生效的房间故障注入，由调用方显式解除。
@@ -314,6 +318,7 @@ impl Engine {
             market: market::MarketState::default(),
             next_id,
             last_events: Vec::new(),
+            last_action_log: BTreeMap::new(),
             processor_random: ProcessorRandom::default(),
             fail_room: None,
             run_state: RunState::Ready,

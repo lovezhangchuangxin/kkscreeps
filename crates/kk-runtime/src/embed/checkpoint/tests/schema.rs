@@ -45,6 +45,17 @@ fn schema_tree_official_packages(tree: &mut BTreeSet<String>) -> anyhow::Result<
     for binary in [false, true] {
         let mut engine = prepare(binary, &packages, &options)?;
         run(&mut engine, 1)?;
+        // 动作记录导出（actionLog 捕获批）：放一只 creep 公开说话，使
+        // last_action_log 子树进键树钉死（空映射不产生键）。
+        let talker = engine.place_object(
+            "W1N1",
+            "creep",
+            &json!({"pos":[25,25],"owner":"p1","body":["move"],"name":"speaker"}),
+        )?;
+        engine.run_player(
+            "p1",
+            &format!("Game.getObjectById('{talker}').say('pin', true); null"),
+        )?;
         engine
             .engine
             .edit_players(|players| {
@@ -212,6 +223,16 @@ const PINNED_CHECKPOINT_KEYS: &[&str] = &[
     "checkpoint_format_version",
     "concurrency",
     "disabled_mods[]",
+    // 动作记录导出（actionLog 捕获批）：say 夹具产生的 creep 条目形状
+    //（structureType/name 为 skip_serializing_if，creep 条目无 structureType）。
+    "engine.last_action_log.*[]",
+    "engine.last_action_log.*[].actionLog.*.isPublic",
+    "engine.last_action_log.*[].actionLog.*.message",
+    "engine.last_action_log.*[].id",
+    "engine.last_action_log.*[].name",
+    "engine.last_action_log.*[].type",
+    "engine.last_action_log.*[].x",
+    "engine.last_action_log.*[].y",
     "engine.last_events[]",
     "engine.market.next_order_seq",
     "engine.market.next_transaction_id",
@@ -358,7 +379,7 @@ fn checkpoint_schema_keys_are_pinned() -> anyhow::Result<()> {
     schema_tree_invader_memory(&mut tree)?;
     assert_eq!(
         PINNED_CHECKPOINT_KEYS.len(),
-        137,
+        145,
         "钉死键总数；可空 binary 的 null 与数组分支、无包分片的 mods null 分支分别计键，增删时同步清单"
     );
     let expected: BTreeSet<String> = PINNED_CHECKPOINT_KEYS

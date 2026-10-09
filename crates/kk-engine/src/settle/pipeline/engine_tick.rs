@@ -123,6 +123,7 @@ impl Engine {
             rooms: Vec::new(),
             events: Vec::new(),
             market: self.market.clone(),
+            action_log: std::collections::BTreeMap::new(),
         })
     }
 
@@ -159,6 +160,7 @@ impl Engine {
                 events: mut room_events,
                 inter_room: mut moves,
                 fresh_age: mut fresh,
+                action_log,
             } = settle_room(
                 room,
                 txn.time,
@@ -171,6 +173,9 @@ impl Engine {
             fresh_age.append(&mut fresh);
             txn.rooms.push((name.clone(), room));
             txn.events.append(&mut room_events);
+            if !action_log.is_empty() {
+                txn.action_log.insert(name.clone(), action_log);
+            }
         }
         // portal 传送先于边缘过渡收集应用（官方两段式同 tick：creep tick
         // 的 portal 标记覆盖 edge 标记——既在边缘格又在 portal 格的对象只
@@ -202,6 +207,7 @@ impl Engine {
         self.mod_states = prepared.mod_states;
         self.next_id = prepared.next_id;
         self.last_events = prepared.events;
+        self.last_action_log = prepared.action_log;
         Ok(())
     }
 }

@@ -513,12 +513,12 @@ pub fn mineral_tick(w: &mut Working, id: ObjId) -> Result<(), super::SettleError
         }
         // 注入序列逐值消费（耗尽报错）；缺省走 MineralRng 派生流，
         // 派生路径保持单实例两次以上抽取的既有语义。
-        let mut next_random = match &w.state.random {
+        let next_random = match &w.state.random {
             super::ProcessorRandom::Injected(seq) => Some(seq.clone()),
             super::ProcessorRandom::Derived => None,
         };
         let mut rng = MineralRng::new(&w.room.name, id, w.time);
-        let mut draw = |rng: &mut MineralRng| -> Result<f64, super::SettleError> {
+        let draw = |rng: &mut MineralRng| -> Result<f64, super::SettleError> {
             match &next_random {
                 Some(seq) => seq.borrow_mut().pop_front().ok_or_else(|| {
                     super::SettleError(
