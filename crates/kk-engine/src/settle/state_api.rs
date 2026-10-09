@@ -90,6 +90,16 @@ impl Engine {
     pub fn set_terrain(&mut self, name: &str, terrain: kk_core::Terrain) -> Result<(), String> {
         self.edit_world(|world| world.set_terrain(name, terrain))
     }
+
+    /// 管理触发的 raid 生成器：一次候选编辑内执行官方 genInvaders 扫描
+    ///（房态门、扇区核、出口资格、组合生成、阈值重掷）。随机源由调用方
+    /// 注入：序列耗尽报错并保留原世界。
+    pub fn run_invader_raid_spawner(
+        &mut self,
+        mut random: super::invader_raid::RaidRandom,
+    ) -> Result<(), String> {
+        self.edit_world(|world| super::invader_raid::run_spawner(world, &mut random))
+    }
     #[doc(hidden)]
     pub fn set_time_for_test(&mut self, time: u64) -> Result<(), String> {
         self.edit_world(|world| {

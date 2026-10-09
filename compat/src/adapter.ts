@@ -37,6 +37,21 @@ export interface TickOptions {
   signal?: AbortSignal;
 }
 
+/** 上游 InvaderRaidRoomStateSpec：逐键种子，未提供的键保持不变。 */
+export interface InvaderRaidRoomStateSpec {
+  harvestedEnergy?: number;
+  raidGoal?: number | null;
+  active?: boolean;
+  status?: string;
+  controllerReservation?: { owner: string; ticksToEnd?: number } | null;
+}
+
+/** 上游 InvaderRaidSpawnerOptions：注入随机序列（消耗序同官方
+ *  genInvaders 的 Math.random 调用点；耗尽报错）。 */
+export interface InvaderRaidSpawnerOptions {
+  random?: readonly number[];
+}
+
 export interface PlayerRunResult {
   executed: boolean;
   expr: { ok: true; value: unknown } | { ok: false; kind: string; error: string };
@@ -195,14 +210,15 @@ export class KkscreepsAdapter {
     throw new Error('captureActionLog 未实装（M0；actionLogCapture capability = false）');
   }
 
-  async setInvaderRaidState(): Promise<never> {
-    throw new Error('invader raid spawner 未实装（capability = false）');
+  async setInvaderRaidState(room: string, spec: InvaderRaidRoomStateSpec): Promise<void> {
+    await client().call('setInvaderRaidState', { room, spec });
   }
-  async runInvaderRaidSpawner(): Promise<never> {
-    throw new Error('invader raid spawner 未实装（capability = false）');
+  async runInvaderRaidSpawner(options?: InvaderRaidSpawnerOptions): Promise<void> {
+    // random 缺省时键不发送，引擎用世界种子派生流（确定性回放）。
+    await client().call('runInvaderRaidSpawner', { random: options?.random });
   }
-  async clearInvaderRaidCreeps(): Promise<never> {
-    throw new Error('invader raid spawner 未实装（capability = false）');
+  async clearInvaderRaidCreeps(room: string): Promise<void> {
+    await client().call('clearInvaderRaidCreeps', { room });
   }
 
   async getControllerPos(room: string): Promise<{ x: number; y: number } | null> {

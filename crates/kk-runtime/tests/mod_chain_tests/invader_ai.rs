@@ -304,7 +304,7 @@ fn invader_ai_invalid_memory_and_missing_domain_reject_restore_atomically() -> a
         e.tick(1)?;
         let saved = e.checkpoint(Value::Null)?;
         let key = kk_world::ObjId::parse(&id).unwrap().0.to_string();
-        assert_eq!(saved["checkpoint_format_version"], 6);
+        assert_eq!(saved["checkpoint_format_version"], 7);
         for defect in [
             "domain",
             "actor",

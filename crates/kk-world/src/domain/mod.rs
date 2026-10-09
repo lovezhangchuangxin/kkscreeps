@@ -6,6 +6,7 @@ pub(crate) mod deposit;
 pub mod generic;
 pub mod invader_core;
 pub mod invader_memory;
+pub mod invader_raid;
 pub mod keeper;
 pub mod keeper_memory;
 pub mod npc;

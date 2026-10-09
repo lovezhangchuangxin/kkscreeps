@@ -145,6 +145,10 @@ fn intent_harvest_source(w: &mut Working, id: ObjId, target_id: ObjId) {
     if let Some(RoomObject::Source(s)) = w.room.objects.get_mut(&target_id) {
         s.energy -= amount as u32;
     }
+    // 采集量（与是否超容掉落无关）累计入房 raid 预算，供下次生成器阈值
+    // 判定。来源：harvest.js:45-48 对 source 写 invaderHarvested（任意
+    // 采集者都累计）；kk 聚合在房间 raid 状态——生成器只读总和。
+    w.room.raid.harvested_energy = w.room.raid.harvested_energy.saturating_add(amount);
     let sum = held_total + amount;
     // 先把产出加到 energy 槽，再用全部资源之和检查容量。
     // 超量只从 energy 槽掉落，可能包括原有能量；不能把全槽总量写入 energy。

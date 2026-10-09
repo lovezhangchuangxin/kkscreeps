@@ -10,6 +10,7 @@ pub struct RoomContents<'a> {
     pub effects: &'a mut BTreeMap<ObjId, Vec<crate::EffectEntry>>,
     pub keeper_memory: &'a mut BTreeMap<ObjId, crate::domain::keeper_memory::KeeperMemory>,
     pub invader_memory: &'a mut BTreeMap<ObjId, crate::domain::invader_memory::InvaderMemory>,
+    pub raid: &'a mut crate::domain::invader_raid::RaidRoomState,
 }
 
 impl World {
@@ -99,6 +100,7 @@ impl World {
             effects: &mut room.effects,
             keeper_memory: &mut room.keeper_memory,
             invader_memory: &mut room.invader_memory,
+            raid: &mut room.raid,
         })?;
         for (id, object) in &mut room.objects {
             if let Some(entries) = crate::effects::extract(object)? {

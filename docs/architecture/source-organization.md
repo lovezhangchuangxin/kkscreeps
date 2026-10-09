@@ -23,7 +23,7 @@
 | `kk-engine/src/settle/powers/use_power.rs` | 公共施放门、目标效果与成功提交尾部；`use_power/extension.rs` 持有灌能排序与资源更新，`shield.rs` 持有临时 rampart 放置 |
 | `kk-engine/src/settle/keeper.rs` / `npc.rs` | 前者持有 lair 倒计时、同名 NPC 替换与候选出生；后者合并 NPC 预意图，`npc/invader.rs` / `invader/` 持有普通 Invader 分类、追击/治疗/远程预意图，`invader_path.rs` 持有 5 tick moveTo/closest/flee，`path.rs` 共用原生矩阵/搜索，`npc/keeper.rs` / `path.rs` 持有 Keeper 巡守/战斗与寻路；`kk-world/src/domain/keeper.rs` 校验保存时钟，`npc.rs` 统一保留归属判定 |
 | `kk-world/src/domain/deposit.rs` | deposit 放置时钟归一及数值表示校验，插入/编辑/发布/恢复同源；采集和冷却公式由 engine 负责 |
-| `kk-engine/src/settle/invader_core.rs` / `stronghold.rs` | 前者持有核心坍塌/孵化 tick 与 reserve 意图，后者持有布防部署（模板铺场、清格、奖励随机流）；`kk-world/src/domain/invader_core.rs` 校验核心保存键（含布防模板名），`stronghold.rs` 持有官方 bunker 模板与容器奖励表 |
+| `kk-engine/src/settle/invader_core.rs` / `stronghold.rs` / `invader_raid.rs` | 前者持有核心坍塌/孵化 tick 与 reserve 意图，第二者持有布防部署（模板铺场、清格、奖励随机流），后者持有 raid 生成器扫描（资格门、出口资格、组合生成、阈值重掷）；`kk-world/src/domain/invader_core.rs` 校验核心保存键（含布防模板名），`stronghold.rs` 持有官方 bunker 模板与容器奖励表，`invader_raid.rs` 持有 raid 房间状态域、官方身体表与扇区/中心带判定；`kk-runtime/src/embed/raid_admin.rs` 持有 raid 管理命令（状态种子/生成器触发/清理） |
 | `kk-engine/src/settle/mod.rs` | 世界引擎状态和控制入口；`working.rs` 候选构造和上下文，`working/` 按对象、字段、移动、掉落、链快照与首触日志组织，`room_loop.rs` 房间循环，`install.rs` 冻结计划接线，`pipeline/` 持有候选阶段/事务/写回/校验/发布 |
 | `kk-engine/src/settle/contrib.rs` | 槽、处理器和续行类型及运行入口；`contrib/assemble.rs` 冻结表装配，`incoming.rs` 受击数值链与默认回退，`execute.rs` 内建动作/tick 链执行与 Hosted 局部恢复（资源两端/事件、移动请求登记、战斗/建造族对象/延迟队列/链内增删） |
 | `kk-engine/src/settle/creep/combat/damage_policy.rs` | 单体策略伤害的表示校验、战斗视图；默认/native 和策略应用共用 damage.rs 的生命值与死亡路径 |

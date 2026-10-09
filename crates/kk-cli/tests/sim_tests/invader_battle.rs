@@ -82,7 +82,7 @@ fn invader_battle_actual_damage_healing_movement_replay_and_cold_resume_match() 
         assert_eq!(prefix["input_log"]["segments"], 100);
         let saved: Value = serde_json::from_slice(&std::fs::read(&checkpoint)?)?;
         let payload: Value = serde_json::from_str(saved["payload"].as_str().unwrap())?;
-        assert_eq!(payload["checkpoint_format_version"], 6);
+        assert_eq!(payload["checkpoint_format_version"], 7);
         assert!(
             !payload["engine"]["world"]["rooms"]["W1N1"]["invader_memory"]
                 .as_object()

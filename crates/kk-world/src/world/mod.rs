@@ -56,6 +56,9 @@ pub struct RoomState {
     pub keeper_memory: BTreeMap<ObjId, crate::domain::keeper_memory::KeeperMemory>,
     /// Invader 移动路径与 lastMove；随对象删除，完整检查点独立保存。
     pub invader_memory: BTreeMap<ObjId, crate::domain::invader_memory::InvaderMemory>,
+    /// Invader raid 房间状态（阈值覆盖/采集预算/活跃/房间状态）；
+    /// 完整检查点保存，任意投影或管理快照不暴露。
+    pub raid: crate::domain::invader_raid::RaidRoomState,
 }
 
 impl RoomState {
@@ -73,6 +76,7 @@ impl RoomState {
             effects: BTreeMap::new(),
             keeper_memory: BTreeMap::new(),
             invader_memory: BTreeMap::new(),
+            raid: Default::default(),
         }
     }
 
@@ -308,6 +312,20 @@ impl World {
         room.effects.insert(id, entries);
         self.generation += 1; // 保守失效：可变访问即视为内容可能变更
         Ok(())
+    }
+
+    /// raid 生成器成功布兵后的房态收尾：写入重掷阈值、清零采集预算并
+    /// 置活跃（官方 cronjobs.js:433-439 的 rooms.update + activateRoom）。
+    /// 只由生成器在候选编辑内调用；房间不存在是程序错误，直接 panic 界。
+    pub fn set_raid_post_spawn(&mut self, room_name: &str, new_goal: i64) {
+        let room = self
+            .rooms
+            .get_mut(room_name)
+            .expect("生成器收尾房来自既存房间键");
+        room.raid.invader_goal = Some(new_goal);
+        room.raid.harvested_energy = 0;
+        room.raid.active = true;
+        self.generation += 1; // 保守失效：可变访问即视为内容可能变更
     }
 
     /// 放入对象并分配全局唯一 id（对象 id 字段被覆写为分配值）。

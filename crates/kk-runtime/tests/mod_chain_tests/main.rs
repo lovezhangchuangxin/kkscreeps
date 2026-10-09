@@ -228,6 +228,8 @@ mod invader_ai;
 mod invader_combat;
 mod invader_core;
 mod invader_melee;
+mod invader_raid;
+mod invader_raid_admin;
 mod keeper_ai;
 mod keeper_lair;
 mod link_decline;

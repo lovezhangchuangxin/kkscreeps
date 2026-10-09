@@ -4,12 +4,12 @@
 
 ## 当前接手位置
 
-- 更新日期：2026-10-09；控制器 INVULNERABILITY 消费者已提交 `d48d6ea`；Invader core 生命周期首片已提交 `2b68002`；Stronghold 布防首片随本提交交付。最近完整门禁 Rust 全绿（源码规模含模板数据逐 bunker 拆分）；最近 release 棘轮 2816 passed / 8 failed / 90 skipped（0 转红，8 例既有豁免）。TooAngel/Overmind 六阶段为既有入库证据；本批未重跑 bot 长测。
+- 更新日期：2026-10-09；控制器 INVULNERABILITY 消费者已提交 `d48d6ea`；Invader core 生命周期首片已提交 `2b68002`；Stronghold 布防首片已提交 `4f7dd2bd`；raid 调度首片随本提交交付。最近完整门禁 Rust 全绿；最近 release 棘轮 2837 passed / 8 failed / 69 skipped（0 转红，8 例既有豁免）。TooAngel/Overmind 六阶段为既有入库证据；本批未重跑 bot 长测。
 - 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座、deposit 采集链、observer 限时视野已交付。**M2H.b 19/19 powers 全部接通**。
-- 当前接手：G02.d3 结构/rampart 计划级通行及默认玩家/NPC 寻路已提交 `fd27fbd`；G03 障碍追加后的同源链预演已提交 `3f3d9a7`；障碍摘要的安全模式主人已提交 `41de432`；控制器零升级量修复已提交 `10eb812`；G27.a 独立异步后台宿主已提交 `b25e280`；控制器 INVULNERABILITY 三处消费门已提交 `d48d6ea`；invaderCore 生命周期首片已提交 `2b68002`；stronghold 布防首片（五套 bunker 布局/清格/奖励/decayTime 寿命绑定）随本提交交付，生产者侧仍缺 raid 调度与地图生成、战术 AI（maintainPopulation/refillTowers/focusClosest）与 create-creep 等意图。逐房通行粒度、摘要增强、完整仲裁替换仍未完成。
+- 当前接手：G02.d3 结构/rampart 计划级通行及默认玩家/NPC 寻路已提交 `fd27fbd`；G03 障碍追加后的同源链预演已提交 `3f3d9a7`；障碍摘要的安全模式主人已提交 `41de432`；控制器零升级量修复已提交 `10eb812`；G27.a 独立异步后台宿主已提交 `b25e280`；控制器 INVULNERABILITY 三处消费门已提交 `d48d6ea`；invaderCore 生命周期首片已提交 `2b68002`；stronghold 布防首片已提交 `4f7dd2bd`；raid 调度首片（官方 genInvaders 复刻：资格门/出口资格/组合生成/阈值重掷/每房 raid 持久域 v7）随本提交交付，生产者侧仍缺地图生成、powerBank 生成、战术 AI（maintainPopulation/refillTowers/focusClosest）与 create-creep 等意图。逐房通行粒度、摘要增强、完整仲裁替换仍未完成。
 - 本次完成：JSON/KKPV 各 200 tick 持续战斗、100+100 tick 跨进程冷恢复和完整检查点回放；实际位置/hits 证明移动、受伤与恢复，双通道及直跑/续跑世界与 Memory 等值。TooAngel v6 双通道 2000 tick 连跑及 1000+1000 tick 冷恢复六阶段复验通过。
-- 剩余：真实 bot 战斗/多房/长期存活验收；地图生成/raid 调度与 G21 Mod 世界事件；stronghold 战术 AI/create-creep 意图；walkTo/Keeper lastMove 按实际 stronghold 消费者接线；G02.d3 逐房/摘要后续、G03 完整仲裁替换与 G27.a。NPC 场景不标 M2B 或 G21 完成。
-- 兼容率 2816/2914≈96.7%（**95% 中间检查点已越过**；99% 目标需 2885，缺口 69；跳过 90 中 actionLog 21 例既缓，其余 69 需全吃）。
+- 剩余：真实 bot 战斗/多房/长期存活验收；地图生成与 G21 Mod 世界事件；stronghold 战术 AI/create-creep 意图、powerBank 生成；walkTo/Keeper lastMove 按实际 stronghold 消费者接线；G02.d3 逐房/摘要后续、G03 完整仲裁替换与 G27.a。NPC 场景不标 M2B 或 G21 完成。
+- 兼容率 2837/2914≈97.3%（**95% 中间检查点已越过**；99% 目标需 2885，缺口 48；跳过 69 中 actionLog 21 例既缓，其余 48 需全吃：边缘环绕簇 13、powerBank 消费者簇 9、弃用告警 7、多 shard 7、核弹 5、矿物密度注入 4、random 注入契约 3 等）。
 - Mod 扩展：移动策略、对象/建筑/资源、库存/耐久/受击、作者 CLI/类型、输入回放和检查点已有基础；未完成范围以任务表为准。默认玩法已有消费者不代表对应 Mod 替换能力已经开放。
 - 网络服务、持久 storage 后端与真实游戏客户端仍未实现；renderer R0–R6 已交付，R7 最终矩阵/长测未收口。现有 bot-check 不能代替持续推进世界中的可玩验收。
 - M2B 验收标准（2026-10-09 调整）：screeps-ok ≥95% 为中间检查点、≥99% 为后续覆盖目标；最终完成要求约定范围内功能全部通过验收，剩余例外逐项有明确范围、证据和可审查理由，见[路线图](../roadmap.md)。
@@ -18,7 +18,7 @@
 
 | 顺位 | 任务 | 首片与完成条件 |
 |---|---|---|
-| 1 | 零散红逐例归因与修复 | 8 条既有官方对齐豁免保留证据；Invader 自动远程攻击已交付；零步相邻近战已交付；普通 Invader 路径建筑改向/追击/治疗已贯通；NPC 持续战斗已验，后续为地图/raid/stronghold（Source Keeper 同房巡守/战斗已交付），raid/stronghold 另拆；每例有官方源或套件仲裁证据 |
+| 1 | 零散红逐例归因与修复 | 8 条既有官方对齐豁免保留证据；Invader 自动远程攻击已交付；零步相邻近战已交付；普通 Invader 路径建筑改向/追击/治疗已贯通；NPC 持续战斗已验（Source Keeper 同房巡守/战斗、stronghold 布防、raid 生成已交付），剩余地图生成/powerBank 生成另拆；每例有官方源或套件仲裁证据 |
 | 2 | 真实 bot 验收与 G02.d3 后续 | TooAngel 单房经济/死亡后补员/冷恢复已验；Overmind 单房经济/寿命/冷恢复已验；剩余真实 bot 战斗、多房，以及结构/rampart 通行与寻路贯通 |
 | 独立候选 | G02.d3 后续、G27.a | 前者继续逐房粒度与摘要增强（结构/rampart 已贯通）；后者提供异步后台生命周期，随后才接 storage/outbox/网络 |
 
@@ -328,6 +328,17 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - 独立 worker/realm、原生登记能力门、同步注册/异步生命周期、队列快拒绝、过期/跨包/未授予/调用和字节限额及共享 VM 预算已接线；FileProbe 使用常规文件的有限只读异步任务。实际发现异步 op 会在 V8 调用时提前轮询，首轮测试因没有 Tokio 上下文而中止，已将预算调用统一进入 worker 执行器上下文；随后宿主六组、CLI 三组与双通道持续世界一组定向回归通过。CLI 冷检查点身份读取/输入守卫、后台等待读期间世界继续推进及重启 calls 归零均实测。新增 ADR-017、现行后台契约/源码导航/状态域清单与公共示例，无新玩法持久域或载荷版本；可选 services 清单/代码沿既有 Mod 身份与包摘要保存，无服务旧清单保持原序列化形态。首轮完整门禁通过，最后的故障来源诊断和协议常量收口后须再次完整复验。
 
 - 最终无参数完整门禁通过：Rust 1512 passed / 0 failed，Clippy、JS workspace/维护工具、307 个 Markdown / 1971 个本地链接与 936 个源码/测试规模通过。release CLI 重建通过，公共 services 包由 release 实际运行，start/request/stop 与 world_unchanged=true 验收通过；JS 格式检查通过，无 doctest 改动。固定 bot 准备、适配器构建和显式 release 兼容棘轮通过：2802 passed / 8 failed / 104 skipped、floor 2802、0 转红/0 转绿（8 例既有豁免）。本片未运行 bot 长测，不标网络/耐久任务完成；实现/测试/公共示例/契约及报告随本批提交。
+
+## 2026-10-09 raid 调度首片（已完成，随本提交交付）
+
+- 基线 `4f7dd2bd`，起始工作区干净。官方参考源经确认本地在库：backend-npm/lib/cronjobs.js 的 `genInvaders`（L245-441，约 200 行）与 lib/utils.js 的 `isCenter`/`roomNameToXY`——与 stronghold 批同为"官方源逐字对照"。套件 14.6 共 21 例（INVADER-RAID-001..010）经 `runInvaderRaidSpawner({random})` 注入确定性随机序列驱动，随机流消费次序（方向→升级 R1/R2→count→每 creep 子型条件掷/落格/boost/名字→成功后阈值两次掷骰）已逐例手工推演并对齐矩阵 7 例组合金标。
+- 交付内容：kk-world 域 `invader_raid`（RaidRoomState 四键、官方六 body 表逐字、boost 映射、sector_key/is_center_room——kk RoomName W/N 取负减一约定下 W 轴分组按房间号 |xx|-1 再除 10、中心带 n%10∈[4,6]）；引擎 `settle/invader_raid.rs` 生成器（资格门序：normal 且非活跃→无 Invader creep→预算≥阈值（goal==1 旁路）→扇区 level>0 核→出口扫描 0..49 恰排四角→邻房 owner/reservation 封锁方向；createRaid/createCreep 逐字复刻含 count 掷骰在内层 if 之后的官方缩进层级）；harvest 结算逐次累计预算（官方 harvest.js:45-48 同源，与超容掉落无关）；三个 embed 管理命令 `setInvaderRaidState`（逐键部分更新、harvestedEnergy>0 需有源、controllerReservation 绝对 endTime 缺省 5000、owner 须本分片非 NPC 玩家——vanilla 同形契约）/`runInvaderRaidSpawner`（注入序列逐值校验 [0,1)、耗尽报错保留原世界；缺省世界种子派生流）/`clearInvaderRaidCreeps`（无墓碑清理）；适配器三方法实装 + capabilities.invaderRaidSpawner 翻转。
+- **官方怪癖逐字保留三处**：阈值重掷乘数 `Math.floor(rand>0.5?2:0.5)` 半量分支 floor(0.5)=0 把阈值**写成 0**，读回侧 `goal || C` 的 JS 真值回退把存储 0 视同默认阈值（本意减半实际重置为默认——首版实现误把 0 当免门槛，语义评审以 cronjobs.js:388 证伪后修正并有金标区分 0/×2 两分支）；出口方向选择数组序是各方向首个开口格的发现序而非固定方位序（同评审发现，排序按发现 i 升序实现）；RCL0 有主房在 controllerLevel 真值链中等同无主。出口方向算术按官方 W/N 负坐标（top=yy-1）。
+- **新持久域 `raid`（每房）**：invader_goal/harvested_energy/active/status，官方分放 rooms 集合与 source.invaderHarvested，kk 聚合为一（生成器只读总和）；任意玩家/管理快照不暴露。检查点格式 v6→v7：v6_to_v7 缺域拒绝（不补造——活跃位丢失会静默放行生成）；schema 钉死键 130→134；harvest 累计随房间候选提交并经真实采集用例验证（WORK×1 每拍 2 能量，阈值 10 于第 5 拍达标）。
+- 集成测试 14 例（mod_chain_tests/invader_raid.rs 生成器行为 11 例 + invader_raid_admin.rs 管理命令/检查点契约 3 例，源码规模门禁触发 1002 行后按职责拆分；关键面双通道）：抑制门矩阵（9 例对照）、阈值旁路与单出口精确落格、官方组合矩阵 7 例逐例 + 自派生 RCL8 例（body/boost 档/落位/随机流/count 收敛/0.4 强化阶梯）、成功后预算清零+活跃置位+再扫描拦截、乘数怪癖 0/×2 双分支（真值回退语义）、真实 harvest 预算累计、冷恢复等值（恢复的预定继续封锁 + 恢复的预算驱动生成 + raid 子树逐字等值——防 raid 域恢复丢失）、方向发现序与首格映射、部分更新语义、序列耗尽/非法值原子拒绝、种子命令契约校验（含无控制器房 null 清除无操作、ticksToEnd 浮点等价、检查点畸形值拒绝）。实测量：夹具同扇区核心放邻房时，玩家 tick 触发核心 reserve 意图会封锁出口（官方行为联动，测试改用非邻房同扇区核心）。
+- 三路复审（官方语义对照/对抗安全/测试边界）发现项当批清偿：语义 P0（invaderGoal 真值回退——首版注释还把错误理解写成官方怪癖，修正实现+金标）、语义 P1（方向组序是发现序非固定方位序，修正+案例）、安全 P0（无控制器房 + controllerReservation null 的 expect panic 击穿 embed 服务，改无操作同 vanilla）、安全 P1（ticksToEnd 浮点整数静默落缺省 5000、检查点恢复 raid 值域不设防——as_f64 取整 + 域校验）、测试边界 G1/G2/G3/G4/G6/G7/G8（冷恢复对 raid 域失明、乘数分支零演练、active 置位无断言、方向序/首格映射、部分更新、残余校验）全部补测钉住；切比雪夫 vs 曼哈顿度量经复核在同边出口组内 dy 恒同、数学不可区分，登记为不可观察。安全 P2 有意分歧登记：kk 校验严于 vanilla（拒绝小数预算/未知键/负阈值、清理命令对不存在房报错、random 数组前置整单校验）；生成器失败时 kk 整轮候选回滚（vanilla 部分落库保留）。
+- 登记（后续片回补）：墙钟 cron 调度（官方 5 分钟）不在本片；raid creep 战术沿用普通 Invader 行为；powerBank 生成（官方同属 invader cron 家族，套件另有 powerBank 消费者簇约 9 例）；遍历序 kk 房名排序 vs 官方 db 自然序（多候选房随机流交织次序不同）；未注入 random 的种子派生流 vs 官方真随机（同拍重复扫描同值）。
+- 定向与门禁：kk-world 域单测 4 例、引擎随机源单测 1 例、运行时集成 8 例通过；无参数完整 `pnpm run check` 通过（Rust 全绿、Clippy、JS workspace、维护工具、文档链接与源码规模）；`pnpm run fmt:js` 通过，无 doctest 变更。release CLI 重建，固定 screeps-ok 全量 2914 例 **2837 passed / 8 failed / 69 skipped**，棘轮通过（地板 2816→2837、0 转红/21 转绿，8 例既有官方对齐豁免）。本批未跑 bot 长测，不以历史报告宣称本批 bot 验收。
 
 ## 2026-10-09 Stronghold 布防首片（已完成，随本提交交付）
 

@@ -23,7 +23,9 @@ pub mod powers;
 // 兼容旧调用路径，领域实现只维护在 movement 中。
 pub use movement::{admission, contest, move_cost, obstacle, precheck, pull_registration};
 mod invader_core;
+mod invader_raid;
 mod keeper;
+pub use invader_raid::RaidRandom;
 mod npc;
 pub mod objects;
 pub mod resources;

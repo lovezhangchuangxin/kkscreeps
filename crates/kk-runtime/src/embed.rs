@@ -747,6 +747,7 @@ mod input_log;
 mod mod_chain;
 mod placement;
 mod projection;
+mod raid_admin;
 mod replay;
 mod setup;
 mod switch;

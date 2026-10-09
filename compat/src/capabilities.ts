@@ -52,7 +52,7 @@ export const capabilities: AdapterCapabilities = {
   portals: false,
   invaderCore: true,
   strongholdDeploy: true,
-  invaderRaidSpawner: false,
+  invaderRaidSpawner: true,
   multiShard: false,
   interShardMemory: false,
   cpuShardLimits: false,

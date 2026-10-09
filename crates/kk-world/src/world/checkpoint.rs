@@ -23,6 +23,7 @@ pub struct RoomCheckpoint {
     pub extensions: BTreeMap<u64, BTreeMap<String, serde_json::Value>>,
     pub keeper_memory: BTreeMap<u64, crate::domain::keeper_memory::KeeperMemory>,
     pub invader_memory: BTreeMap<u64, crate::domain::invader_memory::InvaderMemory>,
+    pub raid: crate::domain::invader_raid::RaidRoomState,
 }
 
 impl World {
@@ -61,6 +62,7 @@ impl World {
                                 .iter()
                                 .map(|(id, memory)| (id.0, memory.clone()))
                                 .collect(),
+                            raid: room.raid.clone(),
                             extensions: room
                                 .extensions
                                 .iter()
@@ -121,6 +123,9 @@ impl World {
                 .into_iter()
                 .map(|(id, memory)| (ObjId(id), memory))
                 .collect();
+            room.raid = data.raid;
+            crate::domain::invader_raid::validate(&room.raid)
+                .map_err(|e| format!("检查点房间 {name} {e}"))?;
             World::validate_room_objects([(name.as_str(), &room)], saved.next_obj_id)?;
             for (id, fields) in data.extensions {
                 if !room.objects.contains_key(&ObjId(id)) {
