@@ -224,6 +224,7 @@ mod deposit_harvest;
 mod factory_power_effects;
 mod fortify_shield_power_effects;
 mod heal_policy;
+mod invader_combat;
 mod keeper_ai;
 mod keeper_lair;
 mod link_decline;

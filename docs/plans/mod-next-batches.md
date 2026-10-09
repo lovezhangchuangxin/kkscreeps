@@ -4,9 +4,10 @@
 
 ## 当前接手位置
 
-- 更新日期：2026-10-09；TooAngel 单房经济与冷恢复首片已完成（实施基线 `5315dca`，本批随提交交付）；Source Keeper 巡守与战斗已收口（含三路复审清偿批）。最近引擎验证：完整门禁 Rust 1457 passed / 0 failed；release 棘轮全量 2802 passed / 8 failed / 104 skipped（0 转红，8 例均为既有官方对齐豁免）；本批未重跑三 bot。
+- 更新日期：2026-10-09；TooAngel 单房经济与冷恢复首片已提交 `a3c0602`（实施基线 `5315dca`）；Source Keeper 巡守与战斗已收口（含三路复审清偿批）。最近引擎验证：完整门禁 Rust 1465 passed / 0 failed；release 棘轮全量 2802 passed / 8 failed / 104 skipped（0 转红，8 例均为既有官方对齐豁免）；本批未重跑三 bot。
 - 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座、deposit 采集链、observer 限时视野已交付。**M2H.b 19/19 powers 全部接通**。
-- 下一片：**零散红逐例归因**（剩余 8 例均为既有官方对齐豁免，清单见最新兼容报告；NPC 自杀与 keeper lair 已转绿，下一片可推进 Invader 战斗/追击/治疗或 G02.d3 后续，仍按实际消费者拆片）或推进 Overmind/战斗/多房真实 bot 验收；TooAngel 单房经济首片已完成，每片贯通真实消费者、玩家投影、失败边界和冷恢复。
+- 本次完成：**Invader 自动远程攻击首片**（基线 `a3c0602`，随本提交交付）；最低 hits 目标、过滤、既有战斗链、失败重试与冷恢复已验，无新增保存域。下一片按官方消费者推进 Invader 近战/追击/治疗，寻路/walkTo 须同片补齐 NPC 推挤记忆；raid/stronghold 另拆。
+- 后续候选：**零散红逐例归因**（剩余 8 例均为既有官方对齐豁免，清单见最新兼容报告；NPC 自杀与 keeper lair 已转绿，下一片可推进 Invader 近战/追击/治疗或 G02.d3 后续，仍按实际消费者拆片）或推进 Overmind/战斗/多房真实 bot 验收；TooAngel 单房经济首片已完成，每片贯通真实消费者、玩家投影、失败边界和冷恢复。
 - 兼容率 2802/2914≈96.2%（**95% 中间检查点已越过**；99% 目标需 2885）。
 - Mod 扩展：移动策略、对象/建筑/资源、库存/耐久/受击、作者 CLI/类型、输入回放和检查点已有基础；未完成范围以任务表为准。默认玩法已有消费者不代表对应 Mod 替换能力已经开放。
 - 网络服务、持久 storage 后端与真实游戏客户端仍未实现；renderer R0–R6 已交付，R7 最终矩阵/长测未收口。现有 bot-check 不能代替持续推进世界中的可玩验收。
@@ -16,7 +17,7 @@
 
 | 顺位 | 任务 | 首片与完成条件 |
 |---|---|---|
-| 1 | 零散红逐例归因与修复 | 8 条既有官方对齐豁免保留证据；下一片推进 Invader 战斗/追击/治疗（Source Keeper 同房巡守/战斗已交付），raid/stronghold 另拆；每例有官方源或套件仲裁证据 |
+| 1 | 零散红逐例归因与修复 | 8 条既有官方对齐豁免保留证据；Invader 自动远程攻击已交付；后续为近战/追击/治疗（Source Keeper 同房巡守/战斗已交付），raid/stronghold 另拆；每例有官方源或套件仲裁证据 |
 | 2 | 真实 bot 验收与 G02.d3 后续 | TooAngel 单房经济/死亡后补员/冷恢复已验；剩余 Overmind、战斗、多房，以及结构/rampart 通行与寻路贯通 |
 | 独立候选 | G02.d3 后续、G27.a | 前者贯通结构/rampart 通行与寻路；后者提供异步后台生命周期，随后才接 storage/outbox/网络 |
 
@@ -235,3 +236,12 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - 已同步本地模拟契约、compat 使用说明和 roadmap 的首片范围；剩余 Overmind、战斗、多房、长期存活与 M2B 最终验收不销账。提交状态：本批改动及上一轮调研台账随本提交交付；下一步按队列选择 Invader 主动行为或其他真实 bot 首片，G02.d3 与 G27.a 仍未完成。
 
 - 最终兼容验收：固定 bot 夹具重新准备、适配器重建；显式指定本次 release 的 `node compat/scripts/ratchet.mjs` 通过，2802 passed / 8 failed / 104 skipped，转红 0 / 转绿 0，地板维持 2802。未重跑固定世界三 bot-check，不用历史报告宣称本批三 bot 验收；本批真实玩法验收仅为上述 TooAngel 首片。收尾文档链接与 diff whitespace 检查通过。
+
+## 2026-10-09 Invader 自动远程攻击首片（已完成，随本提交交付）
+
+- 基线：TooAngel 验收已提交 `a3c0602`，起始工作区干净。按当前队列选择完整 `shootAtWill` 消费者，未扩为完整 Invader AI。
+- 实现：`npc/invader.rs` 持有原退场逻辑与自动远程目标选择；有效 RANGED_ATTACK、三格内最低 hits、稳定平手顺序、精确 NPC 归属排除、孵化 creep 排除、powerCreep 分类和缺 hits 边界按锁定官方 4.3.0 源码。治疗型仍开火，不切换 mass。显式同名动作优先，伤害走现有战斗槽链。
+- 保存与职责复审：无新增状态写入域或保存版本，目标每轮从对象/身体/位置重建；预意图模块仅生成/合并动作，伤害、boost、rampart、事件、失败回滚沿原消费者。退场逻辑原样迁入 Invader 模块，NPC 合并入口保留共用边界。
+- 已执行定向门禁：`pnpm run check -- kk-runtime --test mod_chain_tests --filter invader_ranged`，8 passed / 0 failed（每例 JSON/KKPV），覆盖最低 hits/平手/距离、NPC/孵化目标过滤、部件损毁/孵化执行者、powerCreep/缺 hits、boost/rampart、显式覆盖、Mod 取消、晚期失败重试及冷恢复续跑。初次测试发现 Keeper 零伤害预意图也产事件，已把 Keeper 夹具放在玩家射程外保留 NPC 排除断言，最终定向通过。
+- 已执行完整无参数 `pnpm run check`：Rust 1465 passed / 0 failed，Clippy、debug CLI 构建、JavaScript workspace/维护工具、303 个 Markdown / 1927 个本地链接及源码规模检查通过；release CLI、固定 bot 准备与适配器构建通过。显式指定新 release CLI 执行 `node compat/scripts/ratchet.mjs`：2802 passed / 8 failed / 104 skipped，floor 2802，相对 HEAD~1 转红 0 / 转绿 0，8 条仍为既有官方对齐豁免；最新机器报告随本提交更新。本批不重跑三 bot/TooAngel 2000 tick（首片不含 Invader，既有入库证据保留）。
+- 剩余消费者：Invader 近战、追击/逃离、治疗/跟随、多轮寻路与 walkTo 推挤记忆，随后 raid/stronghold；G21 的 Mod 世界事件能力仍未开放。本批随提交交付，台账、现行游戏循环、源码导航和兼容说明已同步；未推送远端。
