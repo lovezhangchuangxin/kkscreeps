@@ -6,12 +6,12 @@
 
 - 2026-10-09 review 修复（本次提交）：invaderCore 放置的孵化守军初始 `ageTime=0`，出生后再起算普通寿命；stronghold 部署绑定 `decayTime` 的路径保持原值。新增超过 1500 tick 孵化回归；定向 `pnpm run check -- kk-runtime --test mod_chain_tests --filter invader_core_long_incubation` 与无参数 `pnpm run check` 均通过（不含 doctest；本次未改 doctest）。其余 G02/G03 与 NPC 后续消费者不受此修复影响，下一步按当前执行队列继续。
 
-- 更新日期：2026-10-10；控制器 INVULNERABILITY 消费者已提交 `d48d6ea`；Invader core 生命周期首片已提交 `2b68002`；Stronghold 布防首片已提交 `4f7dd2bd`；raid 调度首片已提交 `e316a07`；powerBank 生成与消费者首片已提交 `e5249ff2`；边缘环绕+核弹簇（portal 传送/衰变、roomStatus 种子域、worldSize 环绕、launchNuke 状态门）随本提交交付。最近完整门禁 Rust 全绿；最近 release 棘轮 2864 passed / 8 failed / 42 skipped（0 转红，8 例既有豁免）。TooAngel/Overmind 六阶段为既有入库证据；本批未重跑 bot 长测。
+- 更新日期：2026-10-10；控制器 INVULNERABILITY 消费者已提交 `d48d6ea`；Invader core 生命周期首片已提交 `2b68002`；Stronghold 布防首片已提交 `4f7dd2bd`；raid 调度首片已提交 `e316a07`；powerBank 生成与消费者首片已提交 `e5249ff2`；边缘环绕+核弹簇已提交 `9ff9d2e`；弃用告警（register.deprecated 三处补点 + deprecationNotices 翻转）随本提交交付。最近完整门禁 Rust 全绿；最近 release 棘轮 2871 passed / 8 failed / 35 skipped（0 转红，8 例既有豁免）。TooAngel/Overmind 六阶段为既有入库证据；本批未重跑 bot 长测。
 - 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座、deposit 采集链、observer 限时视野已交付。**M2H.b 19/19 powers 全部接通**。
 - 当前接手：G02.d3 结构/rampart 计划级通行及默认玩家/NPC 寻路已提交 `fd27fbd`；G03 障碍追加后的同源链预演已提交 `3f3d9a7`；障碍摘要的安全模式主人已提交 `41de432`；控制器零升级量修复已提交 `10eb812`；G27.a 独立异步后台宿主已提交 `b25e280`；控制器 INVULNERABILITY 三处消费门已提交 `d48d6ea`；invaderCore 生命周期首片已提交 `2b68002`；stronghold 布防首片已提交 `4f7dd2bd`；raid 调度首片已提交 `e316a07`；powerBank 生成与消费者首片已提交 `e5249ff2`；边缘环绕+核弹簇（portal 传送/衰变/核爆免伤、roomStatus 种子域与 getRoomStatus/launchNuke 门、worldSize 活算与 map/market/terminal 三处环绕计费、检查点 v9）随本提交交付，生产者侧仍缺地图生成、战术 AI（maintainPopulation/refillTowers/focusClosest）与 create-creep 等意图。逐房通行粒度、摘要增强、完整仲裁替换仍未完成。
 - 本次完成：JSON/KKPV 各 200 tick 持续战斗、100+100 tick 跨进程冷恢复和完整检查点回放；实际位置/hits 证明移动、受伤与恢复，双通道及直跑/续跑世界与 Memory 等值。TooAngel v6 双通道 2000 tick 连跑及 1000+1000 tick 冷恢复六阶段复验通过。
 - 剩余：真实 bot 战斗/多房/长期存活验收；地图生成与 G21 Mod 世界事件；stronghold 战术 AI/create-creep 意图；walkTo/Keeper lastMove 按实际 stronghold 消费者接线；G02.d3 逐房/摘要后续、G03 完整仲裁替换与 G27.a。NPC 场景不标 M2B 或 G21 完成。
-- 兼容率 2864/2914≈98.3%（**95% 中间检查点已越过**；99% 目标需 2885，缺口 21；跳过 42 中 actionLog 21 例既缓，其余需全吃：弃用告警 7、多 shard 7、矿物密度注入 4、random 注入契约 3 及若干原估口径差；边缘环绕+核弹簇 27 例已随本批全绿）。
+- 兼容率 2871/2914≈98.6%（**95% 中间检查点已越过**；99% 目标需 2885，缺口 14；跳过 35 中 actionLog 21 例既缓，其余需全吃：多 shard 7、矿物密度注入 4、random 注入契约 3 及若干原估口径差；弃用告警 7 例已随本批全绿）。
 - Mod 扩展：移动策略、对象/建筑/资源、库存/耐久/受击、作者 CLI/类型、输入回放和检查点已有基础；未完成范围以任务表为准。默认玩法已有消费者不代表对应 Mod 替换能力已经开放。
 - 网络服务、持久 storage 后端与真实游戏客户端仍未实现；renderer R0–R6 已交付，R7 最终矩阵/长测未收口。现有 bot-check 不能代替持续推进世界中的可玩验收。
 - M2B 验收标准（2026-10-09 调整）：screeps-ok ≥95% 为中间检查点、≥99% 为后续覆盖目标；最终完成要求约定范围内功能全部通过验收，剩余例外逐项有明确范围、证据和可审查理由，见[路线图](../roadmap.md)。
@@ -330,6 +330,14 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - 独立 worker/realm、原生登记能力门、同步注册/异步生命周期、队列快拒绝、过期/跨包/未授予/调用和字节限额及共享 VM 预算已接线；FileProbe 使用常规文件的有限只读异步任务。实际发现异步 op 会在 V8 调用时提前轮询，首轮测试因没有 Tokio 上下文而中止，已将预算调用统一进入 worker 执行器上下文；随后宿主六组、CLI 三组与双通道持续世界一组定向回归通过。CLI 冷检查点身份读取/输入守卫、后台等待读期间世界继续推进及重启 calls 归零均实测。新增 ADR-017、现行后台契约/源码导航/状态域清单与公共示例，无新玩法持久域或载荷版本；可选 services 清单/代码沿既有 Mod 身份与包摘要保存，无服务旧清单保持原序列化形态。首轮完整门禁通过，最后的故障来源诊断和协议常量收口后须再次完整复验。
 
 - 最终无参数完整门禁通过：Rust 1512 passed / 0 failed，Clippy、JS workspace/维护工具、307 个 Markdown / 1971 个本地链接与 936 个源码/测试规模通过。release CLI 重建通过，公共 services 包由 release 实际运行，start/request/stop 与 world_unchanged=true 验收通过；JS 格式检查通过，无 doctest 改动。固定 bot 准备、适配器构建和显式 release 兼容棘轮通过：2802 passed / 8 failed / 104 skipped、floor 2802、0 转红/0 转绿（8 例既有豁免）。本片未运行 bot 长测，不标网络/耐久任务完成；实现/测试/公共示例/契约及报告随本批提交。
+
+## 2026-10-10 弃用告警（已完成，随本提交交付）
+
+- 基线 `9ff9d2e`（边缘环绕批），起始工作区干净。官方参考：engine game.js:113-120（register.deprecated 按消息文本 tick 内去重 + console.log）、map.js:199-207/235-258（告警先于房名正则与 pos 解构）、path-finder.js:68-74（仅 !isActive 告警 + 写 _useNewPathFinder）、rooms.js:231-238/:325-336（findPath 告警并置 undefined / findClosestByPath 仅告警）、structures.js:1257-1264（renewCreep 强化体告警在全部拒绝门后）。机制底座（deprecation.js 去重闭包 + perTickReset 挂钩、收集型 console + op 上限封顶、last_console 每玩家最近一次运行 + captureConsoleLogs RPC + 检查点保存）与 avoid/ignore/renewCreep 三处告警均为既有实现；本批只补三个缺失触发点：map.isRoomAvailable/map.getTerrainAt（官方逐字消息、先于参数校验——非法名也告警）、PathFinder.use 仅 false 触发（原 countStub 桩移除，无遗留消费方），翻转 capabilities.deprecationNotices。sandbox.md 新增"控制台输出与弃用告警"契约节。
+- 套件 7 例转绿：DEPRECATED-MAP-001/002、PATH-001/002/003、SPAWN-001、DEDUP-001（2864→2871）。翻转外溢面经全量 grep：三 API 在 28 之外仅 LEGACY-PATH-003（use 三连调、无 console 断言）与 RENEW-CREEP-004（强化体续命新增一条告警行、无 console 断言），均无害。
+- Rust 集成 4 例（mod_chain_tests/deprecation.rs，双通道）：map 双告警+三拍去重（同拍两调合一/新拍重发/非法名先告警后 false）、use(false) 告警+use(true) 静默（新拍独立腿防同拍去重遮蔽）+消息正文逐字、avoid/ignore 六表面（findPath/findPathTo/findClosestByPath 各 avoid+ignore，选项丢弃 10 步对角、filter 子串集与套件同形、不同文本互不去重）、renewCreep 强化体告警+无强化对照（capture 替换语义钉住）。
+- 三路复审（官方语义/对抗安全/测试边界）发现当批清偿：语义 P1 登记分歧两处——官方 use(false) 会切旧寻路器（同 tick 后续 findPath 家族走旧分支：avoid/ignore 真实生效且不告警），kk 仅实现新寻路不建模开关（path-finder.js 注释+sandbox.md 明示）；官方告警经调用时全局 console 解析（玩家重绑会改道），kk 装配期捕获收集通道属有意加固。语义 P2 两处注释/文档表述修正（findClosestByPath 不置选项）。测试边界 G2-1 ignore 腿三表面补全+filter 补第三子串、G2-2 use(true) 判别性腿、G2-3 非法名告警腿；G3-1 评审稿的 SPAWN_RENEW_RATIO 按 0.6 推导与常量 1.2 不符（夹具两种读法均过、rc 断言可检）。安全无 P0/P1：dedup 劫持面（共享 lodash 活查找/Array.push 覆写）为官方同构自伤面（消息恒 6 条常量串、每 tick 重置、console 通道 1000 行/1MiB 先计数后封顶）。
+- 验证：无参数 `pnpm run check` 通过（含 fmt 修正复跑）；release 棘轮 2871 passed / 8 failed / 35 skipped（floor 2864→2871，0 转红、7 转绿，8 例既有官方对齐豁免）。
 
 ## 2026-10-10 边缘环绕+核弹簇（已完成，随本提交交付）
 

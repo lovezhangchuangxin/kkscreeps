@@ -6,7 +6,8 @@
 (() => {
   'use strict';
 
-  const { ops, countStub, lodash: _ } = globalThis.__kkp;
+  const { ops, lodash: _ } = globalThis.__kkp;
+  const { deprecated } = globalThis.__kkp.deprecation;
   const gw = globalThis.__kkp.gw;
 
   // CostMatrix._bits 是公开的 2500 字节 Uint8Array，索引为 x*50+y。
@@ -92,8 +93,17 @@
 
   const PathFinder = {
     CostMatrix,
-    use() {
-      countStub('PathFinder.use');
+    // 官方 path-finder.js:68-74：use(false) 触发弃用告警、use(true) 静默。
+    // 官方还写 register._useNewPathFinder=!!isActive（默认 true，game.js:68），
+    // use(false) 后同 tick 的 findPath/findPathTo/findClosestByPath 切换到
+    // 旧寻路器——旧分支真实执行 avoid/ignore 且不告警、findPathTo 跨房走
+    // findExitTo。kk 只实现新寻路、不建模该开关：use(false) 后寻路仍走新
+    // 路径、avoid/ignore 仍告警并丢弃（登记分歧；套件在 use 调用间不夹寻路，
+    // bot 若 use(false) 后寻路会暴露此差）。
+    use(isActive) {
+      if (!isActive) {
+        deprecated('`PathFinder.use` is considered deprecated and will be removed soon.');
+      }
     },
     search(origin, goal, options) {
       // 官方 engine/src/game/path-finder.js:60-62：空/无目标早退——两键形态

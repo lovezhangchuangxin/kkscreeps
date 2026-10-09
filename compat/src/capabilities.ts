@@ -59,5 +59,5 @@ export const capabilities: AdapterCapabilities = {
   liveWorldSize: true,
   actionLogCapture: false,
   randomInjection: false,
-  deprecationNotices: false,
+  deprecationNotices: true,
 };

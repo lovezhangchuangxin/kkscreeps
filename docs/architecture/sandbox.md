@@ -43,6 +43,12 @@ TypedArray backing store、WebAssembly 线性内存和宿主分配不都受此�
 
 JavaScript 写入限制采用字符串 `length`，即 UTF-16 码元计数：RawMemory.set 上限为 `2×1024×1024`，segment 数据为 `100×1024`，活动 segment 最多 10 个。不能将这些值直接称为 UTF-8 字节上限；Memory 自动序列化也不具有与 RawMemory.set 完全相同的长度检查路径。
 
+## 控制台输出与弃用告警
+
+玩家 `console.*` 是收集型实现：经宿主 op 推入每 tick 缓冲（行数与字节上限封顶、超限仅提示一次），不直写进程 stdout。embed 协议 `captureConsoleLogs(handle)` 返回该玩家**最近一次完成结算的运行**的控制台行（仅文本、按发射序），随检查点保存。
+
+弃用告警复刻官方 `register.deprecated`（engine game.js:113-120）：按消息文本在 tick 内去重、经 `console.log` 输出，重置挂在每 tick 装配（perTickReset）——同一文本跨 API 合并、下一拍重发。六个触发点与官方逐字同位：`Game.map.isRoomAvailable`/`getTerrainAt`（告警先于参数校验与 pos 对象解构）、`PathFinder.use(false)`（use(true) 静默）、`findPath`/`findPathTo`/`findClosestByPath` 的 `avoid`/`ignore`（告警后 `findPath`/`findPathTo` 置空选项、`findClosestByPath` 仅告警不置——选项本就不被新寻路消费，路径照常）、`renewCreep` 强化体（全部拒绝门之后、意图照常生效）。登记分歧：官方 `use(false)` 会把同 tick 后续寻路切到旧寻路器（旧分支真实执行 avoid/ignore 且不告警），kk 仅实现新寻路、不建模该开关；官方告警经调用时全局 console 解析（玩家重绑 console 会改道），kk 装配期捕获收集通道属有意加固。
+
 ## 世界读取与写回
 
 当前协调器构造按玩家视野过滤的世界 JSON，再注入沙箱。JavaScript 对象包装器从当前原始对象表读取属性，部分 getter 按对象缓存；缓存条件和跨 tick 行为并不完全相同，不能承诺所有旧引用总能读取最新字段。

@@ -2,6 +2,7 @@
 (() => {
   'use strict';
   const gw = globalThis.__kkp.gw;
+  const { deprecated } = globalThis.__kkp.deprecation;
   const C_TOP = globalThis.TOP;
   const C_BOTTOM = globalThis.BOTTOM;
   const C_LEFT = globalThis.LEFT;
@@ -314,9 +315,12 @@
         if (!route.length) return C_ERR_INVALID_ARGS;
         return route[0].exit;
       },
-      // 官方 map.js:207-213（deprecated）：在场房 true（accessibleRooms
-      // =世界全房表）；官方 register.deprecated 提示不仿真（登记）
+      // 官方 map.js:199-207：弃用告警先于房名校验（非法名也告警），
+      // 在场房 true（accessibleRooms=世界全房表）。
       isRoomAvailable(roomName) {
+        deprecated(
+          'Method `Game.map.isRoomAvailable` is deprecated and will be removed. Please use `Game.map.getRoomStatus` instead.',
+        );
         if (!ROOM_NAME_RE.test(roomName)) return false;
         return Object.prototype.hasOwnProperty.call(worldRooms, roomName);
       },
@@ -435,9 +439,13 @@
         }
         return _mapVisual;
       },
-      // 官方 map.js:235-258：返回 'wall'|'swamp'|'plain'（完整词，非缩写）；
-      // 越界或缺少该房间的地形数据时返回 undefined；位码由 TERRAIN_MASK_* 解释。
+      // 官方 map.js:235-258：弃用告警先于 pos 对象解构（两种调用形态
+      // 同一消息、每 tick 去重为一条）；返回 'wall'|'swamp'|'plain'（完整
+      // 词，非缩写）；越界或缺少该房间的地形数据时返回 undefined。
       getTerrainAt(x, y, roomName) {
+        deprecated(
+          'Method `Game.map.getTerrainAt` is deprecated and will be removed. Please use a faster method `Game.map.getRoomTerrain` instead.',
+        );
         if (x && typeof x === 'object') {
           y = x.y;
           roomName = x.roomName;
