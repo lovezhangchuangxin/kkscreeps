@@ -80,6 +80,24 @@ target/release/kkscreeps sim run --scenario compat/fixtures/sim-economy/scenario
 
 夹具包含采集、搬运、升级和寿命到期后孵化替补，最终断言要求 GCL/控制器进度增加、替补出生及旧 creep 消失。模块目录相对场景文件解析，支持预编译的玩家模块与初始 Memory；这不代表 TooAngel、Overmind 已全功能验收。格式、退出码与复现边界见[本地场景模拟](../docs/architecture/local-simulation.md)。
 
+### TooAngel 单房经济与冷恢复
+
+真实 bot 首片使用锁定提交 `87645a0b933360224737cca3b18ae9d112f46fef` 的 TooAngel `src/*.js`。在仓库根目录执行（输出目录须不存在，父目录须已存在）：
+
+```bash
+bash scripts/fetch-bots.sh
+cargo build --release -p kk-cli
+node compat/scripts/bot-gameplay.mjs --out /tmp/tooangel-gameplay
+```
+
+可用 `--bin <路径>` 或 `KKSCREEPS_BIN` 显式选择刚构建的 CLI；默认使用 release，不回退旧 debug。`--bot-root` 指向固定提交的 clone。工具逐文件校验 git blob 和源码清单，只复制原版 `src/*.js`，不使用 bot-check 曾留下的根目录扁平副本；额外模块、缺失模块、内容或提交不符均拒绝。`--ticks` 默认 2000、至少 2000；`--split` 默认 1000、须在 1..ticks-1。输出目录内有固定[场景](fixtures/sim-tooangel/scenario.json)、原版模块、[公开观察入口](fixtures/sim-tooangel/acceptance.js)、六份 sim 报告、检查点、输入日志和 `summary.json`。
+
+JSON/KKPV 各运行一次 2000 tick 连跑和一次 1000+1000 tick 跨进程冷恢复；每阶段都启用输入日志与 `--verify-replay`，按记录的玩家结果重放结算并比较完整检查点。直跑与冷恢复之间分别验证同一组业务条件，不比较两次玩家执行的随机命名、CPU 桶或全状态相等。
+
+初始只有 RCL1 房间、300 能量 spawn、两处 source 和 mineral，没有 creep、extension、预制工地或补给。入口不发额外意图、不修改 bot 配置，只在 `Memory.__kkAcceptance` 记录公开事件/出生观察，并捕获锁定 bot 的 main/brain/room/creep 异常日志。最终要求实际采集 ≥1000、转账 ≥200、建造进度 ≥200、升级 ≥200、至少两次已出生观察、一次死亡和死亡后一次出生；同时检查至少两只已出生 creep 存活、extension 建成、RCL≥2、GCL 累计增长 ≥200。事件读取上一拍，报告明确 `eventsThroughTick`，不把最后一轮未读事件计入统计。对多房、战斗、任意 bot 的异常检测和 72 小时稳定性不作承诺。
+
+退出码 0 表示所有运行及业务条件通过；2 表示运行/验收失败（逐项检查和已有失败产物保留）；1 表示参数或输出目录无法建立。失败不复用上次成功报告，也不覆盖既有目录。入库证据见[本批汇总](reports/gameplay-tooangel/summary.json)；它只关闭 TooAngel 单房经济与冷恢复首片，Overmind、战斗、多房与 M2B 最终验收仍待推进。
+
 Mod 生命周期场景可运行 `target/release/kkscreeps sim run --scenario compat/fixtures/sim-mod-tick/scenario.json --ticks 50 --report /tmp/sim-mod-tick.json`。它显式装载官方原型 clockwork，验证两房对象自主更新、玩家类和查询、Mod state 与真实计划身份；没有玩家意图或按官方包 ID 特殊处理。该场景不含对象增删、生产建筑和内容预设。另有 `sim-mod-objects/scenario.json`，使用相同命令运行至少 53 轮，验证 nursery 双房自主生成/到期删除、玩家类/空间查询；报告 mod_objects 包含全部动态 Mod 对象。两场景的 root 都装载 official 的直接子包，尚不是内容预设或显式包选择。
 
 独立 JS 处理器组合可运行 `target/release/kkscreeps mod inspect --root compat/fixtures/mod-composition --report /tmp/composition.json`，使用 `--disable z-gate` 预览依赖闭包。`sim-mod-composition/scenario.json` 至少运行 100 轮，真实玩家核验链序 trace，报告 composition 与实际装配同源。接口和约束见[组合诊断](../docs/architecture/mod-composition.md)。

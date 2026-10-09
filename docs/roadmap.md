@@ -43,6 +43,8 @@ M2 分为两道关卡，避免把运行环境可用与完整玩法可玩混为�
 
 核心仓库搬运与分片 GCL 输入已接入；两种玩家投影分别通过连续 40 tick 的采集、容器搬运和升级守恒场景，记录见[核心经济链与 GCL](research/notes/economy-gcl-2026-10-04.md)。现已提供 [sim run](architecture/local-simulation.md) 和可复跑的采集、搬运、升级、寿命到期后孵化替补场景；完整外部 bot 的玩法验收、特殊存储规则开放及数据库/迁移/日志恢复仍须继续推进；已提供显式[基础检查点](architecture/checkpoints.md)。
 
+2026-10-09 新增 [TooAngel 单房经济与冷恢复验收](../compat/README.md#tooangel-单房经济与冷恢复)：锁定的未修改 bot 在 JSON/KKPV 各完成 2000 tick 连跑与 1000+1000 tick 跨进程续跑，验证实际采集、转账、建造、升级、死亡后补员和输入回放。此首片不包含 Overmind、战斗或多房，不关闭 M2B 整体验收。
+
 并发调度、统一提交和共享视图遵循 [tick 契约](architecture/tick-contract.md)与[快照契约](architecture/snapshot-contract.md)。这些文档分别说明现状和目标；提出契约不等于生产通路已经完整接入。端到端基线按[性能验收方案](architecture/performance-acceptance.md)采集，须先确认夹具实际产生动作与状态变化。
 
 ## JS Mod 与架构扩展
