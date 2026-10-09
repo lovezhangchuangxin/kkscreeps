@@ -80,6 +80,18 @@ pub fn settle_room(
                 c.action_log = 0;
                 c.say_message = None;
                 c.say_public = None;
+            } else if let RoomObject::Generic(g) = creep
+                && g.data.contains("\"observeRoom\"")
+                && let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&g.data)
+                && v.get("structureType").and_then(serde_json::Value::as_str) == Some("observer")
+                && v.as_object().is_some_and(|m| m.contains_key("observeRoom"))
+            {
+                // observer 的观察标记在预意图阶段清零（官方 processor.js
+                // :115-117 仅对 type==observer 同形）：意图臂随后覆盖写，
+                // 无新意图的观察视野恰一拍后失效。前置 contains 判避免逐
+                // 对象序列化；类型门防 Mod 配方字段名同名被逐拍剥离。
+                v.as_object_mut().unwrap().remove("observeRoom");
+                g.data = v.to_string();
             } else if super::powers::is_power_creep(creep)
                 && let RoomObject::Generic(g) = creep
                 && let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&g.data)

@@ -124,6 +124,7 @@ pub(super) fn pc_use_power(w: &mut Working, id: ObjId, d: &IntentData) {
         | c::PWR_OPERATE_TERMINAL
         | c::PWR_DISRUPT_TERMINAL
         | c::PWR_OPERATE_CONTROLLER
+        | c::PWR_OPERATE_OBSERVER
         | c::PWR_FORTIFY => {
             let Some(target_id) = d.id else { return };
             let valid_target = match w.room.objects.get(&target_id) {
@@ -151,6 +152,7 @@ pub(super) fn pc_use_power(w: &mut Working, id: ObjId, d: &IntentData) {
                         c::PWR_OPERATE_POWER => "powerSpawn",
                         c::PWR_OPERATE_FACTORY => "factory",
                         c::PWR_OPERATE_TERMINAL | c::PWR_DISRUPT_TERMINAL => "terminal",
+                        c::PWR_OPERATE_OBSERVER => "observer",
                         c::PWR_FORTIFY => "rampart",
                         _ => return,
                     };

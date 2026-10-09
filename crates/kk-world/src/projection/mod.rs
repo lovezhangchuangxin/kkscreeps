@@ -22,7 +22,8 @@ impl World {
     /// 房内存在己方对象时授予视野，但旗和工地不授予；可见房中的敌方对象也会导出。
     /// 己方旗和工地可单独导出，即使其房间不可见；他人的旗被排除。
     /// 所有已注册房间的地形仍会提供，无主旗只在可见房间导出。
-    /// 当前不根据 observer 观察或控制器预订授予额外房间视野。
+    /// observer 观察标记授予限时额外房间视野（observed_rooms_of 并入，
+    /// 一拍生命周期）；控制器预订仍未实现、不授予视野。
     /// 视野归集参考：driver/lib/runtime/data.js 的 userObjects 房间计算。
     pub fn world_json_for_viewer(&self, user: &str, gcl_points: i64) -> Value {
         self.world_json_impl(Some((user, gcl_points)), None)
@@ -93,7 +94,10 @@ impl World {
         surface: Option<&kk_mod_api::player_surface::PlayerSurface>,
     ) -> Value {
         let user = viewer.map(|(u, _)| u);
-        let visible: std::collections::BTreeSet<&String> = match user {
+        // observer 观察标记授予下一拍限时视野：并入可见集后，房间的能量
+        // 统计、事件与对象导出与己方对象房同口径（官方 data.js 同源）。
+        let observed = user.map(|user| self.observed_rooms_of(user));
+        let mut visible: std::collections::BTreeSet<&String> = match user {
             None => self.rooms.keys().collect(),
             Some(user) => self
                 .rooms
@@ -102,6 +106,9 @@ impl World {
                 .map(|(name, _)| name)
                 .collect(),
         };
+        if let Some(observed) = &observed {
+            visible.extend(observed.iter());
+        }
         let mut objects = Vec::new();
         let mut rooms = serde_json::Map::new();
         for (name, state) in &self.rooms {

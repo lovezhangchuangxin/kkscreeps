@@ -259,6 +259,7 @@ mod move_obstacle;
 mod move_precheck;
 mod move_pull_registration;
 mod move_static;
+mod observer_room;
 mod retaliation_faults;
 mod retaliation_policy;
 mod tough_damage;

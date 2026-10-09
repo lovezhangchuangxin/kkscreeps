@@ -212,6 +212,43 @@ impl Default for World {
 }
 
 impl World {
+    /// 观察限时视野：查看者名下 observer 的 observeRoom 标记（结算相写
+    /// 入、预意图相清零）指向的目标房集合。标记在观察者所在房，目标是
+    /// 任意房——须世界级扫描；目标房未注册时跳过（官方 data.js 的房间
+    /// 查询自然落空，Game.rooms 不出现该房）。
+    /// 来源：driver/lib/runtime/data.js:99-127 的 userObjects 房间计算。
+    pub(crate) fn observed_rooms_of(&self, user: &str) -> std::collections::BTreeSet<String> {
+        let mut observed = std::collections::BTreeSet::new();
+        for state in self.rooms.values() {
+            for object in state.objects.values() {
+                let RoomObject::Generic(g) = object else {
+                    continue;
+                };
+                if !g.data.contains("\"observeRoom\"")
+                    || crate::domain::object_owner(object).as_deref() != Some(user)
+                {
+                    continue;
+                }
+                let Ok(data) = serde_json::from_str::<serde_json::Value>(&g.data) else {
+                    continue;
+                };
+                if data
+                    .get("structureType")
+                    .and_then(serde_json::Value::as_str)
+                    != Some("observer")
+                {
+                    continue;
+                }
+                if let Some(target) = data.get("observeRoom").and_then(serde_json::Value::as_str)
+                    && self.rooms.contains_key(target)
+                {
+                    observed.insert(target.to_string());
+                }
+            }
+        }
+        observed
+    }
+
     pub fn instance(&self) -> Arc<()> {
         self.instance.clone()
     }

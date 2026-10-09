@@ -750,6 +750,36 @@
     return C.OK;
   };
 
+  /** StructureObserver.observeRoom（官方 game/structures.js:537-572）：
+   *  ①!my→NOT_OWNER ②房名非 string 或不匹配 regex→INVALID_ARGS
+   *  ③isActive（observer 在 CONTROLLER_STRUCTURES 表内 RCL8 限 1，与
+   *  checkStructureAgainstController 等价）→RCL_NOT_ENOUGH ④活跃
+   *  PWR_OPERATE_OBSERVER 效果完全跳过射程检查（官方无 10+N 公式，效果
+   *  即无限射程；玩家面 effects 只含 ticksRemaining>0），否则逐轴绝对差
+   *  >OBSERVER_RANGE→NOT_IN_RANGE ⑤intents.set(id,'observeRoom',{roomName})。
+   *  观察结果下一拍可见（结算写标记、预意图清零）。 */
+  globalThis.StructureObserver.prototype.observeRoom = function observeRoom(roomName) {
+    if (!this.my) {
+      return C.ERR_NOT_OWNER; // :545-547
+    }
+    if (typeof roomName !== 'string' || !/^(W|E)\d+(N|S)\d+$/.test(roomName)) {
+      return C.ERR_INVALID_ARGS; // :548-550
+    }
+    if (!this.isActive()) {
+      return C.ERR_RCL_NOT_ENOUGH; // :551-553
+    }
+    const effect = (this.effects || []).find((e) => e.power === C.PWR_OPERATE_OBSERVER);
+    if (!effect || effect.ticksRemaining <= 0) {
+      const [tx, ty] = gw.roomNameToXY(roomName);
+      const [x, y] = gw.roomNameToXY(this.room.name);
+      if (Math.abs(tx - x) > C.OBSERVER_RANGE || Math.abs(ty - y) > C.OBSERVER_RANGE) {
+        return C.ERR_NOT_IN_RANGE; // :561-563
+      }
+    }
+    gw.intents.set(this.id, 'observeRoom', { roomName });
+    return C.OK;
+  };
+
   /** StructurePowerSpawn.processPower（官方 game/structures.js:1337-1354）：
    *  not-owner > RCL（checkStructureAgainstController——isActive 等价）>
    *  库存（power≥1 且 energy≥POWER_SPAWN_ENERGY_RATIO）。PWR_OPERATE_POWER

@@ -113,6 +113,12 @@ pub fn process_structure_intents(
                 super::nukes::launch_nuke(&mut w, id, d);
             }
         }
+        // observer 单动作直派发（observeRoom 写标记，下一拍投影授视野）。
+        "observer" => {
+            if let Some(d) = actions.get(&Action::ObserveRoom) {
+                observer_observe_room(&mut w, id, d);
+            }
+        }
         // powerSpawn 单动作直派发（processPower 双扣并累计账号 power）。
         "powerSpawn" => {
             if let Some(_payload) = actions.get(&Action::ProcessPower) {
@@ -500,6 +506,58 @@ pub(super) fn chebyshev(a: (u8, u8), b: (u8, u8)) -> i64 {
     (a.0 as i64 - b.0 as i64)
         .abs()
         .max((a.1 as i64 - b.1 as i64).abs())
+}
+
+/// observer 的 observeRoom：复验官方玩家面门（房名合法、RCL 激活、射程
+/// 或活跃 PWR_OPERATE_OBSERVER 效果豁免）后写 data.observeRoom 标记；
+/// 标记的清零在房间结算预扫描（官方 processor.js 预意图阶段同形）。
+/// 官方结算侧本身无门（信任游戏层预检），kk 从严防直注意图注入。
+/// 来源：engine/src/game/structures.js 的 observeRoom 与 processor.js:284-287。
+fn observer_observe_room(w: &mut Working, id: ObjId, d: &IntentData) {
+    let Some(view) = generic_view(w, id) else {
+        return;
+    };
+    if view.structure_type != "observer" {
+        return;
+    }
+    if !check_structure_against_controller(w, id, &view) {
+        return;
+    }
+    let Some(target) = d.target_room_name.as_deref() else {
+        return;
+    };
+    if !crate::settle::market::is_valid_room_name(target) {
+        return;
+    }
+    // 射程门与玩家预检同形：活跃效果（严格 > 边界）完全豁免——官方无
+    // 10+N 公式，效果激活即无限射程；否则逐轴绝对差 ≤ OBSERVER_RANGE。
+    let effect_active =
+        kk_world::effects::active_power(w.room.effects.get(&id), c::PWR_OPERATE_OBSERVER, w.time)
+            .is_some();
+    if !effect_active {
+        let from = w.room.name.clone();
+        let out = match (
+            kk_core::RoomName::parse(&from),
+            kk_core::RoomName::parse(target),
+        ) {
+            (Ok(a), Ok(b)) => {
+                i64::from((a.xx - b.xx).abs()) > c::OBSERVER_RANGE
+                    || i64::from((a.yy - b.yy).abs()) > c::OBSERVER_RANGE
+            }
+            _ => true,
+        };
+        if out {
+            return;
+        }
+    }
+    if let Some(RoomObject::Generic(g)) = w.room.objects.get_mut(&id)
+        && let Ok(mut data) = serde_json::from_str::<Value>(&g.data)
+        && let Some(map) = data.as_object_mut()
+    {
+        // 与清零分支同款对象守卫：损坏快照注入的非对象 data 不 panic。
+        map.insert("observeRoom".into(), json!(target));
+        g.data = data.to_string();
+    }
 }
 
 /// 读取结构在某 RCL 的配额：计划配额快照优先（含 link——原 link 专属

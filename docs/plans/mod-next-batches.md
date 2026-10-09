@@ -4,10 +4,10 @@
 
 ## 当前接手位置
 
-- 更新日期：2026-10-09；实现基线含 `13daad3`（FORTIFY/SHIELD）与本批 deposit 完整业务（随本提交交付）。接手先核对实际 HEAD 与工作区。
-- 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座、deposit 采集链已交付。M2H.b 当前 **18/19 powers** 完整接通，剩余 1 个（OPERATE_OBSERVER，依赖观察业务）见下表。
-- 下一片：**observer 与 OPERATE_OBSERVER**（动作、范围/RCL/owner、下一轮限时视野、双投影权限与恢复）。每片贯通施放、真实消费者、玩家投影、失败边界和冷恢复。
-- 兼容率 2759/2914≈94.7%（95% 中间检查点差 10 例：observer 组之外还有零散红逐例归因）。
+- 更新日期：2026-10-09；实现基线含 deposit 完整业务与本批 observer/OPERATE_OBSERVER（随本提交交付）。接手先核对实际 HEAD 与工作区。
+- 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座、deposit 采集链、observer 限时视野已交付。**M2H.b 19/19 powers 全部接通**。
+- 下一片：**零散红逐例归因**（27 例失败清单见最新兼容报告：keeper/NPC 族、UNDOC 组、adapter contract 八例、pull/moveCache/getHistory 等散例）或 G02.d3 后续；每片贯通真实消费者、玩家投影、失败边界和冷恢复。
+- 兼容率 2783/2914≈95.4%（**95% 中间检查点已越过**；99% 目标需 2885）。
 - Mod 扩展：移动策略、对象/建筑/资源、库存/耐久/受击、作者 CLI/类型、输入回放和检查点已有基础；未完成范围以任务表为准。默认玩法已有消费者不代表对应 Mod 替换能力已经开放。
 - 网络服务、持久 storage 后端与真实游戏客户端仍未实现；renderer R0–R6 已交付，R7 最终矩阵/长测未收口。现有 bot-check 不能代替持续推进世界中的可玩验收。
 - M2B 验收标准（2026-10-09 调整）：screeps-ok ≥95% 为中间检查点、≥99% 为后续覆盖目标；最终完成要求约定范围内功能全部通过验收，剩余例外逐项有明确范围、证据和可审查理由，见[路线图](../roadmap.md)。
@@ -16,25 +16,25 @@
 
 | 顺位 | 任务 | 首片与完成条件 |
 |---|---|---|
-| 1 | observer 与 OPERATE_OBSERVER | 动作、范围/RCL/owner、下一轮限时视野、双投影权限与恢复；含最后一个 power 消费者（19/19 收口） |
-| 2 | 其他兼容差异与真实 bot | 按最新报告逐例归因；keeper/NPC 单独拆片；真实场景验证采集、搬运、孵化、建造、升级、存活与重启 |
+| 1 | 零散红逐例归因与修复 | 按最新报告 27 例失败逐例归因（keeper/NPC 单独拆片；UNDOC/adapter contract 组逐例定夺）；每例有官方源或套件仲裁证据 |
+| 2 | 真实 bot 验收与 G02.d3 后续 | 真实场景验证采集、搬运、孵化、建造、升级、存活与重启；结构/rampart 通行与寻路贯通 |
 | 独立候选 | G02.d3 后续、G27.a | 前者贯通结构/rampart 通行与寻路；后者提供异步后台生命周期，随后才接 storage/outbox/网络 |
 
 维护优化已完成的轮次不作为新功能前置。任务首次实施前按业务闭环拆片；G30.a 覆盖清单与 G30.d 同功能参考随领域滚动，不等最终收口才补证据。
 
-## M2H.b power 进度
+## M2H.b power 进度（19/19 收口）
 
 公共效果表、施放共用门、JSON/KKPV 投影、当前格式检查点和候选回滚已实现，机制见[游戏循环](../architecture/game-loop.md#power-效果链当前首片)与[检查点](../architecture/checkpoints.md)。
 
 | 状态 | Power / 消费者 |
 |---|---|
-| 已完成 18 项 | GENERATE_OPS；OPERATE_TOWER / DISRUPT_TOWER；OPERATE_SPAWN / DISRUPT_SPAWN；OPERATE_LAB；OPERATE_POWER；OPERATE_FACTORY；REGEN_SOURCE / DISRUPT_SOURCE；REGEN_MINERAL；OPERATE_STORAGE；OPERATE_EXTENSION；OPERATE_TERMINAL / DISRUPT_TERMINAL；OPERATE_CONTROLLER；FORTIFY / SHIELD |
-| 待实现 | OPERATE_OBSERVER（依赖观察业务） |
+| 已完成 19 项 | GENERATE_OPS；OPERATE_TOWER / DISRUPT_TOWER；OPERATE_SPAWN / DISRUPT_SPAWN；OPERATE_LAB；OPERATE_POWER；OPERATE_FACTORY；REGEN_SOURCE / DISRUPT_SOURCE；REGEN_MINERAL；OPERATE_STORAGE；OPERATE_EXTENSION；OPERATE_TERMINAL / DISRUPT_TERMINAL；OPERATE_CONTROLLER；FORTIFY / SHIELD；OPERATE_OBSERVER |
+| 待实现 | 无 |
 
 剩余任务的具体门序和量值须核对锁定的官方源码与 POWER_INFO：
 
 - 资源/容量：storage 容量与库存消费者同源；extension 为即时灌能，按目标房主、距离顺序和整批预算结算。
-- observer：依赖真实观察和限时视野业务，不以当前房间可见替代观察效果。
+- observer/OPERATE_OBSERVER 已交付（本批）：效果即无限射程、标记生命周期一拍、双通道可见集并入。
 - 战斗：FORTIFY/SHIELD 联动伤害、拆毁、临时 rampart 耐久与衰减；EFFECT_INVULNERABILITY 的伤害/dismantle/attackController/nuke/rangedMassAttack 等消费门同片盘点，其生产者属于后续 invader core/NPC 域，不计入 19 个 power。
 
 ## 任务台账
@@ -128,11 +128,11 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 
 ## 最近交付与实际验证
 
-最近功能批次：FORTIFY/SHIELD 效果链（`13daad3`，交付记录见该提交）与 deposit 完整业务（本提交）。deposit：harvest 的 Deposit 分支（预检 isNearTo/ERR_TIRED；结算量 WORK×HARVEST_DEPOSIT_POWER 含 harvest boost，官方分支无 amount 门——WORK 全熄的 amount=0 仍落动作日志、按当前累计重算冷却并刷新寿命）、超容掉落（资源堆落成当拍按 ceil(amount/ENERGY_DECAY) 衰减）、harvested 累计含 boost、decayTime 刷新 time+50000、冷却 ceil(0.001×harvested^1.2)（>1 才挂）经 pending 表在对象 tick 相落成（官方 _cooldown 临时字段同构，同 tick 后续采集读旧值仍成功）、寿命门 `time >= decayTime-1`（processor.js 移除相为实际边界）；放置归一把相对 cooldown/ticksToDecay 换算为绝对键（与 nuke 同形），查询快照面派生 lastCooldown 并折算 ticksToDecay/剩余 cooldown（rawData 投影通道仍透传绝对键由类 getter 折算，双通道口径自洽）。**capabilities.deposit 已翻转**：套件 deposit 组 44 例全绿（含修复 DEPOSIT-HARVEST-003/006 的放置相对冷却换算、DEPOSIT-006 寿命门、快照往返派生字段）。三路复审（结算保真/测试边界/全局影响）发现项当批清偿：amount=0 无门（去提前返回+引擎意图直注测试锁定结算侧静默门与零量流程）、EVENT_HARVEST 断言移回采集轮（事件 1-tick 生命期）、retry 注释改缓存重放语义、>1 冷却边界用同 tick 双 creep 锁定、到期拍 T=4/T=5 钉边、ERR_NOT_IN_RANGE 距离腿、lastCooldown=0/缺 decayTime→undefined、满仓全量掉落极值、creep.js 陈旧注释、bot 基线 find:114 归因纠正（FIND_MY_CONSTRUCTION_SITES 每轮随机漂移 381↔386，非 deposit 因果——bot 世界无 deposit）。FORTIFY 挂 constructedWall/rampart：非核弹伤害完全免疫（_damage 严格 >，免疫含扣血/摧毁/反击/事件）、dismantle 能量回收归零（SHIELD/FORTIFY/INVULN，>= 边界，伤害照常）、rangedMassAttack 跳过目标（>=）、attack/rangedAttack/dismantle 预检即拒 ERR_INVALID_TARGET（SHIELD 不在预检门）。SHIELD 无 ops 无目标：删自身位工地、过官方 checkConstructionSite 的 rampart 放置子集（同类不重叠/本格非墙/贴边三块边界格全墙）后插临时 rampart（hits=effect、hitsMax=0、nextDecayTime=endTime）；护盾可受伤、dismantle 无回收、衰减 tick 跳过同步并到期删除；POWER_INFO.energy 官方无消费者不扣。EFFECT_INVULNERABILITY 与 FORTIFY 共享全部消费门（生产者属后续 NPC 域）。三路复审（结算保真/测试边界/全局影响）发现项当批清偿：rangedAttack 预检效果门移到射程检查后（官方顺序，超射程且无敌返回 -9）、SHIELD 边界检查移到工地删除后（越界 pc 的工地同样先删）、贴边四角选边改顺序赋值（y 覆盖 x，官方与 room.rs 既有决策同形）、插入不带 notifyWhenAttacked、免伤正路径补塔攻击例（无预检门的唯一可达通道）、到期拍用绝对时间钉住（此前 tick 计数失真未落边界）、dismantle 回收加 carry 部件使 0/1 可区分、massAttack 用有主 rampart 钉 >= 边界、rampart 腿预检与 SHIELD 拒绝路径工地删除副作用补断言、attackController 的 INVULN 预检缺口登记。行为变化：无效果路径逐位不变（免伤/回收/跳过门仅活跃效果命中介入）。damage.rs 现 762 行超 700 复审线，下一批涉及时先拆分。
+最近功能批次：deposit 完整业务（前一提交）与 observer/OPERATE_OBSERVER（本提交，M2H.b 19/19 收口）。observer：observeRoom 预检门序 NOT_OWNER→房名 regex→RCL→射程（逐轴绝对差 ≤10；效果活跃完全豁免——官方无 10+N 公式）；结算侧复验同门防直注后写 data.observeRoom 标记、预意图阶段清零（官方 processor.js 同形，观察视野恰一拍）；世界级预扫 `observed_rooms_of` 把标记房并入 JSON/KKPV 双通道可见集（被观察房的能量/事件/对象导出与己方房同口径，未注册房查询落空同官方）；OPERATE_OBSERVER 挂 observer（duration 数组按级、无 effect 数组，消费只看存在性）、无效目标静默丢弃不扣费；标记随 Generic data 走既有快照/检查点。附带：intent.rs 触 1000 行门禁拆出 from_json.rs（纯移动+pub(super) 可见性，零行为变化）；放置层对无公开 cooldown 的结构类型拒绝 cooldown spec（适配器契约，套件 cooldown 拒绝用例）。**capabilities.observer 已翻转**：套件 observer 组（13.4 十六例、EFFECT-HOST observer 行、adapter cooldown 拒绝例）与 POWER-OPERATE-003/005 两失败全部转绿。deposit：harvest 的 Deposit 分支（预检 isNearTo/ERR_TIRED；结算量 WORK×HARVEST_DEPOSIT_POWER 含 harvest boost，官方分支无 amount 门——WORK 全熄的 amount=0 仍落动作日志、按当前累计重算冷却并刷新寿命）、超容掉落（资源堆落成当拍按 ceil(amount/ENERGY_DECAY) 衰减）、harvested 累计含 boost、decayTime 刷新 time+50000、冷却 ceil(0.001×harvested^1.2)（>1 才挂）经 pending 表在对象 tick 相落成（官方 _cooldown 临时字段同构，同 tick 后续采集读旧值仍成功）、寿命门 `time >= decayTime-1`（processor.js 移除相为实际边界）；放置归一把相对 cooldown/ticksToDecay 换算为绝对键（与 nuke 同形），查询快照面派生 lastCooldown 并折算 ticksToDecay/剩余 cooldown（rawData 投影通道仍透传绝对键由类 getter 折算，双通道口径自洽）。**capabilities.deposit 已翻转**：套件 deposit 组 44 例全绿（含修复 DEPOSIT-HARVEST-003/006 的放置相对冷却换算、DEPOSIT-006 寿命门、快照往返派生字段）。三路复审（结算保真/测试边界/全局影响）发现项当批清偿：amount=0 无门（去提前返回+引擎意图直注测试锁定结算侧静默门与零量流程）、EVENT_HARVEST 断言移回采集轮（事件 1-tick 生命期）、retry 注释改缓存重放语义、>1 冷却边界用同 tick 双 creep 锁定、到期拍 T=4/T=5 钉边、ERR_NOT_IN_RANGE 距离腿、lastCooldown=0/缺 decayTime→undefined、满仓全量掉落极值、creep.js 陈旧注释、bot 基线 find:114 归因纠正（FIND_MY_CONSTRUCTION_SITES 每轮随机漂移 381↔386，非 deposit 因果——bot 世界无 deposit）。FORTIFY 挂 constructedWall/rampart：非核弹伤害完全免疫（_damage 严格 >，免疫含扣血/摧毁/反击/事件）、dismantle 能量回收归零（SHIELD/FORTIFY/INVULN，>= 边界，伤害照常）、rangedMassAttack 跳过目标（>=）、attack/rangedAttack/dismantle 预检即拒 ERR_INVALID_TARGET（SHIELD 不在预检门）。SHIELD 无 ops 无目标：删自身位工地、过官方 checkConstructionSite 的 rampart 放置子集（同类不重叠/本格非墙/贴边三块边界格全墙）后插临时 rampart（hits=effect、hitsMax=0、nextDecayTime=endTime）；护盾可受伤、dismantle 无回收、衰减 tick 跳过同步并到期删除；POWER_INFO.energy 官方无消费者不扣。EFFECT_INVULNERABILITY 与 FORTIFY 共享全部消费门（生产者属后续 NPC 域）。三路复审（结算保真/测试边界/全局影响）发现项当批清偿：rangedAttack 预检效果门移到射程检查后（官方顺序，超射程且无敌返回 -9）、SHIELD 边界检查移到工地删除后（越界 pc 的工地同样先删）、贴边四角选边改顺序赋值（y 覆盖 x，官方与 room.rs 既有决策同形）、插入不带 notifyWhenAttacked、免伤正路径补塔攻击例（无预检门的唯一可达通道）、到期拍用绝对时间钉住（此前 tick 计数失真未落边界）、dismantle 回收加 carry 部件使 0/1 可区分、massAttack 用有主 rampart 钉 >= 边界、rampart 腿预检与 SHIELD 拒绝路径工地删除副作用补断言、attackController 的 INVULN 预检缺口登记。行为变化：无效果路径逐位不变（免伤/回收/跳过门仅活跃效果命中介入）。damage.rs 现 762 行超 700 复审线，下一批涉及时先拆分。
 
-- 完整无参数 `pnpm run check`：Rust workspace 1421 passed / 0 failed（新增 kk-engine deposit_actions 2 例与 kk-runtime deposit_harvest 4 例强化）；JS workspace、工具、文档链接与源码规模通过；无 doctest 变更。
-- release CLI 与适配器重建，固定 screeps-ok HEAD `34a630e`；全量 2914 例：2759 passed / 29 failed / 126 skipped，相对 `13daad3` 基线 +40 转绿 / 0 转红（deposit 能力开启），地板 2719→2759。
-- 三 bot 完成 2000/2000/10 tick（修复后复跑），无中断/惩罚跳过/missing_api，行为键与基线全等；stub 计数 ±3 每轮随机漂移；Overmind 如上保留既有报错。
+- 完整无参数 `pnpm run check`：Rust workspace 1428 passed / 0 failed（新增 kk-runtime observer_room 5 例与 kk-engine observer_actions 2 例）；JS workspace、工具、文档链接与源码规模通过；无 doctest 变更。三路复审（结算保真/测试边界/全局影响）发现项当批清偿：清零扫描补结构类型门（防 Mod 配方字段名同名被逐拍剥离）、标记写入补对象守卫（损坏快照不 panic）、观察视野按玩家隔离与差 10 边界直注、效果到期拍、多 observer 聚合并集、门序锁定（NOT_OWNER/NOT_IN_RANGE 两腿）、非法房名与无主直注（无主写标记为官方同形分歧、测试钉住）、陈旧契约注释改写、cooldown spec 拒绝门与 fmt:js 收口、台账数字勘误。
+- release CLI 与适配器重建，固定 screeps-ok HEAD `34a630e`；全量 2914 例：2783 passed / 27 failed / 104 skipped（≈95.4%，95% 检查点越过），相对 deposit 批基线 +24 转绿 / 0 转红（observer 能力开启），地板 2759→2783。
+- 三 bot 完成 2000/2000/10 tick，无中断/惩罚跳过/missing_api，行为键与基线全等；Overmind 如上保留既有报错。
 - 持久证据：[兼容机器报告](../../compat/reports/kkscreeps.json)、[棘轮配置](../../compat/reports/ratchet.json)、[TooAngel](../../compat/reports/bot-tooangel.json)、[Overmind](../../compat/reports/bot-overmind.json)、[WASM](../../compat/reports/bot-wasm.json)。原临时日志路径仅在历史过程保留，不作为长期证据入口。
 
 ## 台账维护与每批验收

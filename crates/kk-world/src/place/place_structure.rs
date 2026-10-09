@@ -281,15 +281,26 @@ pub(super) fn normalize_structure(
                     }
                 }
             }
-            // lab、terminal、nuker、factory 使用绝对 cooldownTime，其他类型保留计数 cooldown。
+            // lab、terminal、nuker、factory 使用绝对 cooldownTime，link/extractor
+            // 保留计数 cooldown；无公开 cooldown 的类型拒绝该 spec（适配器
+            // 契约：observer 等带 cooldown 放置须报错而非静默落无消费者字段）。
             // 转换前删除原 cooldown，避免同一记录同时保存相对值和绝对值。
-            // 来源：screeps-ok adapters/vanilla/index.ts 的 placeStructure。
+            // 来源：screeps-ok adapters/vanilla/index.ts 的 placeStructure 与
+            // 00-adapter-contract/setup.test.ts 的 cooldown 拒绝用例。
             data.remove("cooldown");
             if let Some(cd) = spec.get("cooldown").and_then(Value::as_u64) {
-                if st == "lab" || st == "terminal" || st == "nuker" || st == "factory" {
-                    data.insert("cooldownTime".into(), json!(ctx.time + cd));
-                } else {
-                    data.insert("cooldown".into(), json!(cd));
+                match st {
+                    "lab" | "terminal" | "nuker" | "factory" => {
+                        data.insert("cooldownTime".into(), json!(ctx.time + cd));
+                    }
+                    "link" | "extractor" => {
+                        data.insert("cooldown".into(), json!(cd));
+                    }
+                    other => {
+                        return Err(format!(
+                            "structure {other} 无公开 cooldown，拒绝 cooldown spec"
+                        ));
+                    }
                 }
             }
             // Mod 建筑的放置默认值来自配方（显式字段保留）；随后内建表。

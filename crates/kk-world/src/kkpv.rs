@@ -37,8 +37,10 @@ impl World {
         audience_hash: [u8; 32],
     ) -> Result<Vec<KkpvBlockInput>, String> {
         let mut blocks = Vec::with_capacity(self.rooms.len());
+        // 观察限时视野与 JSON 通道同源（world_json_impl）：标记房并入可见集。
+        let observed = self.observed_rooms_of(user);
         for (name, state) in &self.rooms {
-            let room_visible = room_visible_to(state, user);
+            let room_visible = room_visible_to(state, user) || observed.contains(name);
             let controller = state.controller();
             let mut objects = Vec::new();
             for (id, object) in &state.objects {
@@ -149,12 +151,14 @@ impl World {
     /// 地形由公开块承载（`kkpv_public_terrain_blocks`）。房间级授权通道
     /// 不进入任何块，能量/事件按可见房裁切后留在信封侧。
     pub fn kkpv_envelope_for_viewer(&self, user: &str, gcl_points: i64) -> Value {
-        let visible: std::collections::BTreeSet<&String> = self
+        let mut visible: std::collections::BTreeSet<&String> = self
             .rooms
             .iter()
             .filter(|(_, state)| room_visible_to(state, user))
             .map(|(name, _)| name)
             .collect();
+        let observed = self.observed_rooms_of(user);
+        visible.extend(observed.iter());
         let mut rooms = serde_json::Map::new();
         for (name, state) in &self.rooms {
             let mut entry = serde_json::Map::new();

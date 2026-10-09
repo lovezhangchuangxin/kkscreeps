@@ -90,6 +90,9 @@
     NUKE_RANGE: globalThis.NUKE_RANGE,
     // powerSpawn processPower（M2H.a）：能量换算比。
     POWER_SPAWN_ENERGY_RATIO: globalThis.POWER_SPAWN_ENERGY_RATIO,
+    // observer observeRoom：射程门与效果豁免查询。
+    OBSERVER_RANGE: globalThis.OBSERVER_RANGE,
+    PWR_OPERATE_OBSERVER: globalThis.PWR_OPERATE_OBSERVER,
   };
   gw.__structuresC = C; // structure-api.js 复用此常量表。
 
@@ -339,8 +342,7 @@
   // 来源：上游 engine/src/game/deposits.js。
   gw.defineGameObjectProperties(globalThis.Deposit.prototype, gw.rawData, {
     depositType: (o) => o.depositType,
-    cooldown: (o) =>
-      o.cooldownTime && o.cooldownTime > now() ? o.cooldownTime - now() : 0,
+    cooldown: (o) => (o.cooldownTime && o.cooldownTime > now() ? o.cooldownTime - now() : 0),
     lastCooldown: (o) =>
       __MathCeil(
         globalThis.DEPOSIT_EXHAUST_MULTIPLY *

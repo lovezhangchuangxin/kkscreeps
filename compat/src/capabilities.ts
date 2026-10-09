@@ -43,7 +43,7 @@ export const capabilities: AdapterCapabilities = {
   marketBasics: true,
   market: true,
   terminalSend: true,
-  observer: false,
+  observer: true,
   nuke: true,
   deposit: true,
   powerBank: false,

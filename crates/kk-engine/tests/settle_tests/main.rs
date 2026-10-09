@@ -34,6 +34,7 @@ mod movement;
 mod movement_inter_room;
 mod notify;
 mod nuke_actions;
+mod observer_actions;
 mod power_actions;
 mod resources;
 mod spawn;
