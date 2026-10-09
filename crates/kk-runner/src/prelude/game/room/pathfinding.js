@@ -43,6 +43,13 @@
         'terminal',
       );
     }
+    const passability = gw.staticPassability;
+    if (passability.obstaclesPassable) {
+      // 生物仍按占格策略处理，portal 保留寻路避让；静态障碍类型才放行。
+      obstacles = obstacles.filter(
+        (type) => type === 'creep' || type === 'powerCreep' || type === 'portal',
+      );
+    }
     const safeMode = room.controller && room.controller.safeMode && room.controller.my;
     if (opts.ignoreCreeps || safeMode) obstacles = _.without(obstacles, 'creep', 'powerCreep');
     // Mod 建筑按声明的寻路语义进矩阵：obstacle 阻断、road 按道路成本；
@@ -60,14 +67,17 @@
           (type === 'creep' || type === 'powerCreep') &&
           object.owner === gw.viewerName) ||
         (!opts.ignoreDestructibleStructures &&
+          !passability.privateRampartsPassable &&
           type === 'rampart' &&
           !object.isPublic &&
           object.owner !== gw.viewerName) ||
         (!opts.ignoreDestructibleStructures &&
+          !passability.obstaclesPassable &&
           modPathing !== undefined &&
           object.type === 'structure' &&
           modPathing.pathing === 'obstacle') ||
         (!opts.ignoreDestructibleStructures &&
+          !passability.obstaclesPassable &&
           type === 'constructionSite' &&
           object.owner === gw.viewerName &&
           (_.contains(C_OBSTACLE_OBJECT_TYPES, object.structureType) ||

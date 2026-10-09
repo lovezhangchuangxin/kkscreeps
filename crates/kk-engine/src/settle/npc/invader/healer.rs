@@ -53,13 +53,13 @@ pub(super) fn intents(
         );
     }
     if u64::from(actor.hits) * 2 < actor.body.len() as u64 * 100 {
-        if let Some(direction) = invader_path::flee(&w.room, pos, hostiles, 4)? {
+        if let Some(direction) = invader_path::flee(w, pos, hostiles, 4)? {
             actions.insert(Action::Move, super::move_intent(direction));
         } else {
             let helpers:Vec<_>=invaders.iter().filter(|id|id.0!=actor.id && matches!(&w.room.objects[id],RoomObject::Creep(c) if active(c,BodyKind::Heal))).copied().collect();
-            if let Some(id) = invader_path::closest(&w.room, pos, &helpers, Options::default())?
+            if let Some(id) = invader_path::closest(w, pos, &helpers, Options::default())?
                 && let Some(direction) = invader_path::move_to(
-                    &w.room,
+                    w,
                     pos,
                     w.room.objects[&id].pos(),
                     1,
@@ -78,14 +78,14 @@ pub(super) fn intents(
         .filter(|id| missing(&w.room.objects[id]) > 0)
         .copied()
         .collect();
-    let mut target = invader_path::closest(&w.room, pos, &injured, Options::default())?;
+    let mut target = invader_path::closest(w, pos, &injured, Options::default())?;
     if target.is_none() {
-        if let Some(direction) = invader_path::flee(&w.room, pos, hostiles, 4)? {
+        if let Some(direction) = invader_path::flee(w, pos, hostiles, 4)? {
             actions.insert(Action::Move, super::move_intent(direction));
             return Ok(());
         }
         let fighters:Vec<_>=invaders.iter().filter(|id|id.0!=actor.id && !matches!(&w.room.objects[id],RoomObject::Creep(c) if active(c,BodyKind::Heal))).copied().collect();
-        target = invader_path::closest(&w.room, pos, &fighters, Options::default())?;
+        target = invader_path::closest(w, pos, &fighters, Options::default())?;
     }
     let Some(id) = target else {
         actions.insert(Action::Suicide, IntentData::bare());
@@ -99,7 +99,7 @@ pub(super) fn intents(
         ))
         .filter(|d| *d != 0)
     } else {
-        invader_path::move_to(&w.room, pos, dest, 1, Options::default(), w.time, memory)?
+        invader_path::move_to(w, pos, dest, 1, Options::default(), w.time, memory)?
     };
     if let Some(direction) = direction {
         actions.insert(Action::Move, super::move_intent(direction));

@@ -87,7 +87,7 @@ findAttack 在无有效 ATTACK、有有效 RANGED_ATTACK 时先对距离 <3 的�
 
 healer 对三格内同归属 creep/powerCreep 按最大缺血量选择（平手首个、包括自己与满血），相邻 heal 否则 rangedHeal；跟随目标另按最近路径选择伤员，不能把治疗评分目标当作跟随目标。严重受伤先治疗再对距离 <4 的敌方逃离，否则靠近另一活跃 healer；健康 healer 无伤员时逃离或跟随非治疗同伴，无目标自杀。shootAtWill 仅在有效 RANGED_ATTACK 时对三格内最低 hits 敌方发单体攻击，不切换 mass；缺 hits 目标仍在近战桶，远程最低值选择跳过，全缺时不发有效远程攻击。
 
-NPC 寻路共用原生 kk-pathfinder 与官方 fake-runtime 代价规则；ignoreRoads 对应 plain=1/swamp=5、默认 plain=2/swamp=10。Invader moveTo 使用同房目的地和 5 tick 缓存，成功生成移动方向即记录 lastMove（不是实际移动成功后才记录）；flee 和 healer 邻格直接 move 不写缓存。对象表快照中的孵化、射程、安全模式、boost、rampart、压制、死亡仍沿现有结算链。
+NPC 寻路共用原生 kk-pathfinder 与官方 fake-runtime 代价规则；计划级墙、静态对象/私有 rampart 通行与 Mod 建筑 obstacle/road 从同房冻结快照消费，见[静态通行契约](movement.md#静态对象通行声明g02d3-后续)。ignoreRoads 对应 plain=1/swamp=5、默认 plain=2/swamp=10。Invader moveTo 使用同房目的地和 5 tick 缓存，成功生成移动方向即记录 lastMove（不是实际移动成功后才记录）；flee 和 healer 邻格直接 move 不写缓存。对象表快照中的孵化、射程、安全模式、boost、rampart、压制、死亡仍沿现有结算链。
 
 新增房间保存域 `invader_memory`（可空 move_cache：destination/time/path、可空 last_move），载荷 v6 必填；v5_to_v6 对缺域房间显式拒绝，不猜测旧路径。编辑、恢复和候选发布共用坐标/时钟/逐步相邻与路径 ≤2500 校验；执行者必须为 Invader creep，可空键必须存在。对象删除、链拒绝恢复和整轮失败均同步清理或恢复记忆，不进入玩家投影。Source Keeper 继续使用原 keeper_memory 与 50 tick 缓存。
 

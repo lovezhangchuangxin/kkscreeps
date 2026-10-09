@@ -67,7 +67,7 @@ impl Movement {
                     room,
                     index,
                     &self.buildings,
-                    self.walls_passable,
+                    self.static_passability,
                     cell,
                     &dynamic_owner(room.objects.get(&id)),
                 ),

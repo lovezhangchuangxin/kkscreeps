@@ -293,7 +293,7 @@ impl EmbedEngine {
         let identity = self.engine.world().instance();
         let terrain_epoch = self.engine.world().terrain_epoch();
         // 计划级墙通行声明参与缓存键：切包改变声明时，同世界代际也须重建。
-        let walls_passable = self.engine.terrain_passability().wall_passable;
+        let walls_passable = self.engine.static_passability().wall_passable;
         let terrain = match &self.pathfinder_terrain {
             Some((cached_identity, cached_epoch, cached_walls, terrain))
                 if std::sync::Arc::ptr_eq(cached_identity, &identity)

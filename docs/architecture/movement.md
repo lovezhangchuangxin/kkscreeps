@@ -118,7 +118,7 @@ export default function register(api) {
 - `api.decline(code)` 丢弃整条链全部 JS 放行、显式否决和暂存 namespace state，再按登记快照恢复原生过滤；其他移动槽仍正常运行。这是整房回退边界。
 - 域外 ID、非字符串、跨槽或异步过期调用走能力故障，不能被 catch + decline 掩盖；整轮不发布，按[Mod 执行恢复](mod-execution.md)重建 realm。
 - 晚期写回失败重用玩家结果缓存，重新决策后世界与 state 恰一次提交；停用包重装后按有效链执行，全部贡献摘除则恢复 native 登记。
-- 新集合是 tick 内瞬态，无新持久写入域；检查点只保存已提交世界与 Mod state。内建槽现为 21（结构受击槽入列，G09.c），catalog revision 随本族演进（G02.d1 自 v14 升 v15、G02.d2 升 v16、G02.d3 升 **v17** 现行），覆盖输入/能力语义变更；旧计划身份的检查点按已有身份门拒绝，没有自动迁移。
+- 新集合是 tick 内瞬态，无新持久写入域；检查点只保存已提交世界与 Mod state。内建槽现为 21（结构受击槽入列，G09.c），catalog revision 随本族演进（G02.d1 自 v14 升 v15、G02.d2 升 v16、G02.d3 墙片升 v17、静态对象后续升 **v20** 现行），覆盖输入/能力语义变更；旧计划身份的检查点按已有身份门拒绝，没有自动迁移。
 
 ### 请求预检：验收与后续
 
@@ -134,7 +134,7 @@ export default function register(api) {
 api.rules.override('builtin:terrain.wallPassable', 1);
 ```
 
-无处理器——冻结规则在装配期形成 [`TerrainPassability`](../../crates/kk-mod-api/src/builtin.rs) 快照，同源驱动三处消费面：
+无处理器——冻结规则在装配期形成 [`StaticPassability`](../../crates/kk-mod-api/src/builtin/passability.rs) 快照，同源驱动三处消费面：
 
 1. **仲裁静态障碍的墙项**：`static_obstacles::arbitration_blocked` 在声明开启时跳过墙地形项（`has_road` 豁免与声明无关，两条路径都放行）；登记阶段本就不查地形。G02.d1 的 `allowStatic` 仍按请求放行，两机制独立可叠加。
 2. **预检槽输入**：`native_static_blocked` 经同一函数自动同源；`terrainWall/terrainSwamp` 摘要保持**物理值**——JS 可见「这是墙但 native 放行」。
@@ -142,13 +142,43 @@ api.rules.override('builtin:terrain.wallPassable', 1);
 
 执行语义：墙位按平原参与移动——疲劳按位掩码判沼泽的既有路径天然给出 墙=平原费率、墙|沼泽=沼泽费率，无专用分支。物理面不随声明改写：`getTerrain().get`、`look` 系地形单词、`Game.map.getTerrainAt`、FIND_EXIT 出口判定（物理位）、建造/孵化放置的墙拒绝与道路 hits 系数保持原值。规则是计划级单值（非逐房/逐 tick），PlanHash 随 builtin revision（v16→v17）变化，旧检查点按既有身份门拒绝。
 
-组合语义（freeze 既有约束）：**两个包覆盖同一规则即冲突**，即使值相同——单轴规则没有冗余共装；跨规则组合正常。验收夹具 [sim-mod-terrain-walls](../../compat/fixtures/sim-mod-terrain-walls/README.md)：原生对照（穿墙 incomplete、沿墙面靠近不越墙列）、ghost/deepwalk 两独立包（同值声明各自生效，证明不按包 ID 特判）、combined（wallPassable + fatigueLimit 跨规则组合）、双通道冷恢复与四 plan_hash 身份；runner 沙箱另有 JSON 通道 `SandboxConfig` 旗标与默认对照场景（默认分支部分路径止于墙前一格，与 G02.d2 钉死的 moveTo 边界一致）。结构/rampart 通行声明与逐房粒度属后续切片，首片不标 G02 全部完成。
+组合语义（freeze 既有约束）：**两个包覆盖同一规则即冲突**，即使值相同——单轴规则没有冗余共装；跨规则组合正常。验收夹具 [sim-mod-terrain-walls](../../compat/fixtures/sim-mod-terrain-walls/README.md)：原生对照（穿墙 incomplete、沿墙面靠近不越墙列）、ghost/deepwalk 两独立包（同值声明各自生效，证明不按包 ID 特判）、combined（wallPassable + fatigueLimit 跨规则组合）、双通道冷恢复与四 plan_hash 身份；runner 沙箱另有 JSON 通道 `SandboxConfig` 旗标与默认对照场景（默认分支部分路径止于墙前一格，与 G02.d2 钉死的 moveTo 边界一致）。结构/rampart 通行已由下述静态对象规则贯通；逐房粒度仍为后续切片，G02 保持部分完成。
+
+## 静态对象通行声明（G02.d3 后续）
+
+```js
+api.rules.override('builtin:movement.obstaclesPassable', 1);
+api.rules.override('builtin:movement.privateRampartsPassable', 1);
+```
+
+两个规则均为整数域 {0,1}、默认 0，与墙规则同属 `StaticPassability` 冻结快照。obstaclesPassable 放行内建 OBSTACLE_OBJECT_TYPES 的非生物静态项（包含 source/mineral）、Mod obstacle 建筑和己方障碍工地；privateRampartsPassable 放行非公开他人 rampart，自有/公开 rampart 的原生通行保持。两轴独立且可与墙声明组合，同规则双包覆盖仍冲突。
+
+同一快照驱动 creep/PowerCreep 两个登记入口、移动槽请求、仲裁与准入链预演、预检 nativeRegistrationBlocked/nativeStaticBlocked，以及玩家默认 Room.findPath/moveTo 矩阵。canary 与真实玩家沙箱从同一安装候选取得私有装配值；玩家代码不能修改该快照。NPC 搜索从同房 Working 的冻结计划读取同值，包含墙规则、Mod 建筑 obstacle/road；原版 ignoreDestructible/ignoreRoads 等选项仍适用。NPC 已保存路径按既有 5/50 tick 时效复用，实际执行仍复核当前计划的障碍，不因旧缓存绕过新规则。
+
+声明不改变 creep/powerCreep 动态占格、不可逆预检/障碍槽否决、建造/孵化放置、物理对象或地形查询；portal 保持默认矩阵避让。裸 PathFinder.search 原生只查地形，调用者的显式 CostMatrix（含 255）保留，不按声明清除。默认矩阵对不可见房仍不泄漏对象。规则为全计划单值，逐房粒度与摘要增强仍未开放。
+
+无新保存域：有效规则及计划身份随既有检查点保存；builtin catalog revision v19→v20，旧计划按身份门拒绝。公共示例见 [三个独立声明包](../../compat/fixtures/mod-static-objects/README.md)，[双通道回归](../../crates/kk-runtime/tests/mod_chain_tests/static_objects.rs) 覆盖矩阵/真实移动、轴独立、Mod 建筑完工、PowerCreep、动态占格/否决、失败重试与冷恢复。
 
 ## 竞争排序
 
 2026-10-06 已开放 `builtin:room.moveContest` 房间级槽。独立 JS 包可改变同格竞争者的排序：输入提供全部竞争格与默认评分要素，JS 通过优先级数值候选调整排序，宿主按 优先级 → 默认四键 → 登记序 稳定排序选胜。这只是排序切片：准入门槛已另行开放为独立槽（见[JS 移动准入](#准入与预演)），获准集合与执行效果仍由原生路径决定（G03/G04 另行开放）。
 
-### 竞争排序：输入与结算
+### 静态对象通行声明（G02.d3 后续）
+
+```js
+api.rules.override('builtin:movement.obstaclesPassable', 1);
+api.rules.override('builtin:movement.privateRampartsPassable', 1);
+```
+
+两个规则均为整数域 {0,1}、默认 0，与墙规则同属 `StaticPassability` 冻结快照。obstaclesPassable 放行内建 OBSTACLE_OBJECT_TYPES 的非生物静态项（包含 source/mineral）、Mod obstacle 建筑和己方障碍工地；privateRampartsPassable 放行非公开他人 rampart，自有/公开 rampart 的原生通行保持。两轴独立且可与墙声明组合，同规则双包覆盖仍冲突。
+
+同一快照驱动 creep/PowerCreep 两个登记入口、移动槽请求、仲裁与准入链预演、预检 nativeRegistrationBlocked/nativeStaticBlocked，以及玩家默认 Room.findPath/moveTo 矩阵。canary 与真实玩家沙箱从同一安装候选取得私有装配值；玩家代码不能修改该快照。NPC 搜索从同房 Working 的冻结计划读取同值，包含墙规则、Mod 建筑 obstacle/road；原版 ignoreDestructible/ignoreRoads 等选项仍适用。NPC 已保存路径按既有 5/50 tick 时效复用，实际执行仍复核当前计划的障碍，不因旧缓存绕过新规则。
+
+声明不改变 creep/powerCreep 动态占格、不可逆预检/障碍槽否决、建造/孵化放置、物理对象或地形查询；portal 保持默认矩阵避让。裸 PathFinder.search 原生只查地形，调用者的显式 CostMatrix（含 255）保留，不按声明清除。默认矩阵对不可见房仍不泄漏对象。规则为全计划单值，逐房粒度与摘要增强仍未开放。
+
+无新保存域：有效规则及计划身份随既有检查点保存；builtin catalog revision v19→v20，旧计划按身份门拒绝。公共示例见 [三个独立声明包](../../compat/fixtures/mod-static-objects/README.md)，[双通道回归](../../crates/kk-runtime/tests/mod_chain_tests/static_objects.rs) 覆盖矩阵/真实移动、轴独立、Mod 建筑完工、PowerCreep、动态占格/否决、失败重试与冷恢复。
+
+## 竞争排序：输入与结算
 
 全部 move/pull 意图登记完成后、仲裁开始前，房间内**存在多竞争者目的格**且有本槽贡献时，整房一次进入 JS；无贡献或无竞争格的房间不进入 realm，不构造输入（默认路径零开销，改造前后微基准无可测量回归，见[交付记录](../research/notes/g01-move-contest-2026-10-06.md)）。`ctx.args.contests` 按目的格给出，竞争者按登记序排列、**不截断**：
 
@@ -171,7 +201,22 @@ api.rules.override('builtin:terrain.wallPassable', 1);
 
 排序键为 `priority` 降序，再回落默认四键（原格请求数/对穿 100、被拉、拉者、功率/重量比），完全平手保持登记序。未设置的竞争者处于 0（默认层）：正值抬升、负值压低、同值不改变原生结果。选胜之后仍按原逻辑取消不可移动或被阻塞者，不自动递补落选者；准入（疲劳/MOVE/被拉门槛）已按 G02.a 开放为独立槽（见[JS 移动准入](#准入与预演)），链取消与执行阶段同源消费准入终值，不再二次复核 `can_move`。
 
-### 竞争排序：独立包组合
+### 静态对象通行声明（G02.d3 后续）
+
+```js
+api.rules.override('builtin:movement.obstaclesPassable', 1);
+api.rules.override('builtin:movement.privateRampartsPassable', 1);
+```
+
+两个规则均为整数域 {0,1}、默认 0，与墙规则同属 `StaticPassability` 冻结快照。obstaclesPassable 放行内建 OBSTACLE_OBJECT_TYPES 的非生物静态项（包含 source/mineral）、Mod obstacle 建筑和己方障碍工地；privateRampartsPassable 放行非公开他人 rampart，自有/公开 rampart 的原生通行保持。两轴独立且可与墙声明组合，同规则双包覆盖仍冲突。
+
+同一快照驱动 creep/PowerCreep 两个登记入口、移动槽请求、仲裁与准入链预演、预检 nativeRegistrationBlocked/nativeStaticBlocked，以及玩家默认 Room.findPath/moveTo 矩阵。canary 与真实玩家沙箱从同一安装候选取得私有装配值；玩家代码不能修改该快照。NPC 搜索从同房 Working 的冻结计划读取同值，包含墙规则、Mod 建筑 obstacle/road；原版 ignoreDestructible/ignoreRoads 等选项仍适用。NPC 已保存路径按既有 5/50 tick 时效复用，实际执行仍复核当前计划的障碍，不因旧缓存绕过新规则。
+
+声明不改变 creep/powerCreep 动态占格、不可逆预检/障碍槽否决、建造/孵化放置、物理对象或地形查询；portal 保持默认矩阵避让。裸 PathFinder.search 原生只查地形，调用者的显式 CostMatrix（含 255）保留，不按声明清除。默认矩阵对不可见房仍不泄漏对象。规则为全计划单值，逐房粒度与摘要增强仍未开放。
+
+无新保存域：有效规则及计划身份随既有检查点保存；builtin catalog revision v19→v20，旧计划按身份门拒绝。公共示例见 [三个独立声明包](../../compat/fixtures/mod-static-objects/README.md)，[双通道回归](../../crates/kk-runtime/tests/mod_chain_tests/static_objects.rs) 覆盖矩阵/真实移动、轴独立、Mod 建筑完工、PowerCreep、动态占格/否决、失败重试与冷恢复。
+
+## 竞争排序：独立包组合
 
 seniority 包替换排序（每格 ID 最小者优先，与默认“功率比最高者胜”相反）：
 
@@ -209,14 +254,44 @@ export default function register(api) {
 
 before/中心/replace/after 与其他槽同构：native 中心为无操作（保留 before 设置的优先级，类比受击槽的默认 TOUGH 中心）；after 在整槽成功后执行。多包平手关系按[handler 依赖与组合诊断](mod-composition.md)冻结。真实场景中三种排序选出三个不同胜者、组合由 after 层压回最重者，见[场景夹具](../../compat/fixtures/sim-mod-move-policy/README.md)。
 
-### 竞争排序：拒绝、故障与恢复
+### 静态对象通行声明（G02.d3 后续）
+
+```js
+api.rules.override('builtin:movement.obstaclesPassable', 1);
+api.rules.override('builtin:movement.privateRampartsPassable', 1);
+```
+
+两个规则均为整数域 {0,1}、默认 0，与墙规则同属 `StaticPassability` 冻结快照。obstaclesPassable 放行内建 OBSTACLE_OBJECT_TYPES 的非生物静态项（包含 source/mineral）、Mod obstacle 建筑和己方障碍工地；privateRampartsPassable 放行非公开他人 rampart，自有/公开 rampart 的原生通行保持。两轴独立且可与墙声明组合，同规则双包覆盖仍冲突。
+
+同一快照驱动 creep/PowerCreep 两个登记入口、移动槽请求、仲裁与准入链预演、预检 nativeRegistrationBlocked/nativeStaticBlocked，以及玩家默认 Room.findPath/moveTo 矩阵。canary 与真实玩家沙箱从同一安装候选取得私有装配值；玩家代码不能修改该快照。NPC 搜索从同房 Working 的冻结计划读取同值，包含墙规则、Mod 建筑 obstacle/road；原版 ignoreDestructible/ignoreRoads 等选项仍适用。NPC 已保存路径按既有 5/50 tick 时效复用，实际执行仍复核当前计划的障碍，不因旧缓存绕过新规则。
+
+声明不改变 creep/powerCreep 动态占格、不可逆预检/障碍槽否决、建造/孵化放置、物理对象或地形查询；portal 保持默认矩阵避让。裸 PathFinder.search 原生只查地形，调用者的显式 CostMatrix（含 255）保留，不按声明清除。默认矩阵对不可见房仍不泄漏对象。规则为全计划单值，逐房粒度与摘要增强仍未开放。
+
+无新保存域：有效规则及计划身份随既有检查点保存；builtin catalog revision v19→v20，旧计划按身份门拒绝。公共示例见 [三个独立声明包](../../compat/fixtures/mod-static-objects/README.md)，[双通道回归](../../crates/kk-runtime/tests/mod_chain_tests/static_objects.rs) 覆盖矩阵/真实移动、轴独立、Mod 建筑完工、PowerCreep、动态占格/否决、失败重试与冷恢复。
+
+## 竞争排序：拒绝、故障与恢复
 
 - `return api.decline(code)` 正常拒绝整条竞争链：丢弃全部优先级候选与暂存 namespace state，回退默认四键排序；此前已登记的请求与拉拽关系保持参与仲裁。已登记的其他 creep 请求不受影响。
 - 优先级候选不直接改写世界。非法数值（非整数、超出 ±(2^53−1)）、输入外 ID、越权能力（移动请求/资源/战斗/受击）的故障不能被 catch + decline 掩盖；错误/预算超限使整轮候选失败，沿[Mod 执行恢复](mod-execution.md)销毁并重建 realm。
 - 晚期写回失败经玩家缓存重试整轮：竞争结果与 namespace state 恰一次提交，不重复执行玩家代码。停用出错的 replace 后回退 native，健康钩子继续组合。
 - 仲裁结果是 tick 内瞬态，不进入检查点；检查点只保存已提交世界与 Mod state。该批内建槽增至 15（现 18，后续批次见[JS 移动准入](#准入与预演)与[JS 移动预检](#请求预检)），新增冻结描述和 native 绑定改变 PlanHash；旧计划身份的检查点不会被当作同一玩法静默加载。
 
-### 竞争排序：验收与剩余范围
+### 静态对象通行声明（G02.d3 后续）
+
+```js
+api.rules.override('builtin:movement.obstaclesPassable', 1);
+api.rules.override('builtin:movement.privateRampartsPassable', 1);
+```
+
+两个规则均为整数域 {0,1}、默认 0，与墙规则同属 `StaticPassability` 冻结快照。obstaclesPassable 放行内建 OBSTACLE_OBJECT_TYPES 的非生物静态项（包含 source/mineral）、Mod obstacle 建筑和己方障碍工地；privateRampartsPassable 放行非公开他人 rampart，自有/公开 rampart 的原生通行保持。两轴独立且可与墙声明组合，同规则双包覆盖仍冲突。
+
+同一快照驱动 creep/PowerCreep 两个登记入口、移动槽请求、仲裁与准入链预演、预检 nativeRegistrationBlocked/nativeStaticBlocked，以及玩家默认 Room.findPath/moveTo 矩阵。canary 与真实玩家沙箱从同一安装候选取得私有装配值；玩家代码不能修改该快照。NPC 搜索从同房 Working 的冻结计划读取同值，包含墙规则、Mod 建筑 obstacle/road；原版 ignoreDestructible/ignoreRoads 等选项仍适用。NPC 已保存路径按既有 5/50 tick 时效复用，实际执行仍复核当前计划的障碍，不因旧缓存绕过新规则。
+
+声明不改变 creep/powerCreep 动态占格、不可逆预检/障碍槽否决、建造/孵化放置、物理对象或地形查询；portal 保持默认矩阵避让。裸 PathFinder.search 原生只查地形，调用者的显式 CostMatrix（含 255）保留，不按声明清除。默认矩阵对不可见房仍不泄漏对象。规则为全计划单值，逐房粒度与摘要增强仍未开放。
+
+无新保存域：有效规则及计划身份随既有检查点保存；builtin catalog revision v19→v20，旧计划按身份门拒绝。公共示例见 [三个独立声明包](../../compat/fixtures/mod-static-objects/README.md)，[双通道回归](../../crates/kk-runtime/tests/mod_chain_tests/static_objects.rs) 覆盖矩阵/真实移动、轴独立、Mod 建筑完工、PowerCreep、动态占格/否决、失败重试与冷恢复。
+
+## 竞争排序：验收与剩余范围
 
 [真实玩家场景](../../compat/fixtures/sim-mod-move-policy/README.md)提供原生、seniority、heaviest 和两包组合；JSON/KKPV 完整 final 一致，竞争后保存退出与冷启动续跑等价。专项覆盖输入完整性与要素、非法数值/外部 ID、能力门、负优先级层、停用回退、晚期失败缓存重试与拒绝回退，结果见[交付记录](../research/notes/g01-move-contest-2026-10-06.md)。
 
@@ -245,7 +320,7 @@ before/中心/replace/after 与其他槽同构：native 中心为无操作（保
 
 `ctx.args.requests` 是**仲裁前的完整原始请求矩阵**（G03.a）：每个房间请求一条（含竞争落选者——他们不在 `movers` 中），按 目的格坐标、格内登记序 排列，逐条 `moverId/x/y/index/originX/originY/won`；`won` 标记该登记者是否为其目的格的仲裁胜者。原始矩阵在选胜时零拷贝暂存，Working 每房每 tick 重建，天然瞬态。
 
-`ctx.target.fields` 恒为 null（房间级槽没有对象目标）；本槽不开放移动请求、资源、战斗或对象能力。powerCreep 胜者保留 owner、身体要素填零（owner 空串、部件 0、功率 0、重量 1），原生准入为否——与原生一致。`ctx.admission` 是槽专属能力（不可枚举、只在处理器同步期有效）：
+`ctx.target.fields` 恒为 null（房间级槽没有对象目标）；本槽不开放移动请求、资源、战斗或对象能力。powerCreep 胜者保留真实 owner，部件/功率为 0、重量为 1；原生准入不要求 MOVE 或疲劳门，与官方 canMove 首支一致。`ctx.admission` 是槽专属能力（不可枚举、只在处理器同步期有效）：
 
 | 方法 | 语义 |
 |---|---|

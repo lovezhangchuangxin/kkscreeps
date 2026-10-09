@@ -2,7 +2,7 @@
 use super::path::{self, Options};
 use crate::settle::{SettleError, movement};
 use kk_world::{
-    ObjId, RoomState,
+    ObjId,
     domain::{invader_memory::InvaderMemory, keeper_memory::KeeperPath, npc::INVADER_OWNER},
 };
 
@@ -11,11 +11,12 @@ pub(super) fn range(a: (u8, u8), b: (u8, u8)) -> u8 {
 }
 
 pub(super) fn closest(
-    room: &RoomState,
+    w: &crate::settle::Working,
     origin: (u8, u8),
     targets: &[ObjId],
     opts: Options,
 ) -> Result<Option<ObjId>, SettleError> {
+    let room = &w.room;
     if targets.is_empty() {
         return Ok(None);
     }
@@ -26,7 +27,7 @@ pub(super) fn closest(
         .iter()
         .map(|id| (room.objects[id].pos(), 1))
         .collect();
-    let route = path::search(room, INVADER_OWNER, origin, &goals, opts)?;
+    let route = path::search(w, INVADER_OWNER, origin, &goals, opts)?;
     let end = route.last().map(|p| (p[0], p[1])).unwrap_or(origin);
     // 官方即使 incomplete 也按路径末格扫描，最后一个符合范围的对象覆盖。
     Ok(targets
@@ -37,7 +38,7 @@ pub(super) fn closest(
 }
 
 pub(super) fn move_to(
-    room: &RoomState,
+    w: &crate::settle::Working,
     origin: (u8, u8),
     destination: (u8, u8),
     range_to: u32,
@@ -55,13 +56,7 @@ pub(super) fn move_to(
         memory.move_cache = Some(KeeperPath {
             destination: dest,
             time,
-            path: path::search(
-                room,
-                INVADER_OWNER,
-                origin,
-                &[(destination, range_to)],
-                opts,
-            )?,
+            path: path::search(w, INVADER_OWNER, origin, &[(destination, range_to)], opts)?,
         });
     }
     let route = &memory.move_cache.as_ref().expect("缓存已写入").path;
@@ -86,11 +81,12 @@ pub(super) fn move_to(
 }
 
 pub(super) fn flee(
-    room: &RoomState,
+    w: &crate::settle::Working,
     origin: (u8, u8),
     targets: &[ObjId],
     range_to: u8,
 ) -> Result<Option<u8>, SettleError> {
+    let room = &w.room;
     let goals: Vec<_> = targets
         .iter()
         .filter_map(|id| {
@@ -102,7 +98,7 @@ pub(super) fn flee(
         return Ok(None);
     }
     let route = path::search(
-        room,
+        w,
         INVADER_OWNER,
         origin,
         &goals,

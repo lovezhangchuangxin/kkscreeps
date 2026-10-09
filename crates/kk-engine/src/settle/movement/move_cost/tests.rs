@@ -172,7 +172,7 @@ fn working() -> Working {
             combat: engine.combat,
             move_gate: Default::default(),
             quotas: std::rc::Rc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
-            terrain_passability: Default::default(),
+            static_passability: Default::default(),
             resources: engine.resources.clone(),
             contrib: engine.contrib,
             extensions: engine.extensions,

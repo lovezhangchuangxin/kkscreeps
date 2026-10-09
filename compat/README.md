@@ -179,3 +179,7 @@ KKSCREEPS_BIN="$PWD/target/release/kkscreeps" node compat/scripts/bot-gameplay.m
 输出目录须全新。验收与 TooAngel 共用六阶段矩阵：JSON/KKPV 各 2000 tick 连跑、1000 tick 保存及新进程 1000 tick 续跑，每阶段输入回放比较完整检查点；实际出生、死亡后补员、正量采集/搬运/建造/升级、建成 extension、RCL2 与 GCL 增长均设门槛。Overmind 会替换 Memory 以重用解析结果，观察器在原版 loop 后写入当前 Memory，并在完整窗口截获官方 logger 的 FATAL/ERROR/异常输出；不能只检查宿主成功或日志头部。Flag 按官方继承 RoomObject，使原版 ref 补丁及持久任务引用有效。
 
 本片范围是单房经济与寿命/冷恢复，战斗、多房和完整 M2B 验收仍未完成。最新证据见 [Overmind 持续世界汇总](reports/gameplay-overmind/summary.json)。
+
+### 计划级静态对象通行
+
+[公共 JS 声明包](fixtures/mod-static-objects/README.md) 分别放行内建静态障碍/Mod obstacle 建筑/己方障碍工地，或非公开他人 rampart；默认保持原生，两个轴可与墙规则组合。规则贯通默认玩家矩阵与实际移动，NPC 搜索消费同一快照。生物占格、显式 CostMatrix、建造/孵化放置保持原约束；逐房规则尚未实现。机制及双通道/失败重试/冷恢复回归见[移动契约](../docs/architecture/movement.md#静态对象通行声明g02d3-后续)。

@@ -114,7 +114,7 @@ fn completion_writes_declared_field_defaults() {
         combat: kk_mod_api::builtin::CombatRanges::from_plan(plan.rules()).unwrap(),
         move_gate: Default::default(),
         quotas: std::rc::Rc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
-        terrain_passability: Default::default(),
+        static_passability: Default::default(),
         resources: std::rc::Rc::new(kk_mod_api::resources::ResourceCatalog::from_plan(&plan)),
         buildings: std::rc::Rc::new(
             kk_mod_api::buildings::BuildingCatalog::from_plan(&plan).unwrap(),

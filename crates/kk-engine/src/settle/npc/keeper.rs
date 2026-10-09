@@ -62,7 +62,7 @@ pub(super) fn intents(w: &mut Working) -> Result<UserIntents, SettleError> {
             memory.source_id = Some(target.0);
             let position = w.room.objects[&target].pos();
             if range(actor, position) > 1 {
-                let direction = path::direction(&w.room, actor, position, w.time, &mut memory)?;
+                let direction = path::direction(w, actor, position, w.time, &mut memory)?;
                 if let Some(direction) = direction {
                     let mut data = IntentData::bare();
                     data.direction = Some(direction);

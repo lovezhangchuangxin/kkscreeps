@@ -188,9 +188,10 @@ fn builtin_link_values_match_constant_dump_and_use_native_slots() {
         }
     );
     assert_eq!(
-        builtin::TerrainPassability::from_plan(plan.rules()).unwrap(),
-        builtin::TerrainPassability {
+        builtin::StaticPassability::from_plan(plan.rules()).unwrap(),
+        builtin::StaticPassability {
             wall_passable: false,
+            ..Default::default()
         }
     );
     assert_eq!(
@@ -198,8 +199,14 @@ fn builtin_link_values_match_constant_dump_and_use_native_slots() {
         &Number::Signed(0),
         "地形通行默认值即官方墙不可通行"
     );
-    // 155 = 32 − link.rcl0..8（9）+ 配额族（132，官方表全键集）。
-    assert_eq!(plan.rules().len(), 155);
+    for name in [
+        "movement.obstaclesPassable",
+        "movement.privateRampartsPassable",
+    ] {
+        assert_eq!(get(&format!("builtin:{name}")), &Number::Signed(0));
+    }
+    // 157 = 155 既有规则 + 两个静态对象通行轴。
+    assert_eq!(plan.rules().len(), 157);
     assert_eq!(plan.slots().len(), 21);
     for name in builtin::RESOURCE_ACTION_SLOTS
         .iter()

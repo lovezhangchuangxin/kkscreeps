@@ -150,6 +150,14 @@ pub(super) fn install_base(runtime: &mut JsRuntime, config: &SandboxConfig) -> a
     for &(name, source) in SEGMENTS {
         runtime.execute_script(name, source.to_string())?;
     }
+    // 仅私有装配上下文持有声明，玩家装载前 __kkp 会删除；不新增公开常量。
+    runtime.execute_script(
+        "kk-static-passability",
+        format!(
+            "globalThis.__kkp.gw.staticPassability = Object.freeze({{obstaclesPassable:{},privateRampartsPassable:{}}});",
+            config.obstacles_passable, config.private_ramparts_passable
+        ),
+    )?;
     if config.extension_intents {
         runtime.execute_script(
             "kk-prelude-mods-extension-intents",

@@ -586,8 +586,9 @@ fn passability_plane(walls: bool) -> kk_engine::settle::Plane {
         combat: kk_world::place::builtin_combat_ranges(),
         move_gate: Default::default(),
         quotas: std::rc::Rc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
-        terrain_passability: kk_mod_api::builtin::TerrainPassability {
+        static_passability: kk_mod_api::builtin::StaticPassability {
             wall_passable: walls,
+            ..Default::default()
         },
         resources: Default::default(),
         contrib: std::rc::Rc::new(kk_engine::settle::contrib::ContributionDispatch::default()),
@@ -609,7 +610,7 @@ fn wall_terrain(swamp_at_wall: Option<(usize, usize)>) -> kk_core::Terrain {
 }
 
 #[test]
-fn terrain_passability_allows_move_onto_wall_with_plain_fatigue() {
+fn static_passability_allows_move_onto_wall_with_plain_fatigue() {
     // 声明放行墙位：move 意图可入墙格，疲劳按平原费率（重量 1 × 2）。
     let mut f = Fixture::new(1, wall_terrain(None));
     let c = f.creep("w1", "p1", 10, 10, &[BodyKind::Move, BodyKind::Work], 0);
@@ -628,7 +629,7 @@ fn terrain_passability_allows_move_onto_wall_with_plain_fatigue() {
 }
 
 #[test]
-fn terrain_passability_keeps_swamp_fatigue_on_wall_swamp_tile() {
+fn static_passability_keeps_swamp_fatigue_on_wall_swamp_tile() {
     // 墙|沼泽位放行后按沼泽语义计疲劳（重量 1 × 10）。
     let mut f = Fixture::new(1, wall_terrain(Some((11, 10))));
     let c = f.creep("w1", "p1", 10, 10, &[BodyKind::Move, BodyKind::Work], 0);
@@ -638,7 +639,7 @@ fn terrain_passability_keeps_swamp_fatigue_on_wall_swamp_tile() {
 }
 
 #[test]
-fn terrain_passability_does_not_release_dynamic_blocking() {
+fn static_passability_does_not_release_dynamic_blocking() {
     // 声明只放行静态地形面：动态占格（未获准移动的 creep）仍阻挡。
     let mut f = Fixture::new(1, wall_terrain(None));
     let _still = f.creep("still", "p1", 11, 10, &[BodyKind::Move], 0);
@@ -648,7 +649,7 @@ fn terrain_passability_does_not_release_dynamic_blocking() {
 }
 
 #[test]
-fn terrain_passability_keeps_structure_obstacles_blocking() {
+fn static_passability_keeps_structure_obstacles_blocking() {
     // 声明只作用于地形墙项：内建障碍结构不随声明放行（登记与仲裁的
     // 结构判定不读通行声明）。
     let mut f = Fixture::new(1, wall_terrain(None));

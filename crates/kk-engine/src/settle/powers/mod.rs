@@ -175,6 +175,7 @@ fn pc_move(w: &mut Working, id: ObjId, data: &IntentData) {
         &w.room,
         &w.index,
         &w.plane.buildings,
+        w.plane.static_passability,
         target,
         &owner,
     );

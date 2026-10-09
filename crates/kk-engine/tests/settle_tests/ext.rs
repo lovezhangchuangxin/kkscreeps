@@ -231,7 +231,7 @@ fn settle_quiet(
         combat: kk_world::place::builtin_combat_ranges(),
         move_gate: Default::default(),
         quotas: std::rc::Rc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
-        terrain_passability: Default::default(),
+        static_passability: Default::default(),
         buildings: Default::default(),
         resources: Default::default(),
         contrib: dispatch,

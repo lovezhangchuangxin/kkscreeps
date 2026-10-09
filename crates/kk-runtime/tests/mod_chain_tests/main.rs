@@ -270,4 +270,5 @@ mod move_static;
 mod observer_room;
 mod retaliation_faults;
 mod retaliation_policy;
+mod static_objects;
 mod tough_damage;

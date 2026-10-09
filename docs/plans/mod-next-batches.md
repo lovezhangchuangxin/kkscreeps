@@ -4,11 +4,11 @@
 
 ## 当前接手位置
 
-- 更新日期：2026-10-09；普通 Invader 行为与移动记忆恢复已提交 `5c544cf`；持续 NPC 战斗验收已提交 `4a3016e`；Overmind 单房验收随本提交交付。最近完整门禁 Rust 1483 passed / 0 failed；最近 release 棘轮 2802 passed / 8 failed / 104 skipped（0 转红，8 例既有豁免）。本批重跑 TooAngel 持续世界六阶段，没有重跑固定世界三 bot。
+- 更新日期：2026-10-09；普通 Invader 行为与移动记忆恢复已提交 `5c544cf`；持续 NPC 战斗验收已提交 `4a3016e`；Overmind 单房验收已提交 `d4f4403`。最近完整门禁 Rust 1490 passed / 0 failed；最近 release 棘轮 2802 passed / 8 failed / 104 skipped（0 转红，8 例既有豁免）。本批重跑 TooAngel 持续世界六阶段，没有重跑固定世界三 bot。
 - 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座、deposit 采集链、observer 限时视野已交付。**M2H.b 19/19 powers 全部接通**。
-- 当前接手：Overmind 单房经济/寿命/冷恢复验收已收口，接着推进 G02.d3 结构/rampart 的计划级通行与玩家寻路贯通。Flag 原型继承缺口已按官方修复，双通道创建/跨拍/冷恢复回归通过。
+- 当前接手：G02.d3 结构/rampart 计划级通行及默认玩家/NPC 寻路已贯通，随本提交交付；下一项为 G03 障碍追加后的同源链预演，让 JS 组合包检查当前追加阻挡的最终连锁取消结果。逐房通行粒度、摘要增强、完整仲裁替换仍未完成。
 - 本次完成：JSON/KKPV 各 200 tick 持续战斗、100+100 tick 跨进程冷恢复和完整检查点回放；实际位置/hits 证明移动、受伤与恢复，双通道及直跑/续跑世界与 Memory 等值。TooAngel v6 双通道 2000 tick 连跑及 1000+1000 tick 冷恢复六阶段复验通过。
-- 剩余：真实 bot 战斗/多房/长期存活验收；地图生成/raid/stronghold 与 G21 Mod 世界事件；walkTo/Keeper lastMove 按实际 stronghold 消费者接线；G02.d3 后续与 G27.a。NPC 场景不标 M2B 或 G21 完成。
+- 剩余：真实 bot 战斗/多房/长期存活验收；地图生成/raid/stronghold 与 G21 Mod 世界事件；walkTo/Keeper lastMove 按实际 stronghold 消费者接线；G02.d3 逐房/摘要后续、G03 障碍后预演与 G27.a。NPC 场景不标 M2B 或 G21 完成。
 - 兼容率 2802/2914≈96.2%（**95% 中间检查点已越过**；99% 目标需 2885）。
 - Mod 扩展：移动策略、对象/建筑/资源、库存/耐久/受击、作者 CLI/类型、输入回放和检查点已有基础；未完成范围以任务表为准。默认玩法已有消费者不代表对应 Mod 替换能力已经开放。
 - 网络服务、持久 storage 后端与真实游戏客户端仍未实现；renderer R0–R6 已交付，R7 最终矩阵/长测未收口。现有 bot-check 不能代替持续推进世界中的可玩验收。
@@ -20,7 +20,7 @@
 |---|---|---|
 | 1 | 零散红逐例归因与修复 | 8 条既有官方对齐豁免保留证据；Invader 自动远程攻击已交付；零步相邻近战已交付；普通 Invader 路径建筑改向/追击/治疗已贯通；NPC 持续战斗已验，后续为地图/raid/stronghold（Source Keeper 同房巡守/战斗已交付），raid/stronghold 另拆；每例有官方源或套件仲裁证据 |
 | 2 | 真实 bot 验收与 G02.d3 后续 | TooAngel 单房经济/死亡后补员/冷恢复已验；Overmind 单房经济/寿命/冷恢复已验；剩余真实 bot 战斗、多房，以及结构/rampart 通行与寻路贯通 |
-| 独立候选 | G02.d3 后续、G27.a | 前者贯通结构/rampart 通行与寻路；后者提供异步后台生命周期，随后才接 storage/outbox/网络 |
+| 独立候选 | G02.d3 后续、G27.a | 前者继续逐房粒度与摘要增强（结构/rampart 已贯通）；后者提供异步后台生命周期，随后才接 storage/outbox/网络 |
 
 维护优化已完成的轮次不作为新功能前置。任务首次实施前按业务闭环拆片；G30.a 覆盖清单与 G30.d 同功能参考随领域滚动，不等最终收口才补证据。
 
@@ -46,7 +46,7 @@
 | 编号 | 任务 | 状态 | 已完成与剩余范围 / 入口 |
 |---|---|---|---|
 | G01 | 移动竞争优先级 | 已完成 | [竞争排序](../architecture/movement.md#竞争排序)；排序能力不等于完整仲裁 |
-| G02 | 移动准入 | 部分完成 | .a 准入、.b 障碍追加、.c 请求预检、.d1 静态放行、.d2 双端玩家门、.d3 墙通行声明已交付；剩余结构/rampart 通行、逐房粒度及摘要增强；[移动契约](../architecture/movement.md) |
+| G02 | 移动准入 | 部分完成 | .a 准入、.b 障碍追加、.c 请求预检、.d1 静态放行、.d2 双端玩家门、.d3 墙与静态对象/rampart 通行声明已贯通；剩余逐房粒度及摘要增强；[移动契约](../architecture/movement.md) |
 | G03 | 完整房间仲裁 | 部分完成 | .a 请求视野/链预演与 pull 登记已开放；剩余障碍槽第二预演、完整仲裁替换；[移动契约](../architecture/movement.md) |
 | G04 | 移动代价与效果 | 部分完成 | .a 代价槽已交付；剩余疲劳恢复、重量评分要素；[移动契约](../architecture/movement.md) |
 | G05 | 作者 CLI | 已完成 | mod init/test；[本地模拟](../architecture/local-simulation.md#作者包模板)，增强按实际痛点另拆 |
@@ -285,3 +285,15 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - 六阶段矩阵实际通过：JSON/KKPV 各 2000 tick 连跑、1000+1000 tick 跨进程冷恢复，每阶段完整检查点回放相等；四份终态实际出生 21–24、死亡 5、死亡后出生 16–19，采集 25728–26704、搬运 3270–4594、建造 6500–9870、升级/GCL 增长 350–500，均 RCL2、建成 extension、无捕获异常。报告见 [Overmind 汇总](../../compat/reports/gameplay-overmind/summary.json)。独立运行按业务条件验收，不宣称随机名称/CPU/最终世界跨运行逐位等值。
 - Flag 修复定向门禁通过；release CLI 重建、固定 bot 准备、适配器重建后 release 棘轮 2802 passed / 8 failed / 104 skipped、0 转红/0 转绿（既有 8 豁免）。最终完整无参数 `pnpm run check` 通过：Rust 1483 passed / 0 failed，Clippy、debug CLI、JS workspace/维护工具、文档链接与 916 个源码/测试文件规模通过；JS 格式检查通过。无 doctest 或新增保存域。
 - 本片代码/场景/报告、沙箱及模拟契约、使用说明与 roadmap 随提交交付；下一项 G02.d3 后续。真实 bot 战斗、多房和长期验收仍未完成，不标 M2B 完成。
+
+## 2026-10-09 G02.d3 静态对象通行后续（已完成，随本提交交付）
+
+- 基线 `d4f4403`，起始工作区干净；按执行队列继续计划级通行，单值规则分别控制静态障碍对象（内建 OBSTACLE_OBJECT_TYPES 中非生物项及 Mod obstacle 建筑/己方障碍工地）和私有他人 rampart。默认保持原生；动态 creep/powerCreep 占格、portal 默认寻路避让、建造/孵化放置不随规则改变。
+- 两个布尔规则实现为 builtin:movement.obstaclesPassable 与 builtin:movement.privateRampartsPassable；冻结快照同源驱动登记/仲裁/预检摘要、默认玩家矩阵和 NPC 矩阵。自定义 CostMatrix 仍由玩家控制，不抹除其显式 255。既有墙规则同时核对 NPC 寻路消费。
+- 无新增持久域；有效规则/计划身份沿现有检查点保存，catalog revision 更新并沿身份门拒绝旧计划。补双通道原生/两独立 JS 包/组合、真实移动、失败重试与冷恢复；逐房粒度及摘要增强仍未完成。
+
+- 实现：StaticPassability 三轴同源快照替代旧墙旗标，单独模块持有目录与值域解析；Engine 安装候选、Working/Movement 与链预演携带快照，两个 creep 请求入口及 powerCreep 登记同步；玩家沙箱私有装配同源值，不新增公开全局。NPC 寻路同步墙与对象声明，并补 Mod 建筑 obstacle/road 的目录消费，保留原版搜索选项与缓存时效。
+- 定向 7 条 Rust 回归通过：JSON/KKPV，静态障碍/私有、自有、公开 rampart/两轴组合、己方及他人工地、玩家显式 255、Mod 建筑完工/创建拒绝、powerCreep、动态生物占格/两个否决槽、两独立包、同规则冲突/非法值、晚期写回失败缓存重试及带真实包身份冷恢复、Keeper 对象/墙搜索。首轮失败为测试夹具：跨房 costCallback 覆盖采样、原生局部路径向后绕行并非原地不动、mineral 必需字段、恢复须提供相同源码身份的 Mod 包；已按实测消费修复，未放松越障/执行等值要求。
+- 公共三个声明包与使用说明、现行移动/源码组织契约和完整玩法计划已更新；builtin revision v20、规则总数 157，沿既有规则/计划保存，无新增写入域。完整无参数 `pnpm run check` 通过：Rust 1490 passed / 0 failed，Clippy、debug CLI、JS workspace/维护工具、304 个 Markdown / 1955 个本地链接与 921 个源码/测试文件规模通过。release CLI 重建、固定 bot 准备与适配器构建通过；显式 release 棘轮 2802 passed / 8 failed / 104 skipped、floor 2802、0 转红/0 转绿（8 例既有豁免）。JS 格式检查通过，无 doctest 改动；本片未重跑 bot 长测，不以之前报告宣称本片长测。
+
+- 本批实现/测试/示例/契约及兼容报告随提交交付，无实现残项；下一片 G03 障碍槽第二预演。G02/G03 父项仍部分完成，不标完整移动替换。

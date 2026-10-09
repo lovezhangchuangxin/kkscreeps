@@ -2,12 +2,9 @@
 use kk_core::constants as c;
 use kk_pathfinder::{CostMatrix, Goal, RoomDecision, SearchOptions, TerrainSet, WorldPosition};
 use kk_schema::room::RoomObject;
-use kk_world::{
-    RoomState,
-    domain::{
-        keeper::OWNER,
-        keeper_memory::{KeeperMemory, KeeperPath},
-    },
+use kk_world::domain::{
+    keeper::OWNER,
+    keeper_memory::{KeeperMemory, KeeperPath},
 };
 
 use crate::settle::{SettleError, movement};
@@ -22,13 +19,25 @@ pub(super) struct Options {
 }
 
 pub(super) fn search(
-    room: &RoomState,
+    w: &crate::settle::Working,
     owner: &str,
     origin: (u8, u8),
     goals: &[((u8, u8), u32)],
     opts: Options,
 ) -> Result<Vec<[u8; 2]>, SettleError> {
-    let tiles = std::array::from_fn(|y| std::array::from_fn(|x| room.terrain().get(x, y)));
+    let room = &w.room;
+    let passability = w.plane.static_passability;
+    let buildings = &w.plane.buildings;
+    let tiles = std::array::from_fn(|y| {
+        std::array::from_fn(|x| {
+            room.terrain().get(x, y)
+                & if passability.wall_passable {
+                    !kk_core::TERRAIN_MASK_WALL
+                } else {
+                    u8::MAX
+                }
+        })
+    });
     let terrain = TerrainSet::new([(room.name.clone(), kk_pathfinder::pack_terrain(&tiles))])
         .map_err(|e| SettleError(e.to_string()))?;
     let mut costs = CostMatrix::new();
@@ -53,20 +62,28 @@ pub(super) fn search(
                     "lab",
                     "terminal",
                 ]
-                .contains(&kind.as_ref());
-        let mut blocked =
-            !ignored && (c::OBSTACLE_OBJECT_TYPES.contains(&kind.as_ref()) || kind == "portal");
+                .contains(&kind.as_ref())
+            || opts.ignore_destructible && buildings.is_obstacle(&kind);
+        let mut blocked = !ignored
+            && (kind == "portal"
+                || ((matches!(kind.as_ref(), "creep" | "powerCreep")
+                    || !passability.obstacles_passable)
+                    && (c::OBSTACLE_OBJECT_TYPES.contains(&kind.as_ref())
+                        || buildings.is_obstacle(&kind))));
         if let RoomObject::Generic(g) = o {
             let data: serde_json::Value = serde_json::from_str(&g.data).unwrap_or_default();
             blocked |= !opts.ignore_destructible
+                && !passability.private_ramparts_passable
                 && kind == "rampart"
                 && !data["isPublic"].as_bool().unwrap_or(false)
                 && data["owner"].as_str() != Some(owner);
         }
         if let RoomObject::ConstructionSite(site) = o {
             blocked |= !opts.ignore_destructible
+                && !passability.obstacles_passable
                 && site.owner.as_deref() == Some(owner)
-                && c::OBSTACLE_OBJECT_TYPES.contains(&site.structure_type.as_str());
+                && (c::OBSTACLE_OBJECT_TYPES.contains(&site.structure_type.as_str())
+                    || buildings.is_obstacle(&site.structure_type));
         }
         if blocked {
             let (x, y) = o.pos();
@@ -82,7 +99,12 @@ pub(super) fn search(
                 );
             }
         }
-        if !opts.ignore_roads && matches!(o, RoomObject::Road(_)) {
+        if !opts.ignore_roads
+            && (matches!(o, RoomObject::Road(_))
+                || buildings
+                    .get(&kind)
+                    .is_some_and(|b| b.pathing == kk_mod_api::buildings::BuildingPathing::Road))
+        {
             let (x, y) = o.pos();
             // 官方 Uint8 矩阵的 255 仍小于 Infinity，因此道路无条件覆盖。
             costs.set(x as usize, y as usize, 1);
@@ -131,7 +153,7 @@ pub(super) fn search(
 }
 
 pub(super) fn direction(
-    room: &RoomState,
+    w: &crate::settle::Working,
     origin: (u8, u8),
     destination: (u8, u8),
     time: u64,
@@ -144,7 +166,7 @@ pub(super) fn direction(
         memory.move_cache = Some(KeeperPath {
             destination: dest,
             time,
-            path: search(room, OWNER, origin, &[(destination, 1)], Options::default())?,
+            path: search(w, OWNER, origin, &[(destination, 1)], Options::default())?,
         });
     }
     let cache = memory.move_cache.as_ref().expect("路径已装入");

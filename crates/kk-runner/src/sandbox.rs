@@ -51,6 +51,9 @@ pub struct SandboxConfig {
     /// 清除墙位（Frozen 通道的快照由宿主构建时已应用）。默认 false
     /// 即官方「墙不可通行」；不影响物理地形查询。
     pub terrain_walls_passable: bool,
+    /// 计划级静态对象通行；只改变默认寻路矩阵，生物占格和玩家矩阵保持。
+    pub obstacles_passable: bool,
+    pub private_ramparts_passable: bool,
 }
 
 impl Default for SandboxConfig {
@@ -66,6 +69,8 @@ impl Default for SandboxConfig {
             mod_api: None,
             install_wall_limit: None,
             terrain_walls_passable: false,
+            obstacles_passable: false,
+            private_ramparts_passable: false,
         }
     }
 }

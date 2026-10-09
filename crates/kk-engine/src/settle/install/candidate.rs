@@ -2,7 +2,7 @@
 use crate::settle::{Engine, contrib::ContributionDispatch};
 use kk_mod_api::buildings::BuildingCatalog;
 use kk_mod_api::builtin::{
-    CombatRanges, LinkRules, MoveGate, StoreRules, StructureQuotaSnapshot, TerrainPassability,
+    CombatRanges, LinkRules, MoveGate, StaticPassability, StoreRules, StructureQuotaSnapshot,
 };
 use kk_mod_api::extension::ExtensionCatalog;
 use kk_mod_api::resources::ResourceCatalog;
@@ -18,7 +18,7 @@ pub(super) struct Installation {
     stores: StoreRules,
     combat: CombatRanges,
     move_gate: MoveGate,
-    terrain_passability: TerrainPassability,
+    static_passability: StaticPassability,
     quotas: Rc<StructureQuotaSnapshot>,
     resources: Rc<ResourceCatalog>,
     buildings: Rc<BuildingCatalog>,
@@ -38,7 +38,7 @@ impl Installation {
         let stores = StoreRules::from_plan(plan.rules())?;
         let combat = CombatRanges::from_plan(plan.rules())?;
         let move_gate = MoveGate::from_plan(plan.rules())?;
-        let terrain_passability = TerrainPassability::from_plan(plan.rules())?;
+        let static_passability = StaticPassability::from_plan(plan.rules())?;
         let quotas = Rc::new(StructureQuotaSnapshot::from_plan(plan.rules())?);
         let resources = Rc::new(ResourceCatalog::from_plan(&plan));
         let buildings = Rc::new(
@@ -69,7 +69,7 @@ impl Installation {
             stores,
             combat,
             move_gate,
-            terrain_passability,
+            static_passability,
             quotas,
             resources,
             buildings,
@@ -84,7 +84,7 @@ impl Installation {
         engine.stores = self.stores;
         engine.combat = self.combat;
         engine.move_gate = self.move_gate;
-        engine.terrain_passability = self.terrain_passability;
+        engine.static_passability = self.static_passability;
         engine.quotas = self.quotas;
         engine.resources = self.resources;
         engine.buildings = self.buildings;

@@ -59,6 +59,7 @@ pub(in crate::settle) fn intent_move(w: &mut Working, id: ObjId, data: &IntentDa
         &w.room,
         &w.index,
         &w.plane.buildings,
+        w.plane.static_passability,
         target,
         &mover_owner,
     );
@@ -107,6 +108,7 @@ pub fn slot_request_direction(w: &mut Working, id: ObjId, direction: u8) -> Resu
         &w.room,
         &w.index,
         &w.plane.buildings,
+        w.plane.static_passability,
         target,
         &creep.owner,
     );

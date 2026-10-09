@@ -24,7 +24,7 @@ pub(super) fn intents(
     let have_attack = active(actor, BodyKind::Attack);
     if !have_attack
         && active(actor, BodyKind::RangedAttack)
-        && let Some(direction) = invader_path::flee(&w.room, pos, hostiles, 3)?
+        && let Some(direction) = invader_path::flee(w, pos, hostiles, 3)?
     {
         actions.insert(Action::Move, super::move_intent(direction));
         return Ok(());
@@ -38,17 +38,11 @@ pub(super) fn intents(
         && !healers.is_empty()
         && !have_attack
     {
-        target = invader_path::closest(&w.room, pos, healers, roads)?;
+        target = invader_path::closest(w, pos, healers, roads)?;
         if let Some(id) = target {
-            if let Some(direction) = invader_path::move_to(
-                &w.room,
-                pos,
-                w.room.objects[&id].pos(),
-                0,
-                roads,
-                w.time,
-                memory,
-            )? {
+            if let Some(direction) =
+                invader_path::move_to(w, pos, w.room.objects[&id].pos(), 0, roads, w.time, memory)?
+            {
                 actions.insert(Action::Move, super::move_intent(direction));
             } else {
                 target = None;
@@ -79,18 +73,11 @@ pub(super) fn intents(
         if target.is_some() {
             break;
         }
-        target = invader_path::closest(&w.room, pos, hostiles, opts)?;
+        target = invader_path::closest(w, pos, hostiles, opts)?;
         if let Some(id) = target
             && (have_attack || range(pos, w.room.objects[&id].pos()) > 3)
-            && let Some(direction) = invader_path::move_to(
-                &w.room,
-                pos,
-                w.room.objects[&id].pos(),
-                0,
-                opts,
-                w.time,
-                memory,
-            )?
+            && let Some(direction) =
+                invader_path::move_to(w, pos, w.room.objects[&id].pos(), 0, opts, w.time, memory)?
         {
             actions.insert(Action::Move, super::move_intent(direction));
         }
@@ -103,7 +90,7 @@ pub(super) fn intents(
             }
             let dest = o.pos();
             let route = path::search(
-                &w.room,
+                w,
                 kk_world::domain::npc::INVADER_OWNER,
                 pos,
                 &[(dest, 0)],
@@ -126,7 +113,7 @@ pub(super) fn intents(
         }
         if let Some(id) = unreachable
             && let Some(direction) = invader_path::move_to(
-                &w.room,
+                w,
                 pos,
                 w.room.objects[&id].pos(),
                 0,

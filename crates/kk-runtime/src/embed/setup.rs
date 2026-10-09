@@ -366,7 +366,7 @@ impl EmbedEngine {
                 // 地形通行声明同步预检沙箱：json/kkpv 通道的原生寻路
                 // 地形与结算静态障碍判定读同一生效值。
                 let terrain =
-                    kk_mod_api::builtin::TerrainPassability::from_plan(registered.plan.rules())
+                    kk_mod_api::builtin::StaticPassability::from_plan(registered.plan.rules())
                         .map_err(anyhow::Error::msg)?;
                 // 建筑 RCL 配额族同步预检沙箱：工地创建预检读的
                 // CONTROLLER_STRUCTURES 与结算配额快照同一计划来源。
@@ -385,6 +385,8 @@ impl EmbedEngine {
                     constant_overrides,
                     mod_api: Some(api.clone()),
                     terrain_walls_passable: terrain.wall_passable,
+                    obstacles_passable: terrain.obstacles_passable,
+                    private_ramparts_passable: terrain.private_ramparts_passable,
                     ..kk_runner::SandboxConfig::default()
                 })
                 .map_err(|error| anyhow::anyhow!("Mod 玩家面预检失败：{error}"))?;
@@ -464,7 +466,10 @@ impl EmbedEngine {
             }
             // 地形通行声明同步玩家沙箱：json/kkpv 通道的原生寻路地形与
             // 结算静态障碍判定（引擎 Plane）读同一生效值。
-            config.terrain_walls_passable = self.engine.terrain_passability().wall_passable;
+            let passability = self.engine.static_passability();
+            config.terrain_walls_passable = passability.wall_passable;
+            config.obstacles_passable = passability.obstacles_passable;
+            config.private_ramparts_passable = passability.private_ramparts_passable;
             // 建筑 RCL 配额族同步玩家全局常量：createConstructionSite 与
             // isActive 预检读同一生效表；结算侧读 Plane 配额快照。
             config.constant_overrides.insert(

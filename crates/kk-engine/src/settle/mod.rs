@@ -234,7 +234,7 @@ pub struct Engine {
     pub(crate) move_gate: kk_mod_api::builtin::MoveGate,
     /// 地形静态通行规则：仲裁静态障碍判定的墙项与玩家面原生寻路地形
     /// 同源消费；与计划一同装配。
-    pub(crate) terrain_passability: kk_mod_api::builtin::TerrainPassability,
+    pub(crate) static_passability: kk_mod_api::builtin::StaticPassability,
     /// 内建结构 RCL 配额快照（G11.a）：结算配额判定与玩家面
     /// CONTROLLER_STRUCTURES 常量注入同源消费；与计划一同装配。
     pub(crate) quotas: Rc<kk_mod_api::builtin::StructureQuotaSnapshot>,
@@ -297,7 +297,7 @@ impl Engine {
             stores: kk_world::place::builtin_store_rules(),
             combat: kk_world::place::builtin_combat_ranges(),
             move_gate: kk_world::place::builtin_move_gate(),
-            terrain_passability: kk_mod_api::builtin::TerrainPassability::default(),
+            static_passability: kk_mod_api::builtin::StaticPassability::default(),
             quotas: Rc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
             resources: Rc::new(kk_mod_api::resources::ResourceCatalog::default()),
             buildings: Rc::new(kk_mod_api::buildings::BuildingCatalog::default()),
@@ -361,8 +361,8 @@ impl Engine {
 
     /// 当前生效的地形静态通行规则（只读快照）；runtime 将它同步到玩家
     /// 沙箱的原生寻路地形。
-    pub fn terrain_passability(&self) -> kk_mod_api::builtin::TerrainPassability {
-        self.terrain_passability
+    pub fn static_passability(&self) -> kk_mod_api::builtin::StaticPassability {
+        self.static_passability
     }
 
     /// 当前生效的结构配额快照：结算配额判定与 runtime 的
