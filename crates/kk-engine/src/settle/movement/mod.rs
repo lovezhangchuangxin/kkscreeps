@@ -389,14 +389,36 @@ impl Movement {
         overrides: &BTreeMap<ObjId, bool>,
     ) -> BTreeSet<ObjId> {
         debug_assert!(self.extra_blocks.is_empty(), "链预演只在障碍槽追加之前可用");
+        self.simulate_with_blocks(room, index, safe_mode_user, overrides, &BTreeSet::new())
+    }
+
+    /// 障碍槽按当前追加集预演；准入终值已经固定，仍复用同一取消链。
+    pub(crate) fn simulate_obstacle_survivors(
+        &self,
+        room: &RoomState,
+        index: &RoomIndex,
+        safe_mode_user: Option<&str>,
+        blocks: &BTreeSet<ObjId>,
+    ) -> BTreeSet<ObjId> {
+        self.simulate_with_blocks(room, index, safe_mode_user, &self.admissions, blocks)
+    }
+
+    fn simulate_with_blocks(
+        &self,
+        room: &RoomState,
+        index: &RoomIndex,
+        safe_mode_user: Option<&str>,
+        admissions: &BTreeMap<ObjId, bool>,
+        blocks: &BTreeSet<ObjId>,
+    ) -> BTreeSet<ObjId> {
         let mut sim = Movement {
             matrix: self.matrix.clone(),
             winners: self.winners.clone(),
             original_requests: BTreeMap::new(),
             pull_of: BTreeMap::new(),
             pulled_by: BTreeMap::new(),
-            admissions: overrides.clone(),
-            extra_blocks: self.extra_blocks.clone(),
+            admissions: admissions.clone(),
+            extra_blocks: self.extra_blocks.union(blocks).copied().collect(),
             // 链预演不消费代价覆盖；取消链不读代价表。
             costs: BTreeMap::new(),
             buildings: self.buildings.clone(),

@@ -17,7 +17,9 @@ pub(crate) use contest::{op_mod_chain_contest_priority, op_mod_chain_contest_set
 mod move_cost;
 pub(crate) use move_cost::{op_mod_chain_cost_fatigue_of, op_mod_chain_cost_set_fatigue};
 mod obstacle;
-pub(crate) use obstacle::{op_mod_chain_obstacle_block, op_mod_chain_obstacle_blocked};
+pub(crate) use obstacle::{
+    op_mod_chain_obstacle_block, op_mod_chain_obstacle_blocked, op_mod_chain_obstacle_evaluate,
+};
 mod precheck;
 pub(crate) use precheck::{
     op_mod_chain_precheck_allow_static, op_mod_chain_precheck_block, op_mod_chain_precheck_blocked,

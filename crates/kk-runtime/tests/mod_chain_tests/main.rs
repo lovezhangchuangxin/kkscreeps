@@ -268,6 +268,7 @@ mod move_precheck;
 mod move_pull_registration;
 mod move_static;
 mod observer_room;
+mod obstacle_preview;
 mod retaliation_faults;
 mod retaliation_policy;
 mod static_objects;

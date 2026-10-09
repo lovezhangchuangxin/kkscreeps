@@ -36,3 +36,21 @@ pub(crate) fn op_mod_chain_obstacle_block(
     let result = chain.host.obstacle_block(&id);
     chain.outcome(ModFaultKind::Write, Some(&binding), result)
 }
+
+/// 追加后的只读链预演；令牌、所属能力与故障留存沿既有读 op。
+#[op2]
+#[serde]
+pub(crate) fn op_mod_chain_obstacle_evaluate(
+    state: &mut OpState,
+    #[string] token: String,
+    #[string] binding: String,
+) -> Result<Vec<String>, JsErrorBox> {
+    let chain = active(state, &token)?;
+    chain.checked_binding(&binding)?;
+    let _timer = chain
+        .profiler
+        .as_ref()
+        .map(|p| p.measure("host_obstacle_evaluate"));
+    let result = chain.host.obstacle_evaluate();
+    chain.outcome(ModFaultKind::Read, Some(&binding), result)
+}

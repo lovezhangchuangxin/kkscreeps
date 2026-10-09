@@ -187,6 +187,20 @@ impl Working {
         )
     }
 
+    /// 障碍槽只读预演：追加候选与固定准入终值共同进入正式取消链。
+    pub fn movement_simulate_obstacle_survivors(
+        &self,
+        blocks: &BTreeSet<ObjId>,
+    ) -> BTreeSet<ObjId> {
+        let safe_mode_user = self.active_safe_mode_user();
+        self.movement.simulate_obstacle_survivors(
+            &self.room,
+            &self.index,
+            safe_mode_user.as_deref(),
+            blocks,
+        )
+    }
+
     /// 仲裁阶段四：按准入终值取消阻塞链，使用此时生效的安全模式主人。
     pub fn finish_movement(&mut self) {
         let safe_mode_user = self.active_safe_mode_user();

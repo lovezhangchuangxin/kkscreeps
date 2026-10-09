@@ -22,6 +22,9 @@ pub trait MovementHost {
     fn obstacle_block(&mut self, _id: &str) -> Result<(), String> {
         Err("本次槽没有移动障碍能力".into())
     }
+    fn obstacle_evaluate(&mut self) -> Result<Vec<String>, String> {
+        Err("本次槽没有移动障碍能力".into())
+    }
     fn precheck_blocked(&mut self, _id: &str) -> Result<bool, String> {
         Err("本次槽没有移动预检能力".into())
     }

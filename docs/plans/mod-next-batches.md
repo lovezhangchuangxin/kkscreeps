@@ -4,11 +4,11 @@
 
 ## 当前接手位置
 
-- 更新日期：2026-10-09；普通 Invader 行为与移动记忆恢复已提交 `5c544cf`；持续 NPC 战斗验收已提交 `4a3016e`；Overmind 单房验收已提交 `d4f4403`。最近完整门禁 Rust 1490 passed / 0 failed；最近 release 棘轮 2802 passed / 8 failed / 104 skipped（0 转红，8 例既有豁免）。本批重跑 TooAngel 持续世界六阶段，没有重跑固定世界三 bot。
+- 更新日期：2026-10-09；普通 Invader 行为与移动记忆恢复已提交 `5c544cf`；持续 NPC 战斗验收已提交 `4a3016e`；Overmind 单房验收已提交 `d4f4403`。最近完整门禁 Rust 1497 passed / 0 failed；最近 release 棘轮 2802 passed / 8 failed / 104 skipped（0 转红，8 例既有豁免）。本批重跑 TooAngel 持续世界六阶段，没有重跑固定世界三 bot。
 - 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座、deposit 采集链、observer 限时视野已交付。**M2H.b 19/19 powers 全部接通**。
-- 当前接手：G02.d3 结构/rampart 计划级通行及默认玩家/NPC 寻路已贯通，随本提交交付；下一项为 G03 障碍追加后的同源链预演，让 JS 组合包检查当前追加阻挡的最终连锁取消结果。逐房通行粒度、摘要增强、完整仲裁替换仍未完成。
+- 当前接手：G02.d3 结构/rampart 计划级通行及默认玩家/NPC 寻路已提交 `fd27fbd`；G03 障碍追加后的同源链预演已完成并待本批提交；下一项补齐障碍摘要的安全模式主人。逐房通行粒度、摘要增强、完整仲裁替换仍未完成。
 - 本次完成：JSON/KKPV 各 200 tick 持续战斗、100+100 tick 跨进程冷恢复和完整检查点回放；实际位置/hits 证明移动、受伤与恢复，双通道及直跑/续跑世界与 Memory 等值。TooAngel v6 双通道 2000 tick 连跑及 1000+1000 tick 冷恢复六阶段复验通过。
-- 剩余：真实 bot 战斗/多房/长期存活验收；地图生成/raid/stronghold 与 G21 Mod 世界事件；walkTo/Keeper lastMove 按实际 stronghold 消费者接线；G02.d3 逐房/摘要后续、G03 障碍后预演与 G27.a。NPC 场景不标 M2B 或 G21 完成。
+- 剩余：真实 bot 战斗/多房/长期存活验收；地图生成/raid/stronghold 与 G21 Mod 世界事件；walkTo/Keeper lastMove 按实际 stronghold 消费者接线；G02.d3 逐房/摘要后续、G03 完整仲裁替换与 G27.a。NPC 场景不标 M2B 或 G21 完成。
 - 兼容率 2802/2914≈96.2%（**95% 中间检查点已越过**；99% 目标需 2885）。
 - Mod 扩展：移动策略、对象/建筑/资源、库存/耐久/受击、作者 CLI/类型、输入回放和检查点已有基础；未完成范围以任务表为准。默认玩法已有消费者不代表对应 Mod 替换能力已经开放。
 - 网络服务、持久 storage 后端与真实游戏客户端仍未实现；renderer R0–R6 已交付，R7 最终矩阵/长测未收口。现有 bot-check 不能代替持续推进世界中的可玩验收。
@@ -47,7 +47,7 @@
 |---|---|---|---|
 | G01 | 移动竞争优先级 | 已完成 | [竞争排序](../architecture/movement.md#竞争排序)；排序能力不等于完整仲裁 |
 | G02 | 移动准入 | 部分完成 | .a 准入、.b 障碍追加、.c 请求预检、.d1 静态放行、.d2 双端玩家门、.d3 墙与静态对象/rampart 通行声明已贯通；剩余逐房粒度及摘要增强；[移动契约](../architecture/movement.md) |
-| G03 | 完整房间仲裁 | 部分完成 | .a 请求视野/链预演与 pull 登记已开放；剩余障碍槽第二预演、完整仲裁替换；[移动契约](../architecture/movement.md) |
+| G03 | 完整房间仲裁 | 部分完成 | .a 请求视野/链预演与 pull 登记已开放；障碍槽第二预演已开放；剩余完整仲裁替换；[移动契约](../architecture/movement.md) |
 | G04 | 移动代价与效果 | 部分完成 | .a 代价槽已交付；剩余疲劳恢复、重量评分要素；[移动契约](../architecture/movement.md) |
 | G05 | 作者 CLI | 已完成 | mod init/test；[本地模拟](../architecture/local-simulation.md#作者包模板)，增强按实际痛点另拆 |
 | G06 | trace 与故障复现 | 部分完成 | .a 槽 trace / --mod-trace 已交付；剩余过滤、停用阈值、一键复现；[trace](../architecture/mod-trace.md) |
@@ -297,3 +297,14 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - 公共三个声明包与使用说明、现行移动/源码组织契约和完整玩法计划已更新；builtin revision v20、规则总数 157，沿既有规则/计划保存，无新增写入域。完整无参数 `pnpm run check` 通过：Rust 1490 passed / 0 failed，Clippy、debug CLI、JS workspace/维护工具、304 个 Markdown / 1955 个本地链接与 921 个源码/测试文件规模通过。release CLI 重建、固定 bot 准备与适配器构建通过；显式 release 棘轮 2802 passed / 8 failed / 104 skipped、floor 2802、0 转红/0 转绿（8 例既有豁免）。JS 格式检查通过，无 doctest 改动；本片未重跑 bot 长测，不以之前报告宣称本片长测。
 
 - 本批实现/测试/示例/契约及兼容报告随提交交付，无实现残项；下一片 G03 障碍槽第二预演。G02/G03 父项仍部分完成，不标完整移动替换。
+
+## 2026-10-09 G03 障碍追加后链预演（完成）
+
+- 基线 `fd27fbd`，起始工作区干净；按移动领域实际消费者继续，不等待小任务确认。新增 ctx.obstacle.evaluate()，按调用时当前追加阻挡和已经提交的准入终值运行与正式取消链同一代码，返回幸存胜者 ID 升序集合；不写世界、不改变候选，不提供解除阻挡或重选落选者。
+- 验收包括多次调用/继续追加、交换/循环/跟随链/拉拽、静态放行与动态生物占格、准入覆盖、双通道、能力所属槽/过期及 catch+decline 故障、正常拒绝回退、晚期写回失败缓存重试及冷恢复。瞬态候选无新保存域，目录 revision 同步能力变化；完整仲裁替换和逐房通行粒度仍未完成。
+
+- 实现已接 ctx.obstacle.evaluate 的 SDK/读 op/能力门与预算归属，经当前追加集脱离快照委托 Working；准入与障碍预演共用 simulate_with_blocks/cancel_blocked，后者锁定已经发布的准入终值，前者仍为障碍前上界。调用不消费阻挡或改变正式赢家。
+- 前五组定向回归通过；追加两包组合与安全模式后，组合通过，安全模式夹具首次因未声明 safeModeAvailable 导致原版返回 ERR_NOT_ENOUGH_RESOURCES，已显式提供可用次数并重跑。第一次完整门禁仍使用修复前编译测试而失败，不登记通过；最终七组定向回归与无参数完整门禁已通过：Rust 1497 passed / 0 failed，Clippy、JS workspace/维护工具、源码规模 922 个文件均通过。
+- 公共使用说明/既有障碍样例 README 与移动契约已更新，catalog revision v21。无新增保存域/版本；准入/追加候选仍为瞬态，冷恢复只保存真实世界与已提交 Mod state/Memory。G03 完整仲裁替换仍未完成。
+
+- release CLI 重建、固定 bot 准备、适配器构建与显式 release 棘轮通过：2802 passed / 8 failed / 104 skipped，floor 2802，0 转红/0 转绿（8 例既有豁免）；JS 格式检查通过，无 doctest 改动。去除误重复的静态通行正文后，文档链接复验通过：304 个 Markdown / 1951 个本地链接。未重跑 bot 长测。实现/测试/使用说明/兼容报告随本批提交；下一项安全模式主人摘要，G02/G03 父项仍部分完成。

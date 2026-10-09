@@ -65,6 +65,11 @@ impl MoveObstacle {
         Ok(())
     }
 
+    /// 当前追加集的脱离副本；预演读取它，不消费或修改候选。
+    pub fn blocks_snapshot(&self) -> BTreeSet<ObjId> {
+        self.blocked.borrow().clone()
+    }
+
     /// 取出追加集（接管所有权）；只在链成功后由引擎调用一次。
     pub fn into_blocks(&self) -> BTreeSet<ObjId> {
         std::mem::take(&mut *self.blocked.borrow_mut())

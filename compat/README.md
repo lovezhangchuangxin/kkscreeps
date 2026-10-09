@@ -183,3 +183,7 @@ KKSCREEPS_BIN="$PWD/target/release/kkscreeps" node compat/scripts/bot-gameplay.m
 ### 计划级静态对象通行
 
 [公共 JS 声明包](fixtures/mod-static-objects/README.md) 分别放行内建静态障碍/Mod obstacle 建筑/己方障碍工地，或非公开他人 rampart；默认保持原生，两个轴可与墙规则组合。规则贯通默认玩家矩阵与实际移动，NPC 搜索消费同一快照。生物占格、显式 CostMatrix、建造/孵化放置保持原约束；逐房规则尚未实现。机制及双通道/失败重试/冷恢复回归见[移动契约](../docs/architecture/movement.md#静态对象通行声明g02d3-后续)。
+
+### 移动障碍后的链预演
+
+公共 SDK 的 `ctx.obstacle.evaluate()` 只读预演当前追加阻挡后的正式取消链，帮助多个 JS 策略组合时观察交换/跟随/拉拽的级联后果。它只在障碍槽同步窗口有效，不消费候选；继续追加、后续钩子或 decline 会使先前结果失效。使用示例与范围见[障碍场景说明](fixtures/sim-mod-move-obstacle/README.md#障碍后预演当前能力)。

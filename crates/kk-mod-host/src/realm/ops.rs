@@ -54,6 +54,7 @@ extension!(
         op_mod_chain_admission_evaluate,
         op_mod_chain_obstacle_blocked,
         op_mod_chain_obstacle_block,
+        op_mod_chain_obstacle_evaluate,
         op_mod_chain_precheck_blocked,
         op_mod_chain_precheck_block,
         op_mod_chain_precheck_allow_static,

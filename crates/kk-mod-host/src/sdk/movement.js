@@ -202,6 +202,9 @@ export function createMovement({ ops, token, fault, write }) {
           return ops.op_mod_chain_obstacle_block(token, key, id);
         });
       },
+      evaluate() {
+        return checked(() => ops.op_mod_chain_obstacle_evaluate(token, key));
+      },
     });
   }
   return { movement, contest, admission, precheck, pull, cost, obstacle };

@@ -47,6 +47,15 @@ impl kk_mod_host::MovementHost for ModChainContext {
         let id = ObjId::parse(id).ok_or("胜者 ID 非法")?;
         obstacle.block(id)
     }
+    fn obstacle_evaluate(&mut self) -> Result<Vec<String>, String> {
+        let obstacle = self.capability.obstacle().ok_or("本次槽没有移动障碍能力")?;
+        let blocks = obstacle.blocks_snapshot();
+        let survivors = self
+            .ctx
+            .borrow()
+            .movement_simulate_obstacle_survivors(&blocks);
+        Ok(survivors.iter().map(|id| id.as_str().to_string()).collect())
+    }
     fn precheck_blocked(&mut self, id: &str) -> Result<bool, String> {
         let precheck = self.capability.precheck().ok_or("本次槽没有移动预检能力")?;
         let id = ObjId::parse(id).ok_or("请求者 ID 非法")?;

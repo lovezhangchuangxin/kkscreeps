@@ -75,9 +75,9 @@ pub(crate) use movement::{
     op_mod_chain_admission_set_admitted, op_mod_chain_contest_priority,
     op_mod_chain_contest_set_priority, op_mod_chain_cost_fatigue_of, op_mod_chain_cost_set_fatigue,
     op_mod_chain_move_cancel, op_mod_chain_move_pending, op_mod_chain_move_request,
-    op_mod_chain_obstacle_block, op_mod_chain_obstacle_blocked, op_mod_chain_precheck_allow_static,
-    op_mod_chain_precheck_block, op_mod_chain_precheck_blocked, op_mod_chain_pull_denied,
-    op_mod_chain_pull_deny,
+    op_mod_chain_obstacle_block, op_mod_chain_obstacle_blocked, op_mod_chain_obstacle_evaluate,
+    op_mod_chain_precheck_allow_static, op_mod_chain_precheck_block, op_mod_chain_precheck_blocked,
+    op_mod_chain_pull_denied, op_mod_chain_pull_deny,
 };
 
 // op 的 serde 输出包装；计时围住真实转换，不从 op/host 的差额推测。
