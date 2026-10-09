@@ -4,7 +4,7 @@
 
 ## 当前接手位置
 
-- 更新日期：2026-10-09；Source Keeper 巡守与战斗已收口，实施基线 `a8f579f`。当前验证：完整门禁 Rust 1456 passed / 0 failed；release 棘轮全量 2802 passed / 8 failed / 104 skipped（0 转红，8 例均为既有官方对齐豁免）；本批未重跑三 bot。
+- 更新日期：2026-10-09；Source Keeper 巡守与战斗已收口（含三路复审清偿批），实施基线 `a8f579f`。当前验证：完整门禁 Rust 1457 passed / 0 failed；release 棘轮全量 2802 passed / 8 failed / 104 skipped（0 转红，8 例均为既有官方对齐豁免）；本批未重跑三 bot。
 - 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座、deposit 采集链、observer 限时视野已交付。**M2H.b 19/19 powers 全部接通**。
 - 下一片：**零散红逐例归因**（剩余 8 例均为既有官方对齐豁免，清单见最新兼容报告；NPC 自杀与 keeper lair 已转绿，下一片可推进 Invader 战斗/追击/治疗或 G02.d3 后续，仍按实际消费者拆片）或真实 bot 验收；每片贯通真实消费者、玩家投影、失败边界和冷恢复。
 - 兼容率 2802/2914≈96.2%（**95% 中间检查点已越过**；99% 目标需 2885）。
@@ -203,6 +203,9 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - 已同步现行游戏循环、源码组织与兼容说明；NPC owner、creep、墓碑沿既有保存域，自动预意图不引入保存字段，无快照升版或旧数据迁移。本批随提交交付，无未提交开发残项。下一片推进 NPC 主动战斗/巡守/追击/治疗；G21 的地图初始化、raid/stronghold、Mod 贡献面，以及 G02.d3 后续和 G27.a 仍未完成。
 
 ### 2026-10-09 Source Keeper 巡守与战斗（已收口，基线 `a8f579f`）
+
+- 三路复审（结算保真/测试边界/全局影响）发现项当批清偿：`overall.md` 实际依赖表与 kk-pathfinder 双消费面（玩家 op 通道 + 引擎 NPC Rust 直调）同步；`checkpoint_format_version` 升 v5 并注册 v4_to_v5 拒绝型迁移（对齐 effects 域先例，缺 keeper_memory 的 v4 房间显式报错，不再撞裸 serde 错误），相关版本断言与迁移测试更新；inter_room 跨房迁移与 effects/extensions 对称随迁 keeper_memory（当前 NPC 不跨房，防御性接线并有单测）；powerCreep 缺失 hits（手工检查点可达）改为入桶不读 hits——仍参与 mass 估计、最低 hits 选择跳过（官方 `_.min` 跳过 undefined，全缺时官方发废意图由结算丢弃、kk 不发，可观察等价）；测试修复：NPC 同伴排除断言把 Invader friend 先放使其 ID 最小（原平手不可区分）、死亡回滚测试经 discard_pending_round 后断言记忆保留（原断言消息引用不含 keeper_memory 的玩家投影面）、投影泄漏断言改真实字段名（source_id/move_cache）、补记忆失效重选与超距（>5）负例、失败轮玩家 Memory 与直跑等值断言、time=0 合法载荷触发缓存重算哨兵的对照用例、缺 hits powerCreep 的 mass 临界（15>13）与全缺不发攻击用例；fatigued 与字段剥除统一经真实检查点 decode/encode 通道（edit_object helper）。
+- 复审登记的遗留（不修，见 game-loop 已知对齐边界与执行队列）：官方 moveTo 的 `memory_move.lastMove`（唯一消费者为 Invader walkTo 推挤判定，实现 Invader 寻路片时必须补）；NPC 意图派发先于玩家（官方玩家在前，仲裁按对象 ID 重排洗平，属既有派发架构）；官方 roomObjects 取回序按 _id 升序为外部行为假设；RemovedObject.keeper_memory 在 Mod 槽链内拒绝的轮内恢复路径无测试触达（本片测试覆盖整轮不发布路径）。
 
 - 核对官方 keepers/pretick.js、processor.js 收集条件与 common/fake-runtime.js：同房 source/mineral 目标记忆（对象表顺序=ID 升序即插入序）、50 tick 路径缓存、近战/远程最低 hits 选择及 massDamage `[10,10,4,1]` 严格 >13 分支；敌对分类含孵化雏形（与 Invader 退场不同）、NPC 归属排除（官方 user 2/3）。寻路复用原生 kk-pathfinder（engine 不依赖 V8），代价矩阵按官方 defaultCostMatrix：障碍+portal、非公有他人 rampart、自家障碍工地阻挡，道路无条件覆盖先前写入（官方 Uint8 钳 255 仍小于 Infinity）；不在路径且与首格切比雪夫 >1 或已达路径尾时清缓存（官方 nextDirectionByPath 返回 0 同形）。空近战桶官方 `_.min` 返回 Infinity 仍发一条 id=undefined 废弃意图由结算丢弃，kk 直接不发（可观察等价）。合并按官方 `assign(ii, existing)`：显式同名动作优先。机制见[游戏循环](../architecture/game-loop.md#source-keeper-巡守与战斗当前首片)。
 - NPC 私有记忆为房间级新保存域 `keeper_memory`（source_id 与可空 move_cache），补齐候选回滚（RemovedObject 随对象恢复）、对象删除清理、完整检查点、值域校验（执行者归属/目标 ID 范围/坐标 0..49/时钟安全整数/路径 ≤2500 逐步相邻）与状态清单登记；不进玩家投影；缺整个域的旧检查点由 serde 拒绝。

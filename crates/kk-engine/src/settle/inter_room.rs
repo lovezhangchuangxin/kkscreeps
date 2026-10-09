@@ -69,6 +69,12 @@ pub fn apply_inter_room_moves(rooms: &mut [(String, RoomState)], moves: &[InterR
         if let Some(fields) = rooms[source_idx].1.extensions.remove(&mv.id) {
             rooms[target_idx].1.extensions.insert(mv.id, fields);
         }
+        // Keeper 巡守记忆与 effects/extensions 同形随迁。当前 NPC 不跨房
+        //（movement 显式排除），本迁移是防御：源房滞留会在候选发布校验
+        //（记忆引用无效执行者）时整轮拒绝且同输入同失败。
+        if let Some(memory) = rooms[source_idx].1.keeper_memory.remove(&mv.id) {
+            rooms[target_idx].1.keeper_memory.insert(mv.id, memory);
+        }
     }
 }
 
@@ -92,6 +98,11 @@ mod tests {
             end_time: 100,
         }];
         source.effects.insert(ObjId(1), entries.clone());
+        let memory = kk_world::domain::keeper_memory::KeeperMemory {
+            source_id: Some(9),
+            move_cache: None,
+        };
+        source.keeper_memory.insert(ObjId(1), memory.clone());
         let mut rooms = vec![("W1N1".into(), source)];
         let moves = [InterRoomMove {
             id: ObjId(1),
@@ -101,13 +112,16 @@ mod tests {
         }];
         apply_inter_room_moves(&mut rooms, &moves);
         assert_eq!(rooms[0].1.effects[&ObjId(1)], entries);
+        assert_eq!(rooms[0].1.keeper_memory[&ObjId(1)], memory);
         rooms.push((
             "W2N1".into(),
             RoomState::new("W2N1", kk_core::Terrain::plains()),
         ));
         apply_inter_room_moves(&mut rooms, &moves);
         assert!(rooms[0].1.effects.is_empty());
+        assert!(rooms[0].1.keeper_memory.is_empty());
         assert_eq!(rooms[1].1.effects[&ObjId(1)], entries);
+        assert_eq!(rooms[1].1.keeper_memory[&ObjId(1)], memory);
         assert_eq!(rooms[1].1.objects[&ObjId(1)].pos(), (49, 20));
     }
 }

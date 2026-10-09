@@ -384,8 +384,8 @@ fn strategy_key_compatibility_branches_are_pinned() -> anyhow::Result<()> {
     );
     assert_eq!(
         engine.checkpoint(Value::Null)?["checkpoint_format_version"],
-        json!(4),
-        "当前保存恒为格式 4"
+        json!(5),
+        "当前保存恒为格式 5"
     );
 
     // (b) 原生检查点注入该键 → 拒绝且旧分片保持原生形态。

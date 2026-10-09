@@ -16,15 +16,17 @@ fn range(a: (u8, u8), b: (u8, u8)) -> u8 {
 
 /// 玩家 creep（包括孵化雏形）与 powerCreep 都是 Keeper 的敌方；NPC 用户排除。
 /// 来源：keepers/pretick.js（与 Invader 的 !spawning 分类不同）。
-fn hostile_hits(o: &RoomObject) -> Option<u64> {
+/// 官方入桶不读 hits：正常对局 hits 恒为整数，手工检查点注入缺失 hits 的
+/// powerCreep 时仍计入全部敌桶（mass 照加、最低 hits 选择忽略它）。
+fn hostile_hits(o: &RoomObject) -> Option<Option<u64>> {
     match o {
-        RoomObject::Creep(c) if !is_npc_owner(&c.owner) => Some(u64::from(c.hits)),
+        RoomObject::Creep(c) if !is_npc_owner(&c.owner) => Some(Some(u64::from(c.hits))),
         RoomObject::Generic(g) => {
             let data: serde_json::Value = serde_json::from_str(&g.data).ok()?;
             if data["type"] != "powerCreep" || data["owner"].as_str().is_some_and(is_npc_owner) {
                 return None;
             }
-            data["hits"].as_u64()
+            Some(data["hits"].as_u64())
         }
         _ => None,
     }
@@ -81,10 +83,12 @@ pub(super) fn intents(w: &mut Working) -> Result<UserIntents, SettleError> {
                 (distance <= 3).then_some((*oid, hits, distance))
             })
             .collect();
+        // 缺失 hits（仅手工检查点可达）仍留在桶内参与 mass 估计；最低
+        // hits 选择跳过它——官方 _.min 跳过 undefined，全部缺失时不发。
         if let Some((target, _, _)) = targets
             .iter()
-            .filter(|(_, _, r)| *r <= 1)
-            .min_by_key(|(_, hits, _)| *hits)
+            .filter(|(_, hits, r)| hits.is_some() && *r <= 1)
+            .min_by_key(|(_, hits, _)| hits.unwrap_or(u64::MAX))
         {
             actions.insert(Action::Attack, IntentData::target(*target));
         }
@@ -97,7 +101,11 @@ pub(super) fn intents(w: &mut Working) -> Result<UserIntents, SettleError> {
             .sum();
         if mass > 13 {
             actions.insert(Action::RangedMassAttack, IntentData::bare());
-        } else if let Some((target, _, _)) = targets.iter().min_by_key(|(_, hits, _)| *hits) {
+        } else if let Some((target, _, _)) = targets
+            .iter()
+            .filter(|(_, hits, _)| hits.is_some())
+            .min_by_key(|(_, hits, _)| hits.unwrap_or(u64::MAX))
+        {
             actions.insert(Action::RangedAttack, IntentData::target(*target));
         }
     }

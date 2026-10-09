@@ -33,7 +33,7 @@
 | `kk-engine` | 清洗指令，结算房间和市场规则，验证并提交世界、玩家及市场的内存候选状态 |
 | `kk-runner` | V8 沙箱、CommonJS 模块加载、玩家 API 预检查、指令收集、墙钟预算和堆限制 |
 | `kk-runtime` | 玩家世界数据注入、执行编排、Memory/segments/CPU 候选提交及失败重试 |
-| `kk-pathfinder` | 封装 Screeps C++ 寻路算法、宿主回调与取消接口；经 kk-runner 同步执行玩家 roomCallback、代价矩阵与嵌套搜索 |
+| `kk-pathfinder` | 封装 Screeps C++ 寻路算法、宿主回调与取消接口；玩家面经 kk-runner 同步执行玩家 roomCallback、代价矩阵与嵌套搜索，引擎面供 NPC 结算（Source Keeper 巡守）Rust 直调 |
 | `kk-storage-bench` | 用合成数据比较 redb 与 libmdbx；结果用于选型研究，不是游戏持久化实现 |
 | `kk-storage` | 预留模块，尚无存储接口或数据库后端 |
 | `kk-backend` | 预留模块，尚无 HTTP 路由、监听或 WebSocket 服务 |
@@ -49,7 +49,7 @@
 |---|---|
 | `kk-cli` | core、engine、runtime、mod-host、mod-api、runner、world |
 | `kk-runtime` | core、schema、mod-api、mod-host、engine、runner、world |
-| `kk-engine` | core、mod-api、schema、world |
+| `kk-engine` | core、mod-api、pathfinder、schema、world |
 | `kk-world` | core、mod-api、schema |
 | `kk-mod-api` | core |
 | `kk-mod-host` | core、mod-api、vm |
@@ -59,7 +59,7 @@
 | `kk-storage-bench` | core、schema、world |
 | `kk-core`、`kk-pathfinder`、`kk-storage`、`kk-backend` | 无内部依赖 |
 
-表中的简称均指 `kk-*` crate。实际引擎并不通过 `kk-storage` 读写；`kk-pathfinder` 只被玩家沙箱（kk-runner）消费、引擎结算不依赖；完整服务的目标依赖不应代替这张实际依赖表。
+表中的简称均指 `kk-*` crate。实际引擎并不通过 `kk-storage` 读写；`kk-pathfinder` 有两个消费面——玩家沙箱经 kk-runner 的 op 通道执行玩家 roomCallback，引擎 NPC 结算（Source Keeper 巡守）在 Rust 侧直调寻路、不依赖 V8；完整服务的目标依赖不应代替这张实际依赖表。
 
 ## 数据流与状态边界
 
