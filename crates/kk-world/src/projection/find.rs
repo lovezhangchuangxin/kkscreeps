@@ -10,7 +10,8 @@ fn obj_energy(o: &Value) -> i64 {
 }
 
 /// 按 FIND 常量匹配原始沙箱记录，不执行房间视野或私有旗过滤。
-/// 有 viewer 时，MY_* 和 HOSTILE_* 按字符串 owner 判定，creep 查询排除 spawning。
+/// 有 viewer 时，MY_* 和 HOSTILE_* 按字符串 owner 判定；keeperLair 固定敌对，
+/// creep 查询排除 spawning。
 /// 无 viewer 时，MY_*、HOSTILE_* 均不匹配，但 FIND_CREEPS 保留孵化中的 creep。
 /// 这种中立查询供测试接口使用，不等同于玩家 room.find。
 /// 参考：engine/src/game/game.js 的 findCacheFn；screeps-ok 的 vanilla findTypeMap。
@@ -50,7 +51,12 @@ pub fn matches_find(o: &Value, find_const: i64, viewer: Option<&str>) -> bool {
             is_struct && st != "source" && st != "mineral" && viewer.is_some_and(owned_by)
         }
         f if f == c::FIND_HOSTILE_STRUCTURES => {
-            is_struct && st != "source" && st != "mineral" && viewer.is_some_and(hostile_of)
+            // lair 不存玩家 owner；StructureKeeperLair 的固定 NPC 归属使其恒为敌方。
+            // 来源：game/structures.js 的 owner/my 与 game.js 的 findCacheFn。
+            is_struct
+                && st != "source"
+                && st != "mineral"
+                && viewer.is_some_and(|v| st == "keeperLair" || hostile_of(v))
         }
         f if f == c::FIND_FLAGS => kind == "flag",
         f if f == c::FIND_CONSTRUCTION_SITES => kind == "constructionSite",

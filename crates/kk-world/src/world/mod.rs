@@ -91,6 +91,7 @@ impl RoomState {
             && let Ok(data) = serde_json::from_str::<serde_json::Value>(&g.data)
         {
             crate::domain::deposit::validate(&data)?;
+            crate::domain::keeper::validate(&data)?;
         }
         let effects = crate::effects::extract(&mut object)?;
         object.set_id(id);

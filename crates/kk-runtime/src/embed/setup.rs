@@ -101,6 +101,9 @@ fn player_setups(spec: &Value) -> anyhow::Result<Vec<(String, i64, i64)>> {
         if name.is_empty() {
             anyhow::bail!("PlayerSpec.name 必须是非空字符串");
         }
+        if name == kk_world::domain::keeper::OWNER {
+            anyhow::bail!("PlayerSpec.name 为 NPC 保留名称：{name}");
+        }
         if !seen.insert(name) {
             anyhow::bail!("重复玩家 handle: {name}");
         }

@@ -234,6 +234,7 @@ pub fn settle_room(
                             Some("container" | "rampart") => "decay",
                             Some("link") => "link",
                             Some("terminal") => "terminal",
+                            Some("keeperLair") => "keeperLair",
                             // Mod 建筑：生产周期或生命周期 tick 任一声明即进入
                             //（同访先产后 tick）；两者皆无的建筑不进入。
                             Some(st)
@@ -273,6 +274,7 @@ pub fn settle_room(
             "ruin" => economy::ruin_tick(&mut ctx.borrow_mut(), id),
             "mineral" => economy::mineral_tick(&mut ctx.borrow_mut(), id),
             "deposit" => economy::deposit_tick(&mut ctx.borrow_mut(), id),
+            "keeperLair" => keeper::tick(&mut ctx.borrow_mut(), id)?,
             "extractor" => economy::extractor_tick(&mut ctx.borrow_mut(), id),
             "road" => economy::road_decay_tick(&mut ctx.borrow_mut(), id),
             "decay" => economy::generic_decay_tick(&mut ctx.borrow_mut(), id),

@@ -381,6 +381,14 @@ fn snapshot_json(
                     v.remove("decayTime");
                 }
             }
+            if v.get("structureType").and_then(Value::as_str) == Some("keeperLair") {
+                let next = v
+                    .get("nextSpawnTime")
+                    .and_then(Value::as_u64)
+                    .filter(|n| *n != 0);
+                v.insert("ticksToSpawn".into(), remaining_opt(next, time));
+                v.remove("nextSpawnTime");
+            }
             // lab 快照补派生字段（vanilla snapshots.ts 的 lab 分支）：store 只
             // 留正量、mineralType 取首个非 energy 正量键、容量按已绑槽展开。
             // 其他 Generic 类型不在此补齐专用 getter。

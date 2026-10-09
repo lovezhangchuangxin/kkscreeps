@@ -187,7 +187,10 @@ pub fn creep_tick_prepare(w: &mut Working, id: ObjId) -> Result<(), SettleError>
         // EVENT_EXIT（含目的房不可达的情形——事件先于迁移应用发出）。
         // 对象随后死亡时不迁移：本仓实现在应用阶段按缺席跳过。
         // 来源：上游 engine/src/processor/intents/creeps/tick.js。
-        if let Some((to_room, nx, ny)) = crate::settle::inter_room::edge_target(&w.room.name, x, y)
+        if w.creep(id)
+            .is_some_and(|c| c.owner != kk_world::domain::keeper::OWNER)
+            && let Some((to_room, nx, ny)) =
+                crate::settle::inter_room::edge_target(&w.room.name, x, y)
         {
             w.push_event(
                 c::EVENT_EXIT,

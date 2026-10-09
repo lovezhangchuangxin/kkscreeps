@@ -197,9 +197,9 @@
             // 族滤孵化雏形（!i.spawning——中立面保留）；MY_*=真值 my、HOSTILE_*
             // =严格 false 混合（可达状态等价——creep/spawn owner 恒字符串、site
             // null 投影缺键）；109 官方另有 `&& i.owner`（owner getter 对 null/
-            // 缺键归 undefined，structures.js:136-138）→ 敌对结构臂只认字符串
-            // owner（与 Rust hostile_of 同口径；cleared controller 的 owner:null
-            // 双层双臂均不进）
+            // 缺键归 undefined，structures.js:136-138）；keeperLair 的固定 NPC
+            // getter 不依赖 raw owner，因此单独计为敌方。其余结构仅认字符串
+            // owner；cleared controller 的 owner:null 在 JS/Rust 两层均不进。
             const creepOk = o.type === 'creep' && (neutral || !o.spawning);
             if (type === 101 /* FIND_CREEPS */ && creepOk) out.push(w);
             else if (
@@ -257,8 +257,8 @@
               isStruct &&
               o.structureType !== 'source' &&
               o.structureType !== 'mineral' &&
-              typeof o.owner === 'string' &&
-              o.owner !== gw.viewerName
+              (o.structureType === 'keeperLair' ||
+                (typeof o.owner === 'string' && o.owner !== gw.viewerName))
             )
               out.push(w);
             else if (type === 110 /* FIND_FLAGS */ && o.type === 'flag') out.push(w);

@@ -120,6 +120,20 @@ pub fn normalize(kind: &str, spec: &Value, ctx: &PlaceCtx) -> Result<RoomObject,
         // 放置不推进时间，此处按放置时刻换算（适配器契约：放置后一次
         // tick 读 timeToLand 恰好减一）。launchRoomName 原样保留。
         "nuke" => Ok(RoomObject::Generic(normalize_nuke(spec, x, y, ctx))),
+        // keeper lair 使用结构玩家类，倒计时只保留绝对 nextSpawnTime。
+        "keeperLair" => {
+            let mut data = generic_fields("structure", spec);
+            data.insert("structureType".into(), json!("keeperLair"));
+            // lair 的归属由玩家类固定给 NPC，不从放置字段授予玩家视野。
+            data.remove("owner");
+            crate::domain::keeper::normalize(&mut data, ctx.time)?;
+            Ok(RoomObject::Generic(GenericObj {
+                id: 0,
+                x,
+                y,
+                data: Value::Object(data).to_string(),
+            }))
+        }
         // deposit 的冷却与寿命同为绝对权威键（cooldownTime/decayTime），
         // 适配器 spec 给相对 cooldown/ticksToDecay，按放置时刻换算
         // （适配器契约：放置后一次 tick 读恰好减一，与 nuke 同形）。

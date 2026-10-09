@@ -22,6 +22,7 @@ pub mod nukes;
 pub mod powers;
 // 兼容旧调用路径，领域实现只维护在 movement 中。
 pub use movement::{admission, contest, move_cost, obstacle, precheck, pull_registration};
+mod keeper;
 pub mod objects;
 pub mod resources;
 pub mod room;
