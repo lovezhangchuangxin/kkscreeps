@@ -21,6 +21,7 @@ pub struct RoomCheckpoint {
     pub snapshot: Vec<u8>,
     pub effects: BTreeMap<u64, Vec<crate::EffectEntry>>,
     pub extensions: BTreeMap<u64, BTreeMap<String, serde_json::Value>>,
+    pub keeper_memory: BTreeMap<u64, crate::domain::keeper_memory::KeeperMemory>,
 }
 
 impl World {
@@ -48,6 +49,11 @@ impl World {
                                 .effects
                                 .iter()
                                 .map(|(id, entries)| (id.0, entries.clone()))
+                                .collect(),
+                            keeper_memory: room
+                                .keeper_memory
+                                .iter()
+                                .map(|(id, memory)| (id.0, memory.clone()))
                                 .collect(),
                             extensions: room
                                 .extensions
@@ -98,6 +104,11 @@ impl World {
                 .effects
                 .into_iter()
                 .map(|(id, entries)| (ObjId(id), entries))
+                .collect();
+            room.keeper_memory = data
+                .keeper_memory
+                .into_iter()
+                .map(|(id, memory)| (ObjId(id), memory))
                 .collect();
             World::validate_room_objects([(name.as_str(), &room)], saved.next_obj_id)?;
             for (id, fields) in data.extensions {

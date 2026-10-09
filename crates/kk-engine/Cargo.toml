@@ -9,6 +9,7 @@ workspace = true
 
 [dependencies]
 kk-core = { workspace = true }
+kk-pathfinder = { workspace = true }
 kk-mod-api = { workspace = true }
 kk-schema = { workspace = true }
 kk-world = { workspace = true }

@@ -4,9 +4,9 @@
 
 ## 当前接手位置
 
-- 更新日期：2026-10-09；Invader 无目标退场与死亡闭环首片已交付，实施基线 `d1d0c7b`。当前验证 2802 passed / 8 failed / 104 skipped；本批随提交交付，无未提交开发残项。
+- 更新日期：2026-10-09；Source Keeper 巡守与战斗已收口，实施基线 `a8f579f`。当前验证：完整门禁 Rust 1456 passed / 0 failed；release 棘轮全量 2802 passed / 8 failed / 104 skipped（0 转红，8 例均为既有官方对齐豁免）；本批未重跑三 bot。
 - 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座、deposit 采集链、observer 限时视野已交付。**M2H.b 19/19 powers 全部接通**。
-- 下一片：**零散红逐例归因**（剩余 8 例均为既有官方对齐豁免，清单见最新兼容报告；NPC 自杀一例已转绿，下一片可推进 Source Keeper 巡守/战斗或 Invader 战斗/追击/治疗，仍按实际消费者拆片）或 G02.d3 后续；每片贯通真实消费者、玩家投影、失败边界和冷恢复。
+- 下一片：**零散红逐例归因**（剩余 8 例均为既有官方对齐豁免，清单见最新兼容报告；NPC 自杀与 keeper lair 已转绿，下一片可推进 Invader 战斗/追击/治疗或 G02.d3 后续，仍按实际消费者拆片）或真实 bot 验收；每片贯通真实消费者、玩家投影、失败边界和冷恢复。
 - 兼容率 2802/2914≈96.2%（**95% 中间检查点已越过**；99% 目标需 2885）。
 - Mod 扩展：移动策略、对象/建筑/资源、库存/耐久/受击、作者 CLI/类型、输入回放和检查点已有基础；未完成范围以任务表为准。默认玩法已有消费者不代表对应 Mod 替换能力已经开放。
 - 网络服务、持久 storage 后端与真实游戏客户端仍未实现；renderer R0–R6 已交付，R7 最终矩阵/长测未收口。现有 bot-check 不能代替持续推进世界中的可玩验收。
@@ -201,3 +201,12 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - 完整无参数 `pnpm run check` 通过：Rust 1450 passed / 0 failed，JS workspace、维护工具、文档链接与源码规模通过；`pnpm run fmt:js:check` 通过，无 doctest 示例变更。release CLI、适配器已重建，固定 bot 夹具重新准备；NPC 死亡/适配器契约子集 85 passed，固定 screeps-ok `34a630e` 全量 2802 passed / 8 failed / 104 skipped，棘轮通过；相对实际接手 HEAD `d1d0c7b` 逐例比较 1 转绿 / 0 转红，按全量报告核对并上调地板至 2802。本批未重跑三 bot，不沿用旧结果宣称本批通过。
 - 复审补齐管理快照 owner 回套件 handle 的反向映射，玩家 VM 的 owner.username 保留公开用户名；发现的 srcKeeper 契约回归已修复并经子集/全量验证。退场算法仅在可证明无目标的子域发射动作，缺少路径判定的分支保留对象，治疗/孵化守卫均有实际断言。
 - 已同步现行游戏循环、源码组织与兼容说明；NPC owner、creep、墓碑沿既有保存域，自动预意图不引入保存字段，无快照升版或旧数据迁移。本批随提交交付，无未提交开发残项。下一片推进 NPC 主动战斗/巡守/追击/治疗；G21 的地图初始化、raid/stronghold、Mod 贡献面，以及 G02.d3 后续和 G27.a 仍未完成。
+
+### 2026-10-09 Source Keeper 巡守与战斗（已收口，基线 `a8f579f`）
+
+- 核对官方 keepers/pretick.js、processor.js 收集条件与 common/fake-runtime.js：同房 source/mineral 目标记忆（对象表顺序=ID 升序即插入序）、50 tick 路径缓存、近战/远程最低 hits 选择及 massDamage `[10,10,4,1]` 严格 >13 分支；敌对分类含孵化雏形（与 Invader 退场不同）、NPC 归属排除（官方 user 2/3）。寻路复用原生 kk-pathfinder（engine 不依赖 V8），代价矩阵按官方 defaultCostMatrix：障碍+portal、非公有他人 rampart、自家障碍工地阻挡，道路无条件覆盖先前写入（官方 Uint8 钳 255 仍小于 Infinity）；不在路径且与首格切比雪夫 >1 或已达路径尾时清缓存（官方 nextDirectionByPath 返回 0 同形）。空近战桶官方 `_.min` 返回 Infinity 仍发一条 id=undefined 废弃意图由结算丢弃，kk 直接不发（可观察等价）。合并按官方 `assign(ii, existing)`：显式同名动作优先。机制见[游戏循环](../architecture/game-loop.md#source-keeper-巡守与战斗当前首片)。
+- NPC 私有记忆为房间级新保存域 `keeper_memory`（source_id 与可空 move_cache），补齐候选回滚（RemovedObject 随对象恢复）、对象删除清理、完整检查点、值域校验（执行者归属/目标 ID 范围/坐标 0..49/时钟安全整数/路径 ≤2500 逐步相邻）与状态清单登记；不进玩家投影；缺整个域的旧检查点由 serde 拒绝。
+- 接手时上一片实现 4 例测试失败，逐例归因为测试侧问题并修复（实现与官方源逐行复核保真）：source 放置须走 structure 通道成为原生 Source 变体（kind="source" 落入 Generic，patrol/path_reuse/corrupt 及 schema 夹具同改）；`IntentBatch::from_json` 线格式是对象 ID 直接做键，套 `{"objects":…}` 外壳被静默丢弃；`builtin:creep.suicide` 处理器入口不存在（suicide 无开放拒绝槽），对象保留场景改为真实机制：TTL 死亡同轮玩家写回失败→整轮候选回滚→对象与记忆一同恢复、重试轮重放后死亡链落盘；p1 无房内对象时整房不可见，投影不泄漏断言前先放远处工人建立视野。无包分片 checkpoint 顶层 `mods: null` 为真实可空分支，钉死键 123→124（与 binary null/数组分支同理）。
+- 定向验收：keeper_ai 六条 JSON/KKPV 双通道测试通过（巡守记忆与贴邻停止、攻击最低 hits 与 mass 严格阈值、失败重试与冷恢复、50 tick 路径复用、损坏记忆七分支原子拒绝、死亡候选回滚恢复记忆随对象）；checkpoint 键树 124 键钉死。
+- 最终无参数 `pnpm run check` 通过：Rust 1456 passed / 0 failed，JS workspace、维护工具、文档链接与源码规模通过；无 doctest 变更。release CLI 已重建，适配器经 ratchet 重建；固定 screeps-ok `34a630e` 全量 2802 passed / 8 failed / 104 skipped，棘轮通过（地板 2802 持平、0 转红，8 例均为既有官方对齐豁免），工作区机器报告已更新。本批未重跑三 bot，不沿用旧结果宣称本批通过。
+- 现行 game-loop 新增巡守小节、state-inventory 登记 keeper_memory 域、compat README 当前验证句同步。本批随提交交付，无未提交开发残项；剩余消费者：Invader 战斗/追击/治疗、keeper 跨房移动、raid/stronghold、keeper 地图生成（G21），以及 G02.d3 后续与 G27.a。

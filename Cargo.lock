@@ -1021,6 +1021,7 @@ dependencies = [
  "anyhow",
  "kk-core",
  "kk-mod-api",
+ "kk-pathfinder",
  "kk-schema",
  "kk-world",
  "serde",

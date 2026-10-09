@@ -52,6 +52,8 @@ pub struct RoomState {
     pub extensions: BTreeMap<ObjId, BTreeMap<String, serde_json::Value>>,
     /// 内建效果独立存储，随对象删除/迁移，随整轮候选提交。
     pub effects: BTreeMap<ObjId, Vec<crate::EffectEntry>>,
+    /// Source Keeper 私有巡守目标与路径；完整检查点保存，对象删除时清理。
+    pub keeper_memory: BTreeMap<ObjId, crate::domain::keeper_memory::KeeperMemory>,
 }
 
 impl RoomState {
@@ -67,6 +69,7 @@ impl RoomState {
             events: Vec::new(),
             extensions: BTreeMap::new(),
             effects: BTreeMap::new(),
+            keeper_memory: BTreeMap::new(),
         }
     }
 
@@ -470,6 +473,7 @@ impl World {
         let room = self.rooms.get_mut(&name).expect("目录来自房间");
         let removed = room.objects.remove(&id);
         room.effects.remove(&id);
+        room.keeper_memory.remove(&id);
         room.extensions.remove(&id);
         if removed.is_some() {
             self.generation = generation;

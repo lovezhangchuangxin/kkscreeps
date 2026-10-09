@@ -120,7 +120,7 @@ pub fn settle_room(
         .collect();
 
     // NPC 预意图读取动作前的房间候选，与玩家动作共用有序派发。
-    let batch = npc::with_retirement_intents(&ctx.borrow().room, batch);
+    let batch = npc::with_npc_intents(&mut ctx.borrow_mut(), batch)?;
 
     // 玩家按名字排序，先处理房间指令，再按对象 ID 处理对象动作。
     for (player, intents) in &batch.users {

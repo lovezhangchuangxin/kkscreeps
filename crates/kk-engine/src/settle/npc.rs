@@ -1,4 +1,6 @@
-//! Invader 无目标退场的预意图首片；追击/治疗/寻路仍未实现。
+//! NPC 预意图生成与合并；Keeper 巡守/战斗、Invader 无目标退场。
+mod keeper;
+mod path;
 use std::borrow::Cow;
 
 use kk_schema::room::RoomObject;
@@ -83,25 +85,24 @@ fn retirement_intents(room: &RoomState) -> UserIntents {
 
 /// NPC 与玩家共用动作派发/候选提交；显式同名动作覆盖自动指令，按官方
 /// processor.js 的 assign(ii, existing) 合并。无 NPC 指令时不复制玩家 batch。
-/// 无新增保存状态，重试/回放从同一房间输入确定性重建。
-pub(super) fn with_retirement_intents<'a>(
-    room: &RoomState,
+/// Keeper 记忆写入房间候选，重试/回放从同一房间输入确定性重建。
+pub(super) fn with_npc_intents<'a>(
+    w: &mut super::Working,
     batch: &'a IntentBatch,
-) -> Cow<'a, IntentBatch> {
-    let generated = retirement_intents(room);
+) -> Result<Cow<'a, IntentBatch>, super::SettleError> {
+    let mut all = vec![(INVADER_OWNER, retirement_intents(&w.room))];
+    all.push((kk_world::domain::keeper::OWNER, keeper::intents(w)?));
     let mut batch = Cow::Borrowed(batch);
-    if !generated.objects.is_empty() {
-        let user = batch
-            .to_mut()
-            .users
-            .entry(INVADER_OWNER.into())
-            .or_default();
-        for (id, actions) in generated.objects {
-            let existing = user.objects.entry(id).or_default();
-            for (action, data) in actions {
-                existing.entry(action).or_insert(data);
+    for (owner, generated) in all {
+        if !generated.objects.is_empty() {
+            let user = batch.to_mut().users.entry(owner.into()).or_default();
+            for (id, actions) in generated.objects {
+                let existing = user.objects.entry(id).or_default();
+                for (action, data) in actions {
+                    existing.entry(action).or_insert(data);
+                }
             }
         }
     }
-    batch
+    Ok(batch)
 }

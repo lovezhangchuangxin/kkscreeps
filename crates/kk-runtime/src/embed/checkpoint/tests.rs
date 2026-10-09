@@ -665,6 +665,7 @@ const SCHEMA_DYNAMIC_MAPS: &[&str] = &[
     "engine.world.rooms",
     "engine.world.rooms.*.extensions",
     "engine.world.rooms.*.effects",
+    "engine.world.rooms.*.keeper_memory",
     "engine.players",
     "engine.players.*.segments",
     "engine.players.*.resources",

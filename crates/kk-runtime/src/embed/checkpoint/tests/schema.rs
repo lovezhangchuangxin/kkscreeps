@@ -146,6 +146,36 @@ export default function register(api) {
     Ok(())
 }
 
+/// 私有 NPC 记忆同时采集 null 与完整路径，避免可空分支漏出键树门禁。
+fn schema_tree_keeper_memory(tree: &mut BTreeSet<String>) -> anyhow::Result<()> {
+    let mut engine = EmbedEngine::new();
+    engine.create_shard(&json!({"players":["p1"],"rooms":[{"name":"W1N1"}]}))?;
+    let keeper = engine.place_object(
+        "W1N1",
+        "creep",
+        &json!({
+            "pos":[10,10],"name":"keeper","owner":kk_world::domain::keeper::OWNER,"body":["move"]
+        }),
+    )?;
+    engine.tick(1)?;
+    collect_schema_keys(&engine.checkpoint(Value::Null)?, String::new(), tree);
+    // source 无独立放置类别，须走 structure 通道才会成为原生 Source 变体。
+    engine.place_object(
+        "W1N1",
+        "structure",
+        &json!({"structureType":"source","pos":[15,10]}),
+    )?;
+    engine.tick(1)?;
+    let saved = engine.checkpoint(Value::Null)?;
+    assert!(
+        saved["engine"]["world"]["rooms"]["W1N1"]["keeper_memory"]
+            [ObjId::parse(&keeper).unwrap().0.to_string()]["move_cache"]
+            .is_object()
+    );
+    collect_schema_keys(&saved, String::new(), tree);
+    Ok(())
+}
+
 /// 钉死检查点 schema 键树：夹具取值非空的字段增删会让本测试红，须同步
 /// docs/architecture/state-inventory.md 与清单并当批补齐保存恢复、版本
 /// 策略。覆盖边界（数组只下钻首元素、Value 载荷按当时形状、不透明叶子）
@@ -220,6 +250,12 @@ const PINNED_CHECKPOINT_KEYS: &[&str] = &[
     "engine.world.rooms.*.effects.*[].level",
     "engine.world.rooms.*.effects.*[].end_time",
     "engine.world.rooms.*.extensions.*",
+    "engine.world.rooms.*.keeper_memory.*.source_id",
+    "engine.world.rooms.*.keeper_memory.*.move_cache",
+    "engine.world.rooms.*.keeper_memory.*.move_cache.destination[]",
+    "engine.world.rooms.*.keeper_memory.*.move_cache.path[]",
+    "engine.world.rooms.*.keeper_memory.*.move_cache.path[][]",
+    "engine.world.rooms.*.keeper_memory.*.move_cache.time",
     "engine.world.rooms.*.snapshot[]",
     "engine.world.seed",
     "engine.world.terrain_epoch",
@@ -254,6 +290,8 @@ const PINNED_CHECKPOINT_KEYS: &[&str] = &[
     "last_fault.target",
     "last_fault.tick",
     "metadata",
+    // 无 mod 包分片的 mods 为 null 叶子（与可空 binary 的分支计键同理）。
+    "mods",
     "mods.options",
     "mods.packages.*.files_sha256",
     "mods.packages.*.manifest",
@@ -275,10 +313,11 @@ fn checkpoint_schema_keys_are_pinned() -> anyhow::Result<()> {
     let mut tree = BTreeSet::new();
     schema_tree_official_packages(&mut tree)?;
     schema_tree_fault_and_extension_package(&mut tree)?;
+    schema_tree_keeper_memory(&mut tree)?;
     assert_eq!(
         PINNED_CHECKPOINT_KEYS.len(),
-        117,
-        "钉死键总数；可空 binary 的 null 与数组分支分别计键，增删时同步清单"
+        124,
+        "钉死键总数；可空 binary 的 null 与数组分支、无包分片的 mods null 分支分别计键，增删时同步清单"
     );
     let expected: BTreeSet<String> = PINNED_CHECKPOINT_KEYS
         .iter()

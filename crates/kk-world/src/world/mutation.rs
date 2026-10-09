@@ -8,6 +8,7 @@ pub struct RoomContents<'a> {
     pub events: &'a mut Vec<String>,
     pub extensions: &'a mut BTreeMap<ObjId, BTreeMap<String, serde_json::Value>>,
     pub effects: &'a mut BTreeMap<ObjId, Vec<crate::EffectEntry>>,
+    pub keeper_memory: &'a mut BTreeMap<ObjId, crate::domain::keeper_memory::KeeperMemory>,
 }
 
 impl World {
@@ -54,6 +55,7 @@ impl World {
                     ));
                 }
             }
+            crate::domain::keeper_memory::validate(room, next_id)?;
             for (id, entries) in &room.effects {
                 if !room.objects.contains_key(id) {
                     return Err(format!("房间 {name} 含悬空效果"));
@@ -92,6 +94,7 @@ impl World {
             events: &mut room.events,
             extensions: &mut room.extensions,
             effects: &mut room.effects,
+            keeper_memory: &mut room.keeper_memory,
         })?;
         for (id, object) in &mut room.objects {
             if let Some(entries) = crate::effects::extract(object)? {
