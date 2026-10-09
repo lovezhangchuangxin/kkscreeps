@@ -235,6 +235,7 @@ pub fn settle_room(
                     } else {
                         match kk_world::domain::generic::structure_type(&g.data).as_deref() {
                             Some("container" | "rampart") => "decay",
+                            Some("powerBank") => "powerBank",
                             Some("link") => "link",
                             Some("terminal") => "terminal",
                             Some("keeperLair") => "keeperLair",
@@ -278,6 +279,7 @@ pub fn settle_room(
             "ruin" => economy::ruin_tick(&mut ctx.borrow_mut(), id),
             "mineral" => economy::mineral_tick(&mut ctx.borrow_mut(), id),
             "deposit" => economy::deposit_tick(&mut ctx.borrow_mut(), id),
+            "powerBank" => economy::power_bank_tick(&mut ctx.borrow_mut(), id),
             "keeperLair" => keeper::tick(&mut ctx.borrow_mut(), id)?,
             "invaderCore" => invader_core::tick(&mut ctx.borrow_mut(), id)?,
             "extractor" => economy::extractor_tick(&mut ctx.borrow_mut(), id),

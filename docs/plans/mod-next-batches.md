@@ -6,12 +6,12 @@
 
 - 2026-10-09 review 修复（本次提交）：invaderCore 放置的孵化守军初始 `ageTime=0`，出生后再起算普通寿命；stronghold 部署绑定 `decayTime` 的路径保持原值。新增超过 1500 tick 孵化回归；定向 `pnpm run check -- kk-runtime --test mod_chain_tests --filter invader_core_long_incubation` 与无参数 `pnpm run check` 均通过（不含 doctest；本次未改 doctest）。其余 G02/G03 与 NPC 后续消费者不受此修复影响，下一步按当前执行队列继续。
 
-- 更新日期：2026-10-09；控制器 INVULNERABILITY 消费者已提交 `d48d6ea`；Invader core 生命周期首片已提交 `2b68002`；Stronghold 布防首片已提交 `4f7dd2bd`；raid 调度首片随本提交交付。最近完整门禁 Rust 全绿；最近 release 棘轮 2837 passed / 8 failed / 69 skipped（0 转红，8 例既有豁免）。TooAngel/Overmind 六阶段为既有入库证据；本批未重跑 bot 长测。
+- 更新日期：2026-10-10；控制器 INVULNERABILITY 消费者已提交 `d48d6ea`；Invader core 生命周期首片已提交 `2b68002`；Stronghold 布防首片已提交 `4f7dd2bd`；raid 调度首片已提交 `e316a07`；powerBank 生成与消费者首片随本提交交付。最近完整门禁 Rust 全绿；最近 release 棘轮 2844 passed / 8 failed / 62 skipped（0 转红，8 例既有豁免）。TooAngel/Overmind 六阶段为既有入库证据；本批未重跑 bot 长测。
 - 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座、deposit 采集链、observer 限时视野已交付。**M2H.b 19/19 powers 全部接通**。
-- 当前接手：G02.d3 结构/rampart 计划级通行及默认玩家/NPC 寻路已提交 `fd27fbd`；G03 障碍追加后的同源链预演已提交 `3f3d9a7`；障碍摘要的安全模式主人已提交 `41de432`；控制器零升级量修复已提交 `10eb812`；G27.a 独立异步后台宿主已提交 `b25e280`；控制器 INVULNERABILITY 三处消费门已提交 `d48d6ea`；invaderCore 生命周期首片已提交 `2b68002`；stronghold 布防首片已提交 `4f7dd2bd`；raid 调度首片（官方 genInvaders 复刻：资格门/出口资格/组合生成/阈值重掷/每房 raid 持久域 v7）随本提交交付，生产者侧仍缺地图生成、powerBank 生成、战术 AI（maintainPopulation/refillTowers/focusClosest）与 create-creep 等意图。逐房通行粒度、摘要增强、完整仲裁替换仍未完成。
+- 当前接手：G02.d3 结构/rampart 计划级通行及默认玩家/NPC 寻路已提交 `fd27fbd`；G03 障碍追加后的同源链预演已提交 `3f3d9a7`；障碍摘要的安全模式主人已提交 `41de432`；控制器零升级量修复已提交 `10eb812`；G27.a 独立异步后台宿主已提交 `b25e280`；控制器 INVULNERABILITY 三处消费门已提交 `d48d6ea`；invaderCore 生命周期首片已提交 `2b68002`；stronghold 布防首片已提交 `4f7dd2bd`；raid 调度首片已提交 `e316a07`；powerBank 生成与消费者首片（官方 genPowerBanks 复刻：高速路房调度/墙体落位/容量暴击；反射/衰变/战毁废墟/泼洒消费者；每房 power_bank_time 持久域 v8）随本提交交付，生产者侧仍缺地图生成、战术 AI（maintainPopulation/refillTowers/focusClosest）与 create-creep 等意图。逐房通行粒度、摘要增强、完整仲裁替换仍未完成。
 - 本次完成：JSON/KKPV 各 200 tick 持续战斗、100+100 tick 跨进程冷恢复和完整检查点回放；实际位置/hits 证明移动、受伤与恢复，双通道及直跑/续跑世界与 Memory 等值。TooAngel v6 双通道 2000 tick 连跑及 1000+1000 tick 冷恢复六阶段复验通过。
-- 剩余：真实 bot 战斗/多房/长期存活验收；地图生成与 G21 Mod 世界事件；stronghold 战术 AI/create-creep 意图、powerBank 生成；walkTo/Keeper lastMove 按实际 stronghold 消费者接线；G02.d3 逐房/摘要后续、G03 完整仲裁替换与 G27.a。NPC 场景不标 M2B 或 G21 完成。
-- 兼容率 2837/2914≈97.3%（**95% 中间检查点已越过**；99% 目标需 2885，缺口 48；跳过 69 中 actionLog 21 例既缓，其余 48 需全吃：边缘环绕簇 13、powerBank 消费者簇 9、弃用告警 7、多 shard 7、核弹 5、矿物密度注入 4、random 注入契约 3 等）。
+- 剩余：真实 bot 战斗/多房/长期存活验收；地图生成与 G21 Mod 世界事件；stronghold 战术 AI/create-creep 意图；walkTo/Keeper lastMove 按实际 stronghold 消费者接线；G02.d3 逐房/摘要后续、G03 完整仲裁替换与 G27.a。NPC 场景不标 M2B 或 G21 完成。
+- 兼容率 2844/2914≈97.5%（**95% 中间检查点已越过**；99% 目标需 2885，缺口 41；跳过 62 中 actionLog 21 例既缓，其余 41 需全吃：边缘环绕簇 13、弃用告警 7、多 shard 7、核弹 5、矿物密度注入 4、random 注入契约 3 及若干原估口径差；powerBank 消费者簇 7 例已随本批全绿）。
 - Mod 扩展：移动策略、对象/建筑/资源、库存/耐久/受击、作者 CLI/类型、输入回放和检查点已有基础；未完成范围以任务表为准。默认玩法已有消费者不代表对应 Mod 替换能力已经开放。
 - 网络服务、持久 storage 后端与真实游戏客户端仍未实现；renderer R0–R6 已交付，R7 最终矩阵/长测未收口。现有 bot-check 不能代替持续推进世界中的可玩验收。
 - M2B 验收标准（2026-10-09 调整）：screeps-ok ≥95% 为中间检查点、≥99% 为后续覆盖目标；最终完成要求约定范围内功能全部通过验收，剩余例外逐项有明确范围、证据和可审查理由，见[路线图](../roadmap.md)。
@@ -330,6 +330,13 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - 独立 worker/realm、原生登记能力门、同步注册/异步生命周期、队列快拒绝、过期/跨包/未授予/调用和字节限额及共享 VM 预算已接线；FileProbe 使用常规文件的有限只读异步任务。实际发现异步 op 会在 V8 调用时提前轮询，首轮测试因没有 Tokio 上下文而中止，已将预算调用统一进入 worker 执行器上下文；随后宿主六组、CLI 三组与双通道持续世界一组定向回归通过。CLI 冷检查点身份读取/输入守卫、后台等待读期间世界继续推进及重启 calls 归零均实测。新增 ADR-017、现行后台契约/源码导航/状态域清单与公共示例，无新玩法持久域或载荷版本；可选 services 清单/代码沿既有 Mod 身份与包摘要保存，无服务旧清单保持原序列化形态。首轮完整门禁通过，最后的故障来源诊断和协议常量收口后须再次完整复验。
 
 - 最终无参数完整门禁通过：Rust 1512 passed / 0 failed，Clippy、JS workspace/维护工具、307 个 Markdown / 1971 个本地链接与 936 个源码/测试规模通过。release CLI 重建通过，公共 services 包由 release 实际运行，start/request/stop 与 world_unchanged=true 验收通过；JS 格式检查通过，无 doctest 改动。固定 bot 准备、适配器构建和显式 release 兼容棘轮通过：2802 passed / 8 failed / 104 skipped、floor 2802、0 转红/0 转绿（8 例既有豁免）。本片未运行 bot 长测，不标网络/耐久任务完成；实现/测试/公共示例/契约及报告随本批提交。
+
+## 2026-10-10 powerBank 生成与消费者首片（已完成，随本提交交付）
+
+- 基线 `e316a07`（raid 批），起始工作区干净。官方参考：backend-npm/lib/cronjobs.js 的 `genPowerBanks`（L194-243）、engine 的 _damage.js:35-41（反射）、processor.js:421-426（衰变移除）、_destroy.js + ruins/tick.js（战毁废墟与泼洒）、structures.js:589（owner='Power Bank'）、withdraw.js:32（拒提取）。套件 7 例（POWER-BANK-001/002/004、RUIN-002:powerBank、inspection、NPC-OWNERSHIP、SHAPE-NPC-003）由 capabilities.powerBank 翻转全绿。
+- 交付内容：放置归一臂（power→store、ticksToDecay→decayTime 且缺省默认 POWER_BANK_DECAY——适配器契约明文、hits 覆盖须 ≥1、hitsMax 恒 2M、spec 键 store/owner 拒绝）；快照折叠 power/ticksToDecay；引擎反射分支（任意攻击类型 ×POWER_BANK_HIT_BACK 毫精度取整、safemode 抑制、HIT_BACK 事件 objectId=银行；显式反击策略整体替换）、static_hits_max 表项、power_bank_tick 衰变移除（>=decayTime-1 无废墟无泼洒）；战毁经通用 _destroy 产废墟（store.power 转移、RUIN_DECAY_STRUCTURES=10）由既有 ruin 通道泼洒；生成器 run_spawner（高速路房=编号任一轴 ≡0 mod 10、respawn 先掷、位置 do/while 墙体+出口且重掷上限 10_000 防病态地形挂死、容量+暴击、种子流带 power-bank 域标签）；RoomState.power_bank_time + 检查点 v8（拒缺迁移）+ 固定键 135；embed 命令 runPowerBankSpawner/setPowerBankState（0 归一 null，官方 falsy 同义）；powerBank 域级 validate 挂插入/编辑/恢复三口；deposit 记录拒带 structureType（串扰防护）。
+- Rust 测试 30 例新增（settle 7：反射事件序/击杀拍反射/奇数不足 1 不反射/safemode/普通远程/反射致死墓碑/衰变/废墟；mod_chain 15：套件同形消费者 + 生成器调度/重掷/暴击/护栏/多房原子回滚/冷恢复双通道/命令契约；kk-world 8：放置归一/拒绝/溢出/域校验/高速路 S 轴；迁移与固定键更新）。三路后台评审（官方语义/对抗安全/测试边界）全部发现当批清偿：语义 P1 放置缺省默认值对齐适配器契约、P2 魔数常量化/0 归一/版本文档；安全 P0 单测期望值笔误、P1 病态地形挂死护栏与域级 validate 缺失、P2 边界复验/键纪律；边界 P1 击杀拍反射与反射致死缺测/种子路径与双通道缺测/多房次序、P2 锚定与注释措辞。登记分歧：反射 0.5 小数跨击累积不可复刻（整数伤害模型）、多房随机流交织序（房名序 vs db 序）、墙钟 cron 递延、status:'normal' 门随 roomStatus 簇。
+- 验证：无参数 `pnpm run check` 通过；release 棘轮 2844 passed / 8 failed / 62 skipped（floor 2837→2844，0 转红、7 转绿）。
 
 ## 2026-10-09 raid 调度首片（已完成，随本提交交付）
 

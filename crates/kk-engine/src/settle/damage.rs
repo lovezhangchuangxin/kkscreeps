@@ -216,6 +216,19 @@ fn apply_damage_inner(
         } else {
             set_structure_hits(w, target_id, new_hits);
         }
+        // 官方 _damage.js:35-37：对 powerBank 的任意伤害按
+        // POWER_BANK_HIT_BACK 反射给攻击者（近战/远程/群体同形），经
+        // 攻击者待伤害队列在应用时受 TOUGH 减伤。毫精度整除向下取整、
+        // 不足 1 不触发——官方 JS 把 0.5 小数存入 _damageToApply 并以
+        // 小数 hits 消费，套件整数反射不可观测，登记为有意分歧；
+        // 显式反击策略存在即整体替换（与 G09.d 声明反击同关系）。
+        // 核弹砸银行的攻击者无耐久面（官方 :88 对无 actionLog 的核弹
+        // 写 attacked 是崩溃角案例），反射入待伤害队列后无人消费，
+        // 等效丢弃；击杀不产废墟由 destroy 的 NUKE 门承担。
+        if retaliation.is_none() && type_name_of(&target) == "powerBank" {
+            let hit_back_milli = (c::POWER_BANK_HIT_BACK * 1000.0) as i64;
+            attack_back = attack_back.max(damage.saturating_mul(hit_back_milli) / 1000);
+        }
     }
 
     if retaliation.is_none()
@@ -470,6 +483,9 @@ fn static_hits_max(structure_type: &str, links: &kk_mod_api::builtin::LinkRules)
         "powerSpawn" => c::POWER_SPAWN_HITS,
         "nuker" => c::NUKER_HITS,
         "factory" => c::FACTORY_HITS,
+        // powerBank 上限恒 POWER_BANK_HITS（放置覆盖 hits 不改上限，
+        // 官方 hitsMax 不随伤害变化；废墟 structure.hitsMax 同源）。
+        "powerBank" => c::POWER_BANK_HITS,
         "link" => links.hits_max,
         _ => return None,
     })

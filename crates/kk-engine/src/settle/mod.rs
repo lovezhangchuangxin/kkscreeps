@@ -25,7 +25,9 @@ pub use movement::{admission, contest, move_cost, obstacle, precheck, pull_regis
 mod invader_core;
 mod invader_raid;
 mod keeper;
+mod power_bank;
 pub use invader_raid::RaidRandom;
+pub use power_bank::seeded_random as power_bank_seeded_random;
 mod npc;
 pub mod objects;
 pub mod resources;

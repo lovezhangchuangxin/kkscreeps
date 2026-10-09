@@ -746,6 +746,7 @@ mod execution;
 mod input_log;
 mod mod_chain;
 mod placement;
+mod power_bank_admin;
 mod projection;
 mod raid_admin;
 mod replay;

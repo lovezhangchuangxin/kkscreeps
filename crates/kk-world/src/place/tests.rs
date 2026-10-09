@@ -439,6 +439,109 @@ fn unknown_types_go_generic_passthrough() {
     assert_eq!(d3["structureType"], "tower");
 }
 
+/// powerBank 放置归一：power 进 store、相对 ticksToDecay 换算绝对
+/// decayTime、hits 可覆盖而 hitsMax 恒 POWER_BANK_HITS、缺相对键不写
+/// 权威键（永不衰变移除，与 deposit 缺键形态一致）。
+#[test]
+fn power_bank_placement_normalizes_relative_keys_and_store() {
+    let s = spec(json!({
+        "pos": [25, 25], "power": 2500, "hits": 1000000, "ticksToDecay": 500
+    }));
+    let RoomObject::Generic(g) = normalize("powerBank", &s, &ctx()).unwrap() else {
+        panic!()
+    };
+    let d: Value = serde_json::from_str(&g.data).unwrap();
+    assert_eq!(d["type"], "structure");
+    assert_eq!(d["structureType"], "powerBank");
+    assert_eq!(d["store"]["power"], 2500, "power 进官方 store 形态");
+    assert_eq!(d["hits"], 1000000, "显式 hits 覆盖");
+    assert_eq!(d["hitsMax"], 2_000_000, "hitsMax 恒 POWER_BANK_HITS");
+    assert_eq!(d["decayTime"], 600, "相对寿命 → ctx.time(100)+500");
+    assert!(d.get("ticksToDecay").is_none() && d.get("power").is_none());
+
+    // 缺 ticksToDecay 默认 POWER_BANK_DECAY（适配器契约；RUIN-002 夹具
+    // 形态——vanilla 下该银行 5000 拍后衰变移除）。
+    let s = spec(json!({ "pos": [25, 25], "power": 100, "hits": 100 }));
+    let RoomObject::Generic(g) = normalize("powerBank", &s, &ctx()).unwrap() else {
+        panic!()
+    };
+    let d: Value = serde_json::from_str(&g.data).unwrap();
+    assert_eq!(
+        d["decayTime"],
+        100 + 5000,
+        "缺省 = ctx.time+POWER_BANK_DECAY"
+    );
+    assert_eq!(d["hits"], 100);
+
+    // 缺省 hits 用 POWER_BANK_HITS、缺省 power 为 0。
+    let s = spec(json!({ "pos": [25, 25] }));
+    let RoomObject::Generic(g) = normalize("powerBank", &s, &ctx()).unwrap() else {
+        panic!()
+    };
+    let d: Value = serde_json::from_str(&g.data).unwrap();
+    assert_eq!(d["hits"], 2_000_000);
+    assert_eq!(d["store"]["power"], 0);
+}
+
+/// powerBank 放置拒绝负数、小数与超安全整数的 power/hits/ticksToDecay；
+/// hits=0、绝对 decayTime 非法、spec 自带 store/owner 整单拒绝。
+#[test]
+fn power_bank_placement_rejects_invalid_numbers() {
+    for key in ["power", "hits", "ticksToDecay"] {
+        for value in [json!(-1), json!(1.5), json!("3"), json!(9.1e15)] {
+            let s = spec(json!({ "pos": [25, 25], key.clone(): value.clone() }));
+            let err = normalize("powerBank", &s, &ctx()).unwrap_err();
+            assert!(err.contains("非负安全整数"), "{key}={value}: {err}");
+        }
+    }
+    let err = normalize(
+        "powerBank",
+        &spec(json!({ "pos": [25, 25], "hits": 0 })),
+        &ctx(),
+    )
+    .unwrap_err();
+    assert!(err.contains("正整数"), "hits=0 无敌银行拒绝：{err}");
+    // 换算溢出分支：ctx.time=100 + 9_007_199_254_740_991 超安全整数。
+    let err = normalize(
+        "powerBank",
+        &spec(json!({ "pos": [25, 25], "ticksToDecay": 9_007_199_254_740_991_u64 })),
+        &ctx(),
+    )
+    .unwrap_err();
+    assert!(err.contains("安全整数范围"), "{err}");
+    for bad in [json!(-5), json!(1.5), json!(9.1e15)] {
+        let err = normalize(
+            "powerBank",
+            &spec(json!({ "pos": [25, 25], "decayTime": bad.clone() })),
+            &ctx(),
+        )
+        .unwrap_err();
+        assert!(err.contains("非负安全整数"), "decayTime={bad}: {err}");
+    }
+    for key in ["store", "owner"] {
+        let err = normalize(
+            "powerBank",
+            &spec(json!({ "pos": [25, 25], key.clone(): json!({"power": 1}) })),
+            &ctx(),
+        )
+        .unwrap_err();
+        assert!(err.contains(key), "spec 键 {key} 整单拒绝：{err}");
+    }
+}
+
+/// deposit 放置拒绝携带 structureType（混合类型串扰：type_name_of 优先
+/// 读 structureType 会让"deposit"串享 powerBank 反射，对抗评审 P2-5）。
+#[test]
+fn deposit_placement_rejects_structure_type_key() {
+    let err = normalize(
+        "deposit",
+        &spec(json!({ "pos": [1, 1], "structureType": "powerBank" })),
+        &ctx(),
+    )
+    .unwrap_err();
+    assert!(err.contains("structureType"), "{err}");
+}
+
 /// 相对时钟在输入值和加法结果两处校验，缺省与零仍保持原语义。
 #[test]
 fn deposit_rejects_invalid_numbers_and_deadline_overflow() {

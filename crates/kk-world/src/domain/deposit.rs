@@ -18,6 +18,11 @@ fn validate_fields(data: &Map<String, Value>) -> Result<(), String> {
     for key in ["cooldownTime", "decayTime", "harvested"] {
         unsigned(data, key)?;
     }
+    // deposit 记录不带 structureType：携带即属混合类型畸形（如放置 spec
+    // 注入 powerBank 会借 type_name_of 的 structureType 优先序串享反射）。
+    if data.contains_key("structureType") {
+        return Err("deposit 记录不得携带 structureType".into());
+    }
     Ok(())
 }
 

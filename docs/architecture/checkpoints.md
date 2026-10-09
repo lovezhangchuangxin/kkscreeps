@@ -103,3 +103,5 @@ target/release/kkscreeps sim run \
 普通 Invader 移动记忆自载荷 v6 保存于每房 `invader_memory`，可空缓存与 last_move 必填；v5_to_v6 对缺域房间显式拒绝。该域参与完整状态回放、候选发布、对象删除与恢复，校验及消费者见[游戏循环](game-loop.md#普通-invader-行为当前实现)和[状态清单](state-inventory.md)。
 
 Invader raid 房间状态自载荷 v7 保存于每房 `raid`（阈值覆盖/采集预算/活跃/房态四键必填）；v6_to_v7 对缺域房间显式拒绝（不补造——活跃房静默变为可生成是不可接受的丢失）。生成器消费者与随机流约定见[游戏循环](game-loop.md#invader-raid-调度当前首片)。
+
+powerBank 生成调度自载荷 v8 保存于每房 `power_bank_time`（Option<u64>，null 或到期 tick）；v7_to_v8 对缺键房间显式拒绝（不补造——已调度房静默回到首轮形态是不可接受的丢失）。生成器与消费者见[游戏循环](game-loop.md#powerbank-生成与消费者当前首片)。

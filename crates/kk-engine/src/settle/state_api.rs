@@ -100,6 +100,22 @@ impl Engine {
     ) -> Result<(), String> {
         self.edit_world(|world| super::invader_raid::run_spawner(world, &mut random))
     }
+
+    /// 管理触发的 powerBank 生成器：一次候选编辑内执行官方
+    /// genPowerBanks 扫描（高速路房调度、到期在墙体目标格生成）。
+    /// 随机源由调用方注入：序列耗尽报错并保留原世界。
+    pub fn run_power_bank_spawner(
+        &mut self,
+        mut random: super::invader_raid::RaidRandom,
+    ) -> Result<(), String> {
+        self.edit_world(|world| super::power_bank::run_spawner(world, &mut random))
+    }
+
+    /// 写入 powerBank 生成器的下次到期 tick（官方 powerBankTime 域的
+    /// 管理面）：生成器测试与运维需要直接调度时使用。
+    pub fn set_power_bank_time(&mut self, room: &str, value: Option<u64>) -> Result<(), String> {
+        self.edit_world(|world| world.set_power_bank_time(room, value))
+    }
     #[doc(hidden)]
     pub fn set_time_for_test(&mut self, time: u64) -> Result<(), String> {
         self.edit_world(|world| {

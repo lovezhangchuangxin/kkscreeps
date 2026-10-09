@@ -11,6 +11,7 @@ pub mod keeper;
 pub mod keeper_memory;
 pub mod npc;
 pub mod owner;
+pub mod power_bank;
 pub(crate) mod room;
 pub mod store;
 pub mod stronghold;

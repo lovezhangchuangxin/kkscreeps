@@ -24,6 +24,7 @@ pub struct RoomCheckpoint {
     pub keeper_memory: BTreeMap<u64, crate::domain::keeper_memory::KeeperMemory>,
     pub invader_memory: BTreeMap<u64, crate::domain::invader_memory::InvaderMemory>,
     pub raid: crate::domain::invader_raid::RaidRoomState,
+    pub power_bank_time: Option<u64>,
 }
 
 impl World {
@@ -63,6 +64,7 @@ impl World {
                                 .map(|(id, memory)| (id.0, memory.clone()))
                                 .collect(),
                             raid: room.raid.clone(),
+                            power_bank_time: room.power_bank_time,
                             extensions: room
                                 .extensions
                                 .iter()
@@ -126,6 +128,15 @@ impl World {
             room.raid = data.raid;
             crate::domain::invader_raid::validate(&room.raid)
                 .map_err(|e| format!("检查点房间 {name} {e}"))?;
+            if data
+                .power_bank_time
+                .is_some_and(|t| t > crate::domain::deposit::MAX_SAFE_INTEGER)
+            {
+                return Err(format!(
+                    "检查点房间 {name} power_bank_time 超出安全整数范围"
+                ));
+            }
+            room.power_bank_time = data.power_bank_time;
             World::validate_room_objects([(name.as_str(), &room)], saved.next_obj_id)?;
             for (id, fields) in data.extensions {
                 if !room.objects.contains_key(&ObjId(id)) {

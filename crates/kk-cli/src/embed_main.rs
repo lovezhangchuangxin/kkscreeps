@@ -193,6 +193,32 @@ fn handle_line(engine: &mut EmbedEngine, line: &str) -> anyhow::Result<Value> {
             engine.clear_invader_raid_creeps(room)?;
             json!({ "done": true })
         }
+        "runPowerBankSpawner" => {
+            let random = match params.get("random") {
+                None => None,
+                Some(v) => Some(
+                    v.as_array()
+                        .ok_or_else(|| anyhow::anyhow!("random 必须是数值数组"))?
+                        .iter()
+                        .map(|x| {
+                            x.as_f64()
+                                .ok_or_else(|| anyhow::anyhow!("random 元素必须是数字: {x}"))
+                        })
+                        .collect::<anyhow::Result<Vec<f64>>>()?,
+                ),
+            };
+            engine.run_power_bank_spawner(random)?;
+            json!({ "done": true })
+        }
+        "setPowerBankState" => {
+            let room = s(&params, "room")?;
+            let spec = params
+                .get("spec")
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("缺少参数 spec"))?;
+            engine.set_power_bank_state(room, &spec)?;
+            json!({ "done": true })
+        }
         "teardown" => {
             // 只重置世界和沙箱，保留进程供下一次 createShard 使用。
             engine.teardown();

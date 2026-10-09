@@ -46,7 +46,7 @@ export const capabilities: AdapterCapabilities = {
   observer: true,
   nuke: true,
   deposit: true,
-  powerBank: false,
+  powerBank: true,
   terrain: true,
   roomStatus: false,
   portals: false,

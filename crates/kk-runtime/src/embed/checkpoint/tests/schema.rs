@@ -294,6 +294,7 @@ const PINNED_CHECKPOINT_KEYS: &[&str] = &[
     "engine.world.rooms.*.raid.harvested_energy",
     "engine.world.rooms.*.raid.invader_goal",
     "engine.world.rooms.*.raid.status",
+    "engine.world.rooms.*.power_bank_time",
     "engine.world.rooms.*.snapshot[]",
     "engine.world.seed",
     "engine.world.terrain_epoch",
@@ -355,7 +356,7 @@ fn checkpoint_schema_keys_are_pinned() -> anyhow::Result<()> {
     schema_tree_invader_memory(&mut tree)?;
     assert_eq!(
         PINNED_CHECKPOINT_KEYS.len(),
-        134,
+        135,
         "钉死键总数；可空 binary 的 null 与数组分支、无包分片的 mods null 分支分别计键，增删时同步清单"
     );
     let expected: BTreeSet<String> = PINNED_CHECKPOINT_KEYS
@@ -423,8 +424,8 @@ fn strategy_key_compatibility_branches_are_pinned() -> anyhow::Result<()> {
     );
     assert_eq!(
         engine.checkpoint(Value::Null)?["checkpoint_format_version"],
-        json!(7),
-        "当前保存恒为格式 7"
+        json!(8),
+        "当前保存恒为格式 8"
     );
 
     // (b) 原生检查点注入该键 → 拒绝且旧分片保持原生形态。

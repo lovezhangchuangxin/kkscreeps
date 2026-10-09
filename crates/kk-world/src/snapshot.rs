@@ -381,6 +381,23 @@ fn snapshot_json(
                     v.remove("decayTime");
                 }
             }
+            // powerBank 快照补官方派生字段：decayTime 折算剩余
+            // ticksToDecay、store.power 提升为顶层 power（玩家 rawData
+            // 通道仍透传绝对键与 store，由 StructurePowerBank 类 getter
+            // 折算）。来源：game/structures.js 的 StructurePowerBank。
+            if v.get("structureType").and_then(Value::as_str) == Some("powerBank") {
+                if let Some(d) = v.get("decayTime").and_then(Value::as_u64) {
+                    v.insert("ticksToDecay".into(), remaining(d, time));
+                    v.remove("decayTime");
+                }
+                if let Some(p) = v
+                    .get("store")
+                    .and_then(|s| s.get("power"))
+                    .and_then(Value::as_u64)
+                {
+                    v.insert("power".into(), json!(p));
+                }
+            }
             if v.get("structureType").and_then(Value::as_str) == Some("keeperLair") {
                 let next = v
                     .get("nextSpawnTime")

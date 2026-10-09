@@ -9,9 +9,11 @@ use kk_schema::room::{
     BodyPart, ControllerObj, CreepObj, EnergyObj, FlagObj, GenericObj, ResourceStack, RoomObject,
     RuinObj, SpawnObj, Store, TombstoneObj,
 };
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 use crate::types::BodyKind;
+
+use crate::domain::deposit::MAX_SAFE_INTEGER;
 
 mod place_structure;
 
@@ -153,6 +155,15 @@ pub fn normalize(kind: &str, spec: &Value, ctx: &PlaceCtx) -> Result<RoomObject,
         // 适配器 spec 给相对 cooldown/ticksToDecay，按放置时刻换算
         // （适配器契约：放置后一次 tick 读恰好减一，与 nuke 同形）。
         "deposit" => Ok(RoomObject::Generic(normalize_deposit(spec, x, y, ctx)?)),
+        // powerBank 结构放置归一：power 进 store（官方 store:{power} 形态，
+        // 玩家面 power getter 与死亡转废墟的 store 转移都读它）；相对
+        // ticksToDecay 换算为绝对 decayTime（与 deposit/nuke 同一适配器
+        // 契约：放置后一次 tick 读恰好减一）；hits 可覆盖、hitsMax 恒
+        // POWER_BANK_HITS（inspection 契约：显式 hits 不改 hitsMax）。
+        // 缺 ticksToDecay 默认 POWER_BANK_DECAY（适配器契约明文
+        // "Defaults to POWER_BANK_DECAY"，vanilla/starter 适配器同款，
+        // 官方 cron 创建的对象也恒带 decayTime）。
+        "powerBank" => Ok(RoomObject::Generic(normalize_power_bank(spec, x, y, ctx)?)),
         // powerCreep 的放置是「已生成」形态：等级取 powers 等级和，
         // hitsMax/storeCapacity 随等级派生（官方 upgrade 步进），寿命
         // time+5000；同名账号记录由放置层（kk-runtime）从成品 data 建立。
@@ -191,6 +202,68 @@ fn normalize_nuke(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> GenericObj {
 fn normalize_deposit(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<GenericObj, String> {
     let mut data = generic_fields("deposit", spec);
     crate::domain::deposit::normalize_times(&mut data, ctx.time)?;
+    Ok(GenericObj {
+        id: 0,
+        x,
+        y,
+        data: Value::Object(data).to_string(),
+    })
+}
+
+/// powerBank 放置归一：见 normalize 分派处的形态说明。
+/// power/hits 只接受非负安全整数（hits 须 ≥1——0 耐久银行无敌且
+/// 不可摧毁，是放置侧畸形）；绝对键 decayTime 透传前同校验；
+/// spec 自带 store/owner 整单拒绝（store 由归一层独占构造，owner
+/// 透传会让战毁废墟凭空带主，官方银行无主）。
+fn normalize_power_bank(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<GenericObj, String> {
+    let mut data = generic_fields("structure", spec);
+    data.insert("structureType".into(), json!("powerBank"));
+    for key in ["store", "owner"] {
+        if data.contains_key(key) {
+            return Err(format!(
+                "powerBank 放置不接受 spec 键 {key}（由归一层独占构造）"
+            ));
+        }
+    }
+    let read_u64 = |data: &Map<String, Value>, key: &str| -> Result<Option<u64>, String> {
+        match data.get(key) {
+            None | Some(Value::Null) => Ok(None),
+            Some(v) => v
+                .as_u64()
+                .filter(|n| *n <= MAX_SAFE_INTEGER)
+                .map(Some)
+                .ok_or_else(|| format!("powerBank {key} 须为非负安全整数")),
+        }
+    };
+    let power = read_u64(&data, "power")?.unwrap_or(0);
+    let hits = match read_u64(&data, "hits")? {
+        None => c::POWER_BANK_HITS as u64,
+        Some(0) => return Err("powerBank hits 须为正整数（0 耐久银行无敌且不可摧毁）".into()),
+        Some(n) => n,
+    };
+    // 缺省截止时间 = 放置时刻 + POWER_BANK_DECAY（适配器契约默认）。
+    let default_decay_time = ctx
+        .time
+        .checked_add(c::POWER_BANK_DECAY as u64)
+        .filter(|n| *n <= MAX_SAFE_INTEGER)
+        .ok_or("powerBank 缺省衰变截止时间超出安全整数范围")?;
+    let decay_time = match read_u64(&data, "ticksToDecay")? {
+        Some(delta) => ctx
+            .time
+            .checked_add(delta)
+            .filter(|n| *n <= MAX_SAFE_INTEGER)
+            .ok_or("powerBank ticksToDecay 换算后的截止时间超出安全整数范围")?,
+        // 显式绝对键 decayTime 透传，缺省取契约默认。
+        None => read_u64(&data, "decayTime")?.unwrap_or(default_decay_time),
+    };
+    for key in ["power", "hits", "ticksToDecay", "decayTime"] {
+        data.remove(key);
+    }
+    data.insert("store".into(), json!({ "power": power }));
+    data.insert("hits".into(), json!(hits));
+    data.insert("hitsMax".into(), json!(c::POWER_BANK_HITS));
+    data.insert("decayTime".into(), json!(decay_time));
+    crate::domain::power_bank::validate(&Value::Object(data.clone()))?;
     Ok(GenericObj {
         id: 0,
         x,

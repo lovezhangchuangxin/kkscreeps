@@ -153,6 +153,28 @@ pub fn deposit_tick(w: &mut Working, id: ObjId) {
     }
 }
 
+/// powerBank 对象 tick：官方 processor.js:421-426 的移除相——
+/// `gameTime >= decayTime-1` 直接移除，不泼洒 store（store 只在战毁
+/// 废墟的 ruin 衰变路径转成资源）。与 deposit 同门同式；放置与生成
+/// 两条路径恒写 decayTime（缺省默认 POWER_BANK_DECAY），缺键形态
+/// 仅直改世界可达、永不移除（与官方 undefined-1 → NaN → false 等价）。
+pub fn power_bank_tick(w: &mut Working, id: ObjId) {
+    let Some(RoomObject::Generic(g)) = w.room.objects.get(&id) else {
+        return;
+    };
+    let data: Value = serde_json::from_str(&g.data).unwrap_or_default();
+    if data.get("structureType").and_then(Value::as_str) != Some("powerBank") {
+        return;
+    }
+    let expired = data
+        .get("decayTime")
+        .and_then(Value::as_u64)
+        .is_some_and(|d| w.time >= d.saturating_sub(1));
+    if expired {
+        w.remove_obj(id);
+    }
+}
+
 /// 处理 container/rampart 衰减；rampart 的 hitsMax 每 tick 同步，不等衰减到期。
 /// Container 消失时先写入非正耐久，再掉落仓内资源，避免资源又存回即将删除的容器。
 pub fn generic_decay_tick(w: &mut Working, id: ObjId) {

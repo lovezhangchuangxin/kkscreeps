@@ -59,6 +59,10 @@ pub struct RoomState {
     /// Invader raid 房间状态（阈值覆盖/采集预算/活跃/房间状态）；
     /// 完整检查点保存，任意投影或管理快照不暴露。
     pub raid: crate::domain::invader_raid::RaidRoomState,
+    /// 官方 `room.powerBankTime`：下一次 powerBank 生成的到期 tick；
+    /// None 表示生成器尚未为本房调度（首轮 cron 只写入到期时间）。
+    /// 完整检查点保存，任意投影不暴露。
+    pub power_bank_time: Option<u64>,
 }
 
 impl RoomState {
@@ -77,6 +81,7 @@ impl RoomState {
             keeper_memory: BTreeMap::new(),
             invader_memory: BTreeMap::new(),
             raid: Default::default(),
+            power_bank_time: None,
         }
     }
 
@@ -103,6 +108,7 @@ impl RoomState {
             crate::domain::deposit::validate(&data)?;
             crate::domain::keeper::validate(&data)?;
             crate::domain::invader_core::validate(&data)?;
+            crate::domain::power_bank::validate(&data)?;
         }
         let effects = crate::effects::extract(&mut object)?;
         object.set_id(id);
@@ -326,6 +332,22 @@ impl World {
         room.raid.harvested_energy = 0;
         room.raid.active = true;
         self.generation += 1; // 保守失效：可变访问即视为内容可能变更
+    }
+
+    /// 写入 powerBank 生成器的下次到期 tick（官方 `powerBankTime`）；
+    /// None 清除调度（回到"首轮 cron 只写时间"形态）。生成器与管理
+    /// 命令在候选编辑内调用；房间不存在返回错误由调用方决定语义。
+    pub fn set_power_bank_time(
+        &mut self,
+        room_name: &str,
+        value: Option<u64>,
+    ) -> Result<(), String> {
+        let Some(room) = self.rooms.get_mut(room_name) else {
+            return Err(format!("房间 {room_name} 不存在"));
+        };
+        room.power_bank_time = value;
+        self.generation += 1; // 保守失效：可变访问即视为内容可能变更
+        Ok(())
     }
 
     /// 放入对象并分配全局唯一 id（对象 id 字段被覆写为分配值）。

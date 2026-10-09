@@ -37,6 +37,7 @@ mod notify;
 mod nuke_actions;
 mod observer_actions;
 mod power_actions;
+mod power_bank;
 mod resources;
 mod spawn;
 mod store_transfer;

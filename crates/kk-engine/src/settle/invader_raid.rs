@@ -32,8 +32,14 @@ impl RaidRandom {
     }
 
     pub fn seeded(seed: u64, time: u64) -> Self {
+        Self::seeded_domain("invader-raid", seed, time)
+    }
+
+    /// 带域标签的种子流：同一 tick/seed 下不同生成器（raid/powerBank）
+    /// 派生互不相关的流，避免两个 cron 同拍产生相同随机序列。
+    pub fn seeded_domain(domain: &str, seed: u64, time: u64) -> Self {
         let mut h = 0xcbf2_9ce4_8422_2325u64;
-        for b in format!("invader-raid#{seed}#{time}").as_bytes() {
+        for b in format!("{domain}#{seed}#{time}").as_bytes() {
             h ^= u64::from(*b);
             h = h.wrapping_mul(0x100_0000_01b3);
         }
@@ -42,7 +48,11 @@ impl RaidRandom {
         }
     }
 
-    fn unit(&mut self) -> Result<f64, String> {
+    /// 取下一个 [0,1) 单位随机数；powerBank 生成器（power_bank.rs）复用
+    /// 同一注入/种子双形态随机源。embed 层已校验注入序列，此处对引擎级
+    /// 直接构造的随机源做边界复验（NaN/越界会在下游坐标换算触发地形
+    /// 断言）。
+    pub(crate) fn unit(&mut self) -> Result<f64, String> {
         match &mut self.inner {
             RaidRandomInner::Sequence(values, index) => {
                 let v = values
@@ -50,6 +60,9 @@ impl RaidRandom {
                     .copied()
                     .ok_or("随机序列耗尽：注入的 random 数组不足以覆盖本次生成器消耗")?;
                 *index += 1;
+                if !v.is_finite() || v < 0.0 || v >= 1.0 {
+                    return Err(format!("随机序列值须落在 [0,1)：{v}"));
+                }
                 Ok(v)
             }
             RaidRandomInner::Seeded(state) => {
