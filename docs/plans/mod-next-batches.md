@@ -4,8 +4,9 @@
 
 ## 当前接手位置
 
-- 更新日期：2026-10-09；TooAngel 单房经济与冷恢复首片已提交 `a3c0602`（实施基线 `5315dca`）；Source Keeper 巡守与战斗已收口（含三路复审清偿批）。最近引擎验证：完整门禁 Rust 1471 passed / 0 failed；release 棘轮全量 2802 passed / 8 failed / 104 skipped（0 转红，8 例均为既有官方对齐豁免）；本批未重跑三 bot。
+- 更新日期：2026-10-09；TooAngel 单房经济与冷恢复首片已提交 `a3c0602`（实施基线 `5315dca`）；Source Keeper 巡守与战斗已收口（含三路复审清偿批）。最近引擎验证：完整门禁 Rust 1481 passed / 0 failed；release 棘轮全量 2802 passed / 8 failed / 104 skipped（0 转红，8 例均为既有官方对齐豁免）；本批未重跑三 bot。
 - 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座、deposit 采集链、observer 限时视野已交付。**M2H.b 19/19 powers 全部接通**。
+- 当前接手：普通 Invader 行为已贯通（基线 `13424c7`，随本提交交付），接着推进持续世界 NPC 战斗与输入回放/冷恢复验收。walkTo 唯一上游消费者为 stronghold，普通 Invader moveTo/lastMove 已接；地图生成/raid/stronghold 与 G21 Mod 世界事件仍未完成。
 - 本次完成：**Invader 相邻近战首片**（基线 `5ed3a03`，随本提交交付）；实现零步可达目标选择、独立近战/远程与共用战斗链，双通道、晚期失败重试和冷恢复已验。下一片为路径建筑改向/追击/逃离，须同片补齐 NPC 推挤记忆及保存恢复；治疗与 raid/stronghold 另拆。
 - 已完成：**Invader 自动远程攻击首片**（提交 `5ed3a03`，基线 `a3c0602`）；最低 hits 目标、过滤、既有战斗链、失败重试与冷恢复已验，无新增保存域。后续按官方消费者推进路径建筑改向/追击/治疗，寻路/walkTo 须同片补齐 NPC 推挤记忆；raid/stronghold 另拆。
 - 后续候选：**零散红逐例归因**（剩余 8 例均为既有官方对齐豁免，清单见最新兼容报告；NPC 自杀与 keeper lair 已转绿，后续可推进 Invader 路径建筑改向/追击/治疗或 G02.d3 后续，仍按实际消费者拆片）或推进 Overmind/战斗/多房真实 bot 验收；TooAngel 单房经济首片已完成，每片贯通真实消费者、玩家投影、失败边界和冷恢复。
@@ -18,7 +19,7 @@
 
 | 顺位 | 任务 | 首片与完成条件 |
 |---|---|---|
-| 1 | 零散红逐例归因与修复 | 8 条既有官方对齐豁免保留证据；Invader 自动远程攻击已交付；零步相邻近战已交付；后续为路径建筑改向/追击/治疗（Source Keeper 同房巡守/战斗已交付），raid/stronghold 另拆；每例有官方源或套件仲裁证据 |
+| 1 | 零散红逐例归因与修复 | 8 条既有官方对齐豁免保留证据；Invader 自动远程攻击已交付；零步相邻近战已交付；普通 Invader 路径建筑改向/追击/治疗已贯通；后续为 NPC 战斗验收与地图/raid/stronghold（Source Keeper 同房巡守/战斗已交付），raid/stronghold 另拆；每例有官方源或套件仲裁证据 |
 | 2 | 真实 bot 验收与 G02.d3 后续 | TooAngel 单房经济/死亡后补员/冷恢复已验；剩余 Overmind、战斗、多房，以及结构/rampart 通行与寻路贯通 |
 | 独立候选 | G02.d3 后续、G27.a | 前者贯通结构/rampart 通行与寻路；后者提供异步后台生命周期，随后才接 storage/outbox/网络 |
 
@@ -254,3 +255,13 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - 定向 `pnpm run check -- kk-runtime --test mod_chain_tests --filter invader_` 已通过：14 passed / 0 failed（含既有远程 8 例、新增近战 6 例，每例 JSON/KKPV）。覆盖最终目标覆盖顺序、同格 powerCreep/缺 hits、NPC/孵化分类、有效部件/含 HEAL 分支、安全模式、boost/rampart、显式覆盖、Mod 取消不压制独立远程、晚期失败重试与冷恢复后死亡一次。
 - 完整无参数 `pnpm run check` 通过：Rust 1471 passed / 0 failed，Clippy、debug CLI 构建、JavaScript workspace/维护工具、303 个 Markdown / 1927 个本地链接与源码规模检查通过。release CLI 重建、固定 bot 准备与适配器构建通过；显式指定新 release CLI 执行兼容棘轮，2802 passed / 8 failed / 104 skipped、floor 2802，相对 HEAD~1 转红 0 / 转绿 0（8 条仍为既有官方对齐豁免）。报告更新入库，本批不重跑三 bot/TooAngel 首片长测。
 - 复审与剩余：本片没有 moveTo；官方路径首格建筑改向攻击/dismantle、复杂阻塞、非相邻追击/逃离、治疗/跟随、NPC walkTo 推挤与记忆仍未实现，须后续同片补齐路径保存恢复。只交付零步选敌与战斗消费，不标完整 findAttack/NPC 或 G21 完成。实现与现行架构/源码导航/兼容说明同步，随本提交交付；未推送远端。
+
+## 2026-10-09 普通 Invader 行为贯通（已完成，随本提交交付）
+
+- 基线 `13424c7`，起始工作区干净；持续开发授权下贯通 findAttack 的三轮寻路、路径建筑 attack/dismantle、逃离、healer 跟随/治疗与退场，未停在单个相邻动作。来源为锁定官方 4.3.0 invaders 与 common/fake-runtime.js。
+- 职责复审：Invader 入口只持有分类/动作合并；attack/healer 按独立变化原因拆开；invader_path 持有最近目标/5 tick moveTo/flee，NPC path 共用原生矩阵与搜索，Keeper 仍用 50 tick 缓存。
+- 保存：新增 invader_memory（move_cache 与 last_move）已接全世界检查点、编辑/发布校验、对象删除、RemovedObject 链拒绝恢复和迁移搬运；不进玩家投影。载荷 v6，v5_to_v6 缺域显式拒绝，可空键必须存在；schema 键树 130 键。Keeper 记忆未改形态。推挤依赖调整有源码证据：walkTo 唯一上游消费者为 stronghold/creeps.js，普通 Invader 使用 moveTo；Keeper lastMove/walkTo 随 stronghold 接线。
+- 定向 Rust 测试：Invader 24 passed / 0 failed（含更新后的退场守卫），checkpoint 首次 19 passed / 0 failed / 1 ignored，随后追加独立 v5→v6 迁移用例已随完整门禁通过。覆盖追击/缓存时钟、逃离与远程独立、缺血量/稳定平手、治疗与跟随目标不同、严重受伤分支、墙环 attack/WORK dismantle、路径晚期失败丢弃/重试、冷恢复、非法记忆和缺域原子拒绝。
+- 原首片守卫变化：可达 spawn 不再保留无目标 Invader；满血孤立 healer 无目标自杀。无活跃 ATTACK 仍可能按官方最终 attack 产生零伤害事件，旧“零攻击事件”断言按真实官方消费者收紧为零伤害，而非隐藏新行为。
+- 完整无参数 `pnpm run check` 通过：Rust 1481 passed / 0 failed，Clippy、debug CLI、JavaScript workspace/维护工具、303 个 Markdown / 1929 个本地链接、912 个源码/测试文件均 ≤1000 行。release CLI、固定 bot 准备与适配器构建通过；显式 release 棘轮 2802 passed / 8 failed / 104 skipped（floor 2802，0 转红/0 转绿，8 条既有豁免）。代码/契约/报告随本提交交付，未推送。随后直接推进持续世界 NPC 战斗与输入日志/冷恢复验收。
+- 父领域未完成：地图 NPC 生成/raid 调度、userSummoned/strongholdId 特殊状态、stronghold 战术/walkTo 推挤与 Keeper lastMove，G21 Mod 世界事件能力仍未开放。

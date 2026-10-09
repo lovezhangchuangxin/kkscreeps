@@ -14,18 +14,18 @@
 //! 在版本路由前就被拒。
 use serde_json::Value;
 
-/// 当前载荷格式版本。v5：房间 NPC 巡守记忆独立表（必填，与 v4 的 effects
+/// 当前载荷格式版本。v6：必填 Invader 移动记忆表；v5：房间 NPC 巡守记忆独立表（必填，与 v4 的 effects
 /// 同一拒绝策略）；v4：房间对象效果独立表（必填）；v3：宿主玩法协议身份；
 /// v2：新增 `checkpoint_format_version` 键本身，并把
 /// `last_auto_disable` 的 trace 批次前旧形态（缺 `mod_id`，来源只在
 /// trigger.error.fault.binding）显式归一为结构化形态。
-pub(super) const CURRENT_FORMAT_VERSION: u32 = 5;
+pub(super) const CURRENT_FORMAT_VERSION: u32 = 6;
 
 type MigrationFn = fn(&mut Value) -> Result<(), String>;
 
 /// 升级链：第 n 项（0 起算）执行 n+1 → n+2。
 const MIGRATIONS: [MigrationFn; (CURRENT_FORMAT_VERSION - 1) as usize] =
-    [v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5];
+    [v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6];
 
 /// 把载荷迁移到当前格式；返回**迁移前的原始版本**供语义门决策
 ///（如执行策略身份硬门只约束 v2 起保存的检查点，v1 存量按 legacy 宽容）。
@@ -127,6 +127,20 @@ fn v4_to_v5(value: &mut Value) -> Result<(), String> {
             .any(|room| room.get("keeper_memory").is_none())
     {
         return Err("检查点房间缺少 keeper_memory，无法恢复 NPC 巡守记忆".into());
+    }
+    Ok(())
+}
+
+// 独立保存域缺失即拒绝；不从当前对象推测历史路径与 lastMove。
+fn v5_to_v6(value: &mut Value) -> Result<(), String> {
+    if let Some(rooms) = value
+        .pointer("/engine/world/rooms")
+        .and_then(Value::as_object)
+        && rooms
+            .values()
+            .any(|room| room.get("invader_memory").is_none())
+    {
+        return Err("检查点房间缺少 invader_memory，无法恢复 Invader 移动记忆".into());
     }
     Ok(())
 }

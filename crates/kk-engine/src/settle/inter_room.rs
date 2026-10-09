@@ -72,6 +72,9 @@ pub fn apply_inter_room_moves(rooms: &mut [(String, RoomState)], moves: &[InterR
         // Keeper 巡守记忆与 effects/extensions 同形随迁。当前 NPC 不跨房
         //（movement 显式排除），本迁移是防御：源房滞留会在候选发布校验
         //（记忆引用无效执行者）时整轮拒绝且同输入同失败。
+        if let Some(memory) = rooms[source_idx].1.invader_memory.remove(&mv.id) {
+            rooms[target_idx].1.invader_memory.insert(mv.id, memory);
+        }
         if let Some(memory) = rooms[source_idx].1.keeper_memory.remove(&mv.id) {
             rooms[target_idx].1.keeper_memory.insert(mv.id, memory);
         }

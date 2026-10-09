@@ -1,4 +1,4 @@
-//! Keeper fake-runtime moveTo 的同房原生寻路与 50 tick 路径复用。
+//! NPC fake-runtime 共用同房原生寻路；Keeper 保持 50 tick 路径复用。
 use kk_core::constants as c;
 use kk_pathfinder::{CostMatrix, Goal, RoomDecision, SearchOptions, TerrainSet, WorldPosition};
 use kk_schema::room::RoomObject;
@@ -12,10 +12,21 @@ use kk_world::{
 
 use crate::settle::{SettleError, movement};
 
-fn search(
+#[derive(Clone, Copy, Default)]
+pub(super) struct Options {
+    pub ignore_roads: bool,
+    pub ignore_creeps: bool,
+    pub ignore_destructible: bool,
+    pub ignore_ramparts: bool,
+    pub flee: bool,
+}
+
+pub(super) fn search(
     room: &RoomState,
+    owner: &str,
     origin: (u8, u8),
-    destination: (u8, u8),
+    goals: &[((u8, u8), u32)],
+    opts: Options,
 ) -> Result<Vec<[u8; 2]>, SettleError> {
     let tiles = std::array::from_fn(|y| std::array::from_fn(|x| room.terrain().get(x, y)));
     let terrain = TerrainSet::new([(room.name.clone(), kk_pathfinder::pack_terrain(&tiles))])
@@ -26,15 +37,35 @@ fn search(
     // 非公有他人 rampart 与 portal 也阻挡，生物（含自身）按官方默认入矩阵。
     for o in room.objects.values() {
         let kind = movement::type_name_of(o);
-        let mut blocked = c::OBSTACLE_OBJECT_TYPES.contains(&kind.as_ref()) || kind == "portal";
+        let ignored = opts.ignore_creeps && kind == "creep"
+            || opts.ignore_destructible
+                && [
+                    "constructedWall",
+                    "rampart",
+                    "spawn",
+                    "extension",
+                    "link",
+                    "storage",
+                    "observer",
+                    "tower",
+                    "powerBank",
+                    "powerSpawn",
+                    "lab",
+                    "terminal",
+                ]
+                .contains(&kind.as_ref());
+        let mut blocked =
+            !ignored && (c::OBSTACLE_OBJECT_TYPES.contains(&kind.as_ref()) || kind == "portal");
         if let RoomObject::Generic(g) = o {
             let data: serde_json::Value = serde_json::from_str(&g.data).unwrap_or_default();
-            blocked |= kind == "rampart"
+            blocked |= !opts.ignore_destructible
+                && kind == "rampart"
                 && !data["isPublic"].as_bool().unwrap_or(false)
-                && data["owner"].as_str() != Some(OWNER);
+                && data["owner"].as_str() != Some(owner);
         }
         if let RoomObject::ConstructionSite(site) = o {
-            blocked |= site.owner.as_deref() == Some(OWNER)
+            blocked |= !opts.ignore_destructible
+                && site.owner.as_deref() == Some(owner)
                 && c::OBSTACLE_OBJECT_TYPES.contains(&site.structure_type.as_str());
         }
         if blocked {
@@ -44,13 +75,28 @@ fn search(
         if kind == "swamp" {
             let (x, y) = o.pos();
             if costs.get(x as usize, y as usize) == Some(0) {
-                costs.set(x as usize, y as usize, 10);
+                costs.set(
+                    x as usize,
+                    y as usize,
+                    if opts.ignore_roads { 5 } else { 10 },
+                );
             }
         }
-        if matches!(o, RoomObject::Road(_)) {
+        if !opts.ignore_roads && matches!(o, RoomObject::Road(_)) {
             let (x, y) = o.pos();
             // 官方 Uint8 矩阵的 255 仍小于 Infinity，因此道路无条件覆盖。
             costs.set(x as usize, y as usize, 1);
+        }
+    }
+    if opts.ignore_ramparts {
+        for object in room.objects.values() {
+            if matches!(
+                movement::type_name_of(object).as_ref(),
+                "rampart" | "constructedWall"
+            ) {
+                let (x, y) = object.pos();
+                costs.set(x as usize, y as usize, 0);
+            }
         }
     }
     let pos = |p: (u8, u8)| {
@@ -58,15 +104,20 @@ fn search(
             .map_err(|e| SettleError(e.to_string()))
     };
     let options = SearchOptions {
-        plain_cost: 2,
-        swamp_cost: 10,
+        plain_cost: if opts.ignore_roads { 1 } else { 2 },
+        swamp_cost: if opts.ignore_roads { 5 } else { 10 },
+        flee: opts.flee,
         max_rooms: 1,
         ..Default::default()
     };
+    let goals: Vec<_> = goals
+        .iter()
+        .map(|(p, range)| Ok(Goal::with_range(pos(*p)?, *range)))
+        .collect::<Result<_, SettleError>>()?;
     let result = kk_pathfinder::search_with_room_callback(
         &terrain,
         pos(origin)?,
-        &[Goal::with_range(pos(destination)?, 1)],
+        &goals,
         &options,
         |_, _| RoomDecision::CostMatrix(&costs),
     )
@@ -93,7 +144,7 @@ pub(super) fn direction(
         memory.move_cache = Some(KeeperPath {
             destination: dest,
             time,
-            path: search(room, origin, destination)?,
+            path: search(room, OWNER, origin, &[(destination, 1)], Options::default())?,
         });
     }
     let cache = memory.move_cache.as_ref().expect("路径已装入");

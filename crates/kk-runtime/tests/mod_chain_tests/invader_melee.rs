@@ -170,7 +170,16 @@ fn invader_melee_body_healer_spawning_range_and_safe_mode_gates() -> anyhow::Res
             }
             e.tick(1)?;
             assert_eq!(hits(&e, &target), 100, "{guard}");
-            assert!(harness::events(&e, c::EVENT_ATTACK).is_empty(), "{guard}");
+            let attacks = harness::events(&e, c::EVENT_ATTACK);
+            if guard == "inactive" {
+                assert_eq!(attacks.len(), 1);
+                assert_eq!(
+                    attacks[0]["data"]["damage"], 0,
+                    "官方最终 attack 不检查活跃身体，产生零伤害事件"
+                );
+            } else {
+                assert!(attacks.is_empty(), "{guard}");
+            }
         }
     }
     Ok(())

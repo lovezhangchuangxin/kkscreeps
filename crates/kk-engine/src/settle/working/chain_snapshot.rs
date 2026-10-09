@@ -9,6 +9,7 @@ pub struct RemovedObject {
     pub extensions: Option<BTreeMap<String, Value>>,
     pub effects: Option<Vec<kk_world::EffectEntry>>,
     pub keeper_memory: Option<kk_world::domain::keeper_memory::KeeperMemory>,
+    pub invader_memory: Option<kk_world::domain::invader_memory::InvaderMemory>,
     pub old_fatigue: Option<u32>,
     pub tick_fatigue: Option<i64>,
     pub damage: Option<i64>,
@@ -203,6 +204,7 @@ impl Working {
                     self.room.extensions.remove(&id);
                     self.room.effects.remove(&id);
                     self.room.keeper_memory.remove(&id);
+                    self.room.invader_memory.remove(&id);
                     self.damage_to_apply.remove(&id);
                     self.heal_to_apply.remove(&id);
                 }
@@ -224,6 +226,14 @@ impl Working {
                         }
                         None => {
                             self.room.keeper_memory.remove(&bundle.id);
+                        }
+                    }
+                    match bundle.invader_memory {
+                        Some(memory) => {
+                            self.room.invader_memory.insert(bundle.id, memory);
+                        }
+                        None => {
+                            self.room.invader_memory.remove(&bundle.id);
                         }
                     }
                     match bundle.extensions {

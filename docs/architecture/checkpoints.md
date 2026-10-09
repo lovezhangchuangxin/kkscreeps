@@ -14,7 +14,7 @@
 | 市场 | 订单、交易及两类分配游标 |
 | 引擎 | 自身 ID 游标、最近成功事件、每个 Mod 的已提交 namespace state、冻结 PlanHash |
 | 玩家工作者 | 工作线程注册子集、JS/二进制模块字节、堆/CPU/安装预算及常量配置；账户不必均有线程 |
-| 格式版本 | `checkpoint_format_version`（当前 4，必填——缺失即拒，不做缺键猜测）：JSON 载荷域布局版本，经注册迁移链升入当前版本 |
+| 格式版本 | `checkpoint_format_version`（当前 6，必填——缺失即拒，不做缺键猜测）：JSON 载荷域布局版本，经注册迁移链升入当前版本 |
 | 宿主玩法协议 | `host_protocol`，当前 UTC Date/RNG/SDK 语义身份，恢复严格核验 |
 | Mod 身份 | 全部发现包的 manifest 与全部文件 SHA-256，包含未选择的包；配置、内容选择、冻结选项、VM 预算及自动停用阈值 |
 | 执行策略身份 | 组合报告的域分隔摘要：冻结 PlanHash + 停用闭包 + 每槽派生执行面（键/阶段/模式/活动链）；引用 PlanHash 而非复制，诊断字段不入摘要 |
@@ -99,3 +99,5 @@ target/release/kkscreeps sim run \
 实际玩家 CPU 费用、玩家面 Date/Math.random 与墙钟输入本来就可能改变独立运行结果；完整续跑相等测试使用固定停跑回充轮锁定 CPU 状态，真实 bot 比较不要求各次实测 CPU 费用相等。玩法 realm（Mod 规则代码）的时间/随机自 G22.b 起确定性化（[协议](gameplay-determinism.md)）；任意 bot 的确定性回放需要输入日志与玩家执行结果——输入日志写入面自 G25.a 起交付、结算回放核对自 G25.b 起交付（[契约](input-log.md)「回放」节，`sim run --verify-replay`）。证据见[基础检查点交付](../research/notes/basic-checkpoints-2026-10-05.md)。
 
 加载检查点目录作为输入整棵受保护：报告、显式保存和日志路径（含符号链接解析后的路径）不得落入其中，守卫先于执行及失败报告写入。重复冷恢复继承 `applied_switches` 并仅追加新成功切换；会话报告只展示当次切换。缺少带哈希游标的旧目录检查点拒绝自动配对，不凭 tick 猜测历史。
+
+普通 Invader 移动记忆自载荷 v6 保存于每房 `invader_memory`，可空缓存与 last_move 必填；v5_to_v6 对缺域房间显式拒绝。该域参与完整状态回放、候选发布、对象删除与恢复，校验及消费者见[游戏循环](game-loop.md#普通-invader-行为当前实现)和[状态清单](state-inventory.md)。

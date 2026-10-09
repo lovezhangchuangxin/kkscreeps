@@ -90,7 +90,7 @@ fn npc_retirement_creates_empty_tomb_without_container_reclaim() -> anyhow::Resu
 }
 
 #[test]
-fn npc_retirement_guards_leave_unimplemented_target_branches_alive() -> anyhow::Result<()> {
+fn npc_retirement_target_branches_follow_complete_invader_rules() -> anyhow::Result<()> {
     for binary in [false, true] {
         for guard in [
             "unowned",
@@ -141,6 +141,10 @@ fn npc_retirement_guards_leave_unimplemented_target_branches_alive() -> anyhow::
                 // NPC 自杀发射死亡事件或创建墓碑。
                 assert!(e.get_object(&id).is_none());
                 assert!(harness::events(&e, c::EVENT_OBJECT_DESTROYED).is_empty());
+            } else if matches!(guard, "spawn" | "healer") {
+                assert!(e.get_object(&id).is_none(), "{guard} 官方无目标退场");
+                assert_eq!(e.find_in_room("W1N1", c::FIND_TOMBSTONES).len(), 1);
+                continue;
             } else {
                 assert!(e.get_object(&id).is_some(), "{guard} 分支不得误退场");
             }

@@ -54,6 +54,8 @@ pub struct RoomState {
     pub effects: BTreeMap<ObjId, Vec<crate::EffectEntry>>,
     /// Source Keeper 私有巡守目标与路径；完整检查点保存，对象删除时清理。
     pub keeper_memory: BTreeMap<ObjId, crate::domain::keeper_memory::KeeperMemory>,
+    /// Invader 移动路径与 lastMove；随对象删除，完整检查点独立保存。
+    pub invader_memory: BTreeMap<ObjId, crate::domain::invader_memory::InvaderMemory>,
 }
 
 impl RoomState {
@@ -70,6 +72,7 @@ impl RoomState {
             extensions: BTreeMap::new(),
             effects: BTreeMap::new(),
             keeper_memory: BTreeMap::new(),
+            invader_memory: BTreeMap::new(),
         }
     }
 
@@ -474,6 +477,7 @@ impl World {
         let removed = room.objects.remove(&id);
         room.effects.remove(&id);
         room.keeper_memory.remove(&id);
+        room.invader_memory.remove(&id);
         room.extensions.remove(&id);
         if removed.is_some() {
             self.generation = generation;

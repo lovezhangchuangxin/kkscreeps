@@ -1,5 +1,6 @@
 //! NPC 预意图生成与合并；Keeper 巡守/战斗、Invader 无目标退场/相邻近战/远程攻击。
 mod invader;
+mod invader_path;
 mod keeper;
 mod path;
 use std::borrow::Cow;
@@ -15,7 +16,7 @@ pub(super) fn with_npc_intents<'a>(
     w: &mut super::Working,
     batch: &'a IntentBatch,
 ) -> Result<Cow<'a, IntentBatch>, super::SettleError> {
-    let mut all = vec![(INVADER_OWNER, invader::intents(&w.room))];
+    let mut all = vec![(INVADER_OWNER, invader::intents(w)?)];
     all.push((kk_world::domain::keeper::OWNER, keeper::intents(w)?));
     let mut batch = Cow::Borrowed(batch);
     for (owner, generated) in all {

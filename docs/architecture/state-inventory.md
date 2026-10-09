@@ -22,7 +22,7 @@
 | Mod 包身份 | `mods.packages.*.manifest`、`mods.packages.*.files_sha256`（不透明） | 身份核验：恢复时与调用方提供的包 manifest 与全部文件 SHA-256 逐一比对，含未选择包 | `ModIdentity::verify`；相同包可换目录，缺包/多包/内容变化拒绝 | 拒绝不迁移，G23 负责 |
 | Mod 配置身份 | `mods.options`（不透明） | 与 `RegisterOptions` 重建身份核验（内容选择、逐包配置、冻结选项、VM 预算、profiler 开关、停用阈值） | `ModIdentity::verify` | 拒绝不迁移，G23 负责 |
 | 宿主玩法协议 | `host_protocol` | 当前 `kk-gameplay-v2-utc-date`，严格等值 | 替代分片装配前核验；日志头段同源 | 旧时区语义明确拒绝，无自动内容迁移 |
-| 载荷格式版本 | `checkpoint_format_version` | 当前 5、必填（缺失即拒）；v1→v2（last_auto_disable 归一）、v2→v3（缺 host_protocol 标旧语义）、v3→v4（缺房间 effects 拒绝）、v4→v5（缺房间 keeper_memory 拒绝）已注册 | `migrate::migrate_to_current` 解码前路由 | 显式迁移链（G23.a 起生效；后续格式变化逐链追加） |
+| 载荷格式版本 | `checkpoint_format_version` | 当前 6、必填（缺失即拒）；v1→v2（last_auto_disable 归一）、v2→v3（缺 host_protocol 标旧语义）、v3→v4（缺房间 effects 拒绝）、v4→v5（缺房间 keeper_memory 拒绝）、v5→v6（缺房间 invader_memory 拒绝）已注册 | `migrate::migrate_to_current` 解码前路由 | 显式迁移链（G23.a 起生效；后续格式变化逐链追加） |
 | Mod 执行状态 | `disabled_mods[]`、`execution_strategy`、`fault_streak`、`last_fault`、`last_auto_disable` | 无独立版本；停用集合须满足依赖闭包，恢复后停用包 schema/规则仍有效；`execution_strategy` 为组合摘要（plan_hash+停用闭包+每槽派生执行面），恢复在 realm 重建后重算等值核对，v2 起 Mod 检查点必填（v1 载荷宽容） | realm 重建后回填故障与停用状态，策略身份以重注册产物为准 | 拒绝不迁移，G23 负责（last_auto_disable 旧形态已收编为 v1→v2 迁移） |
 | 协调器 | `concurrency`、`kkpv` | 无独立版本 | 恢复后并发与投影通道初值（sim 可由 CLI 参数覆盖） | 拒绝不迁移，G23 负责 |
 | 最近 console | `last_console.*[]` | 无独立版本 | 恢复后 console 续接 | 拒绝不迁移，G23 负责 |
@@ -37,6 +37,7 @@
 | 房间对象效果 | `engine.world.rooms.*.effects.*[]`（effect/power/level/end_time；effect 可空——PWR_SHIELD 引擎施放形态（官方专用分支无 effect 键），载荷中为 null，管理放置 ingress 缺省 effect=power；v4 内放宽，旧读取器不认 null，无存量检查点） | 载荷 v4 必填；缺失不补造，引用、等级、时间与同 power 唯一性重验 | `World::from_checkpoint` 重建表；投影/玩法读取绝对时间，删除/跨房与宿主同行 | 缺该域的旧布局拒绝，当前格式冷恢复与失败重试已覆盖 |
 | 房间扩展字段 | `engine.world.rooms.*.extensions`（动态映射，载荷不透明） | 扩展字段按 schema/引用校验 | Mod 对象扩展字段回填 | 拒绝不迁移，G23 负责 |
 | NPC 巡守记忆 | `engine.world.rooms.*.keeper_memory`（动态映射：`source_id`、可空 `move_cache{destination[]、time、path[][]}`） | `checkpoint_format_version` v5 起必填（v4_to_v5 对缺域房间显式拒绝，不补造）；编辑/恢复/候选发布共用值域校验（执行者为 Source Keeper 的 creep、目标 ID 在已分配范围、坐标 0..49、时钟安全整数、路径 ≤2500 且逐步相邻） | Keeper 巡守目标与 50 tick 路径缓存重建；对象删除/候选回滚随宿主同清理或恢复，不进玩家投影 | 拒绝不迁移，G23 负责 |
+| Invader 移动记忆 | `engine.world.rooms.*.invader_memory`（动态映射：必填可空 `move_cache{destination[]、time、path[][]}` 与 `last_move`） | 载荷 v6 起必填，v5_to_v6 缺域显式拒绝；执行者为 Invader creep、坐标 0..49、时钟安全整数、路径 ≤2500 且逐步相邻 | moveTo 5 tick 缓存与生成移动方向的 lastMove；对象删除/链拒绝恢复/整轮候选同步，不进玩家投影 | 缺状态拒绝，不猜测历史路径 |
 | 玩家账户 | `engine.players.*`：`cpu.*`（桶 5 字段）、`gcl`、`rooms[]`、`raw_memory`、`segments.*`、`active_request[]`、`public_ids[]`、`default_public`、`foreign_request`、`money`、`resources.*`（动态映射） | 随 `engine_version` 硬门；CPU 与 Memory/segments 限额在装配时校验 | 玩家状态重建、下一次执行的注入与授权 | 拒绝不迁移，G23 负责 |
 | power 账号域 | `engine.players.*.power`（账号 power，GPL 源）、`power_creeps.*`（动态映射：注册表记录 8 字段，`powers.*` 为等级表；`spawn_cooldown_time`/`delete_time` 为墙钟毫秒） | 随 `engine_version` 硬门；旧检查点缺失按 serde 默认回填（0/空表） | powerCreep 注册表重建、GPL 配额与冷却判定 | 拒绝不迁移，G23 负责 |
 | 玩家通知 | `engine.players.*.notifications[]`（`message`、`tick`、`group_interval`） | 无独立版本 | 跨 tick 最近 100 条内存记录 | 拒绝不迁移，G23 负责 |

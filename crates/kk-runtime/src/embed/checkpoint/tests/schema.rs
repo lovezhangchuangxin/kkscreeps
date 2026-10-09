@@ -176,6 +176,34 @@ fn schema_tree_keeper_memory(tree: &mut BTreeSet<String>) -> anyhow::Result<()> 
     Ok(())
 }
 
+fn schema_tree_invader_memory(tree: &mut BTreeSet<String>) -> anyhow::Result<()> {
+    let mut engine = EmbedEngine::new();
+    engine.create_shard(&json!({"players":["p1"],"rooms":[{"name":"W1N1"}]}))?;
+    let id = engine.place_object(
+        "W1N1",
+        "creep",
+        &json!({"pos":[10,10],"owner":"Invader","name":"invader","body":["attack","move"]}),
+    )?;
+    engine.place_object(
+        "W1N1",
+        "creep",
+        &json!({"pos":[18,10],"owner":"p1","name":"target","body":["move"]}),
+    )?;
+    engine.tick(1)?;
+    let saved = engine.checkpoint(Value::Null)?;
+    let key = ObjId::parse(&id).unwrap().0.to_string();
+    assert!(
+        saved["engine"]["world"]["rooms"]["W1N1"]["invader_memory"][&key]["move_cache"].is_object()
+    );
+    collect_schema_keys(&saved, String::new(), tree);
+    let mut empty = saved;
+    empty["engine"]["world"]["rooms"]["W1N1"]["invader_memory"][&key] =
+        json!({"move_cache":null,"last_move":null});
+    engine.restore_checkpoint(empty, None)?;
+    collect_schema_keys(&engine.checkpoint(Value::Null)?, String::new(), tree);
+    Ok(())
+}
+
 /// 钉死检查点 schema 键树：夹具取值非空的字段增删会让本测试红，须同步
 /// docs/architecture/state-inventory.md 与清单并当批补齐保存恢复、版本
 /// 策略。覆盖边界（数组只下钻首元素、Value 载荷按当时形状、不透明叶子）
@@ -250,6 +278,12 @@ const PINNED_CHECKPOINT_KEYS: &[&str] = &[
     "engine.world.rooms.*.effects.*[].level",
     "engine.world.rooms.*.effects.*[].end_time",
     "engine.world.rooms.*.extensions.*",
+    "engine.world.rooms.*.invader_memory.*.last_move",
+    "engine.world.rooms.*.invader_memory.*.move_cache",
+    "engine.world.rooms.*.invader_memory.*.move_cache.destination[]",
+    "engine.world.rooms.*.invader_memory.*.move_cache.time",
+    "engine.world.rooms.*.invader_memory.*.move_cache.path[]",
+    "engine.world.rooms.*.invader_memory.*.move_cache.path[][]",
     "engine.world.rooms.*.keeper_memory.*.source_id",
     "engine.world.rooms.*.keeper_memory.*.move_cache",
     "engine.world.rooms.*.keeper_memory.*.move_cache.destination[]",
@@ -314,9 +348,10 @@ fn checkpoint_schema_keys_are_pinned() -> anyhow::Result<()> {
     schema_tree_official_packages(&mut tree)?;
     schema_tree_fault_and_extension_package(&mut tree)?;
     schema_tree_keeper_memory(&mut tree)?;
+    schema_tree_invader_memory(&mut tree)?;
     assert_eq!(
         PINNED_CHECKPOINT_KEYS.len(),
-        124,
+        130,
         "钉死键总数；可空 binary 的 null 与数组分支、无包分片的 mods null 分支分别计键，增删时同步清单"
     );
     let expected: BTreeSet<String> = PINNED_CHECKPOINT_KEYS
@@ -384,8 +419,8 @@ fn strategy_key_compatibility_branches_are_pinned() -> anyhow::Result<()> {
     );
     assert_eq!(
         engine.checkpoint(Value::Null)?["checkpoint_format_version"],
-        json!(5),
-        "当前保存恒为格式 5"
+        json!(6),
+        "当前保存恒为格式 6"
     );
 
     // (b) 原生检查点注入该键 → 拒绝且旧分片保持原生形态。

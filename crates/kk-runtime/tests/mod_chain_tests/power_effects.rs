@@ -174,7 +174,7 @@ fn power_effect_writeback_failure_retries_once_and_cold_checkpoint_keeps_formula
         assert!(e.run_player("p1", "throw Error('不得重跑玩家')").is_ok());
         assert_eq!(e.get_object(&pc).unwrap()["store"]["ops"], 90);
         let saved = e.checkpoint(Value::Null)?;
-        assert_eq!(saved["checkpoint_format_version"], 5);
+        assert_eq!(saved["checkpoint_format_version"], 6);
         let mut restored = EmbedEngine::new();
         restored.set_kkpv_channel(binary);
         restored.restore_checkpoint(saved, None)?;
