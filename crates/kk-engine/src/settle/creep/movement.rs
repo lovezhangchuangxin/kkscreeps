@@ -188,7 +188,7 @@ pub fn creep_tick_prepare(w: &mut Working, id: ObjId) -> Result<(), SettleError>
         // 对象随后死亡时不迁移：本仓实现在应用阶段按缺席跳过。
         // 来源：上游 engine/src/processor/intents/creeps/tick.js。
         if w.creep(id)
-            .is_some_and(|c| c.owner != kk_world::domain::keeper::OWNER)
+            .is_some_and(|c| !kk_world::domain::npc::is_npc_owner(&c.owner))
             && let Some((to_room, nx, ny)) =
                 crate::settle::inter_room::edge_target(&w.room.name, x, y)
         {

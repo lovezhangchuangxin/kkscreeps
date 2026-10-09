@@ -64,6 +64,16 @@ export class RunPlayerError extends Error {
   }
 }
 
+// 管理快照的 owner 是套件 handle；玩家 VM 中 owner.username 保持公开用户名。
+// 来源：vanilla 的 NPC_HANDLES 与 snapshots.ts 的 snapOwner/resolvePlayerReverse 反向映射。
+function snapshotNpcHandle(value: unknown): unknown {
+  if (value === null || typeof value !== 'object') return value;
+  const snapshot = value as Record<string, unknown>;
+  if (snapshot.owner === 'Invader') return { ...snapshot, owner: 'sk' };
+  if (snapshot.owner === 'Source Keeper') return { ...snapshot, owner: 'srcKeeper' };
+  return value;
+}
+
 export class KkscreepsAdapter {
   readonly capabilities: AdapterCapabilities = capabilities;
 
@@ -72,7 +82,17 @@ export class KkscreepsAdapter {
   }
 
   private async place(kind: string, room: string, spec: PlaceSpec): Promise<string> {
-    const r = await client().call<{ id: string }>('placeObject', { room, type: kind, spec });
+    // 套件 sk/srcKeeper 对应官方用户 2/3；本引擎保存公开用户名，
+    // 别名只在适配边界转换，不能让普通短玩家名获得 NPC 语义。
+    // 来源：锁定 vanilla/index.ts 的 NPC_HANDLES。
+    const owner =
+      spec.owner === 'sk' ? 'Invader' : spec.owner === 'srcKeeper' ? 'Source Keeper' : spec.owner;
+    const normalized = owner === spec.owner ? spec : { ...spec, owner };
+    const r = await client().call<{ id: string }>('placeObject', {
+      room,
+      type: kind,
+      spec: normalized,
+    });
     return r.id;
   }
 
@@ -159,11 +179,12 @@ export class KkscreepsAdapter {
   }
 
   async getObject(id: string): Promise<unknown> {
-    return await client().call('getObject', { id });
+    return snapshotNpcHandle(await client().call('getObject', { id }));
   }
 
   async findInRoom(room: string, type: number): Promise<unknown[]> {
-    return await client().call<unknown[]>('findInRoom', { room, type });
+    const snapshots = await client().call<unknown[]>('findInRoom', { room, type });
+    return snapshots.map(snapshotNpcHandle);
   }
 
   async getGameTime(): Promise<number> {

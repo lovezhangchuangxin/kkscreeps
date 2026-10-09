@@ -42,10 +42,16 @@ fn utf16_truncate(s: &str, units: usize) -> String {
 /// 部分后续动作可以继续影响其他对象；此处保留该兼容性差异。
 /// 来源：上游 engine/src/processor/intents/creeps/suicide.js 和 intents.js。
 pub(super) fn intent_suicide(w: &mut Working, id: ObjId) {
-    if w.creep(id).is_none_or(|c| c.spawning) {
+    let Some(creep) = w.creep(id).filter(|c| !c.spawning) else {
         return;
-    }
-    die_creep(w, id);
+    };
+    // 只有 Invader 的自杀使用零回收率；TTL/战斗死亡仍走普通回收。
+    let rate = if creep.owner == kk_world::domain::npc::INVADER_OWNER {
+        0.0
+    } else {
+        c::CREEP_CORPSE_RATE
+    };
+    die_creep_with_rate(w, id, rate);
 }
 
 /// 为相邻且已出生的 creep 登记拉拽关系，循环链由 Movement 拒绝。
@@ -90,8 +96,7 @@ pub fn die_creep_nuke(w: &mut Working, id: ObjId) {
 
 /// 移除本体，将部件回收资源和携带资源先放入同格容器，余量进入墓碑，
 /// 最后记录死亡事件。drop_rate<=0 仍创建墓碑，但不转移资源。
-/// 核弹击杀（无墓碑）走 die_creep_nuke；不模拟 NPC 特殊回收、
-/// userSummoned 或 strongholdId。
+/// 核弹击杀（无墓碑）走 die_creep_nuke；不模拟 userSummoned 或 strongholdId。
 /// 来源：上游 engine/src/processor/intents/creeps/_die.js。
 pub fn die_creep_with_rate(w: &mut Working, id: ObjId, drop_rate: f64) {
     let Some(c) = w.creep(id) else { return };

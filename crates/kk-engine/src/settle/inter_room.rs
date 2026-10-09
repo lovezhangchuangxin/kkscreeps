@@ -7,7 +7,7 @@
 //! 角格取首个命中方向。标记时向源房事件日志推 EVENT_EXIT（事件先于
 //! 迁移是否可应用发出）。到达格不做占用或地形检查（可以与既有对象
 //! 重叠、可以是墙格）。官方排除 NPC 用户（Source Keeper/Invader）；
-//! 本仓已排除 Source Keeper，Invader 归属与 AI 尚未接通。portal 触发的跨房
+//! 本仓按保留用户名排除 Source Keeper 与 Invader。portal 触发的跨房
 //! 与 powerCreep 的同机制属官方同文件相邻分支，随对应对象形态实现。
 
 use kk_core::RoomName;

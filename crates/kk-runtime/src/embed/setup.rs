@@ -101,7 +101,7 @@ fn player_setups(spec: &Value) -> anyhow::Result<Vec<(String, i64, i64)>> {
         if name.is_empty() {
             anyhow::bail!("PlayerSpec.name 必须是非空字符串");
         }
-        if name == kk_world::domain::keeper::OWNER {
+        if kk_world::domain::npc::is_npc_owner(name) {
             anyhow::bail!("PlayerSpec.name 为 NPC 保留名称：{name}");
         }
         if !seen.insert(name) {

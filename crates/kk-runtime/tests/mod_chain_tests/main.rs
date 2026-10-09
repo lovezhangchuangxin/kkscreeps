@@ -233,6 +233,7 @@ mod mod_building_fields;
 mod mod_building_world;
 mod mod_guard;
 mod module_context;
+mod npc_retirement;
 mod object_ops;
 mod object_tick;
 mod power_effects;

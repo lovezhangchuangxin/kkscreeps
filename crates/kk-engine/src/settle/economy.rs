@@ -384,8 +384,8 @@ pub fn controller_tick(w: &mut Working, id: ObjId) {
         t.reservation = None;
     }
     let Some(owner) = owner else { return };
-    if owner == "2" {
-        return; // NPC invader（owner=2）跳过控制器寿命处理。
+    if owner == kk_world::domain::npc::INVADER_OWNER {
+        return; // 官方用户 2（Invader）跳过控制器寿命处理。
     }
     if let Some(blocked_until) = w.upgrade_block_pending.get(&id).copied()
         && let Some(RoomObject::Controller(t)) = w.room.objects.get_mut(&id)

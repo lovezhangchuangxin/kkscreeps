@@ -5,6 +5,7 @@ pub mod controller;
 pub(crate) mod deposit;
 pub mod generic;
 pub mod keeper;
+pub mod npc;
 pub mod owner;
 pub(crate) mod room;
 pub mod store;
