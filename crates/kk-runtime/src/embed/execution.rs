@@ -101,7 +101,7 @@ impl EmbedEngine {
                         input_log::PlayerLogEntry {
                             cpu_bucket: bucket,
                             cpu_billed_ms: result.cpu_billed_ms,
-                            // v2：Memory 只入摘要；值本身随检查点持久化。
+                            // Memory 只入摘要；值本身随检查点持久化。
                             raw_memory_sha256: result
                                 .raw_memory
                                 .as_deref()

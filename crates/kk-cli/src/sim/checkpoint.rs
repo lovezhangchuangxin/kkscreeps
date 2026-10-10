@@ -118,10 +118,11 @@ pub(super) fn list_checkpoint_ticks(dir: &Path) -> anyhow::Result<Vec<u64>> {
 /// 点的历史关系问题而非文件损坏——硬错误不降级。撕裂日志在读取处失败并
 /// 携带 valid_segments 供人工截断，不自动改写文件。
 ///
-/// v2 恢复语义：选定检查点后**截断**其游标之后的废弃分支，丢失拍由续
-/// 跑**重执行**补齐（官方恢复模型——候选提交原子性保证无半拍状态；重
-/// 执行与重放在世界推进上等价，且世界/Memory 恢复到同一时间点，不再出
-/// 现“世界到日志尾、Memory 停在检查点”的不一致对）。
+/// 恢复语义：选定检查点后**截断**其游标之后的废弃分支，丢失拍由续
+/// 跑**重执行**补齐。重执行保证世界与 Memory 恢复到同一时间点（段内
+/// Memory 只有摘要，无法经结算重放恢复值）；候选提交的原子性保证无半
+/// 拍状态。官方同模型：engine/src/main.js 先持久化玩家结果后推进
+/// gameTime，崩溃发生在推进前则同拍重跑。
 pub(super) struct Recovery {
     pub value: Value,
     pub file: PathBuf,
@@ -135,8 +136,8 @@ pub(super) struct Recovery {
 }
 
 pub(super) fn recover_latest(dir: &Path, log: &Path) -> anyhow::Result<Recovery> {
-    // v2：日志校验流式化——先零保留扫描一次保住「日志不可读优先中止」
-    // 的错误优先级，再随命中的检查点做游标后缀扫描（只驻留可回放段）。
+    // 日志校验用零保留扫描先做一次，保住「日志不可读优先中止」的错误
+    // 优先级；随命中的检查点再做游标后缀扫描（只驻留可回放段）。
     kk_runtime::embed::scan_input_log(log, kk_runtime::embed::Retain::None).map_err(|error| {
         // 撕裂尾是可人工修复的形态（按前缀段数截断后重试）；其他读取
         // 错误（不存在/权限等）附截断提示会误导，只透出原始错误。
@@ -183,12 +184,11 @@ pub(super) fn recover_latest(dir: &Path, log: &Path) -> anyhow::Result<Recovery>
             .as_ref()
             .context("目录恢复需要带哈希的 log_cursor；旧检查点不可自动配对")?;
         // 配对时间用检查点自己的世界时间（不从游标反推），使
-        // 「cursor.last_tick + 1 == 检查点时间」保持真实交叉校验：
-        // 段 tick 是结算前世界时间、提交后世界 +1（auto_checkpoint
-        // save_if_due 采样注释），正常保存流程两者恒差一，错配即历史
-        // 关系问题，硬错误。v2 截断+重执行不消费后缀做结算，接缝
-        // tick 连续性只剩这道机器门；后缀首段 tick 必须恰等于检查点
-        // 时间（=重执行首拍）。
+        // 「cursor.last_tick + 1 == 检查点时间」保持真实交叉校验：段
+        // tick 是结算前世界时间、提交后世界 +1，正常保存流程两者恒差
+        // 一，错配即历史关系问题，硬错误。截断+重执行不消费后缀做结
+        // 算，接缝 tick 连续性只剩这道机器门；后缀首段 tick 必须恰等于
+        // 检查点时间（=重执行首拍）。
         let data = kk_runtime::embed::scan_input_log(
             log,
             kk_runtime::embed::Retain::FromCursor {

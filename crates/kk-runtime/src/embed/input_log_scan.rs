@@ -1,4 +1,4 @@
-//! 输入日志的读取域（v2 流式扫描）：逐行解析、增量链校验、按保留策略
+//! 输入日志的读取域（流式扫描）：逐行解析、增量链校验、按保留策略
 //! 驻留后缀，以及目录恢复用的游标处原子截断。写入器、文件协议常量与
 //! 错误族在 `embed/input_log.rs`；撕裂语义、保留策略与配对规则的完整
 //! 契约见 docs/architecture/input-log.md。
@@ -42,17 +42,16 @@ pub enum Retain {
     None,
     /// 全段保留：整读校验（测试与全量诊断）。
     All,
-    /// 检查点游标配对（等价旧 `segments_after_cursor`）：游标命中的段
-    /// 须摘要与 tick 双验证（其后缀才可回放），保留其后缀且逐段 tick
-    /// 自 `time` 起连续 +1。
+    /// 检查点游标配对：游标命中的段须摘要与 tick 双验证（其后缀才可回
+    /// 放），保留其后缀且逐段 tick 自 `time` 起连续 +1。
     FromCursor { cursor: LogCursor, time: u64 },
-    /// 起点快照无游标时的配对（等价旧 `segments_from_checkpoint`）：
-    /// 首个不早于 `tick` 的段必须恰等于它，其后缀保留且 tick 严格递增。
+    /// 起点快照无游标时的配对：首个不早于 `tick` 的段必须恰等于它，
+    /// 其后缀保留且 tick 严格递增。
     FromTick(u64),
 }
 
-/// 扫描错误：格式族沿用 `InputLogError`；配对族是流式化后从后缀选择
-/// 移入扫描的检查点配对失败。
+/// 扫描错误：格式族沿用 `InputLogError`；配对族是扫描内实施的检查点
+/// 配对失败（历史哈希/时间咬合/缺口/未覆盖游标）。
 #[derive(Debug)]
 pub enum ScanError {
     Format(InputLogError),
@@ -293,7 +292,7 @@ impl ScanState {
             return Ok(());
         }
         // 段校验。链尾与段号连续性以扫描游标（last_sha/last_seq）校验，
-        // 与整读版的 chain 末项同源。
+        // 与保留段的 chain 末项同值。
         let seq = seq.ok_or(ScanError::Format(InputLogError::MissingField {
             seq: 0,
             line: line_no,
@@ -448,24 +447,24 @@ impl ScanState {
     }
 }
 
-/// 流式扫描：逐行解析、增量链校验、按保留策略驻留后缀。撕裂语义与
-/// 整读版同形——末行判定以**最后一个非空行**为准：其后跟的空白块不把
-/// 它变成中段行（末行缺失换行且非法 UTF-8 的尾块在前缀全部校验通过后
-/// 归因 TornTail；可解码的末行按末行收敛语义解析）。内存占用为
-/// O(保留后缀) 而非 O(整份日志)。
+/// 流式扫描：逐行解析、增量链校验、按保留策略驻留后缀。末行判定以
+/// **最后一个非空行**为准：其后跟的空白块不把它变成中段行（末行缺失
+/// 换行且非法 UTF-8 的尾块在前缀全部校验通过后归因 TornTail；可解码
+/// 的末行按末行收敛语义解析）。内存占用为 O(保留后缀) 而非
+/// O(整份日志)。
 pub fn scan_input_log(path: &Path, retain: Retain) -> Result<InputLogData, ScanError> {
     if let Retain::FromCursor { cursor, .. } = &retain
         && cursor.last_seq == 0
     {
-        // 与整读版 segments_after_cursor 同判：头段不是可提交段。
+        // seq 0 是头段，头段不是可提交的数据段。
         return Err(ScanError::Pairing("检查点日志游标必须指向已提交段".into()));
     }
     let file = std::fs::File::open(path)?;
     let mut reader = BufReader::new(file);
     let mut state = ScanState::new();
     // 一行前瞻：确认存在后继非空行后，当前行才按中段处理（必带换行）。
-    // 空白块不刷新 pending——末行口径与整读版同形地取最后一个非空行，
-    // 撕裂签名行后的尾随空白不能把它升级成中段损坏；空白行本身是
+    // 空白块不刷新 pending——末行口径取最后一个非空行，撕裂签名行后的
+    // 尾随空白不能把它升级成中段损坏；空白行本身是
     // process_line 的无操作，直接跳过等价。
     let mut pending: Option<Vec<u8>> = None;
     let mut torn_tail_bytes = false;

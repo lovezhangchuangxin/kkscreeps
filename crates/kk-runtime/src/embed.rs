@@ -99,7 +99,7 @@ pub struct EmbedEngine {
     )>,
     kkpv_public_store: crate::kkpv_store::KkpvBlockStore,
     /// 可信 Mod 注册与结算 realm；仅 `create_shard_with_mods` 装配。持有它使
-    /// EmbedEngine 不再可跨线程移动（结算与 realm 须同线程）。
+    /// EmbedEngine 不可跨线程移动（结算与 realm 须同线程）。
     mod_realm: Option<Rc<RefCell<ModVm>>>,
     /// 本引擎的运行 trace 开启意愿；setup 与替代分片恢复均应用。
     mod_trace_enabled: bool,

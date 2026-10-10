@@ -239,7 +239,7 @@ pub(super) fn execute(options: &Options) -> anyhow::Result<Value> {
         );
     }
     let mut codes = BTreeMap::new();
-    // 目录恢复的丢失拍（v2 语义见下方恢复块注释）：重执行并入本轮执行数。
+    // 目录恢复的丢失拍（语义见下方恢复块注释）：重执行并入本轮执行数。
     let reexecute_ticks = recovery.as_ref().map_or(0, |found| found.reexecute_ticks);
     let mut stats = BTreeMap::new();
     for bot in &scene.bots {
@@ -264,10 +264,10 @@ pub(super) fn execute(options: &Options) -> anyhow::Result<Value> {
         aliases = saved_aliases;
         engine.set_player_concurrency(options.concurrency)?;
         engine.set_kkpv_channel(options.kkpv);
-        // 目录恢复（v2）：检查点回滚与游标处截断已由 recover_latest 完成；
-        // 废弃分支覆盖的丢失拍并入本轮**重执行**（官方恢复模型——候选提交
-        // 原子性保证无半拍状态；重执行与重放在世界推进上等价，且世界与
-        // Memory 恢复到同一时间点）。此后新轮次照常记日志并续接段号。
+        // 目录恢复：检查点回滚与游标处截断已由 recover_latest 完成；
+        // 废弃分支覆盖的丢失拍并入本轮**重执行**——候选提交原子性保证无
+        // 半拍状态，世界与 Memory 恢复到同一时间点（见 checkpoint.rs 恢复
+        // 语义说明）。此后新轮次照常记日志并续接段号。
         initial
     } else {
         observe(&engine, &scene, &aliases, &mod_names)

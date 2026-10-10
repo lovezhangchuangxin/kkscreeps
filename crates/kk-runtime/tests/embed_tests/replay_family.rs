@@ -76,7 +76,7 @@ fn seal_line(mut record: serde_json::Map<String, Value>) -> (String, String) {
 }
 
 /// 等值比较前剥离的键：last_console 由沙箱执行产生（回放无沙箱），
-/// metadata 是调用方自定载荷；v2 起玩家 Memory 不随日志重建（回放保持
+/// metadata 是调用方自定载荷；玩家 Memory 不随日志重建（回放保持
 /// 检查点值），剥离后由 verify_logged_memory 以摘要对账。
 fn strip_volatile(mut value: Value) -> Value {
     let object = value.as_object_mut().expect("检查点是对象");

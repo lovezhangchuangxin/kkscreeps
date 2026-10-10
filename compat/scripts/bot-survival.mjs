@@ -127,7 +127,7 @@ export function runSurvivalAcceptance({ out, binary, botRoot, ticks = 86400, spl
     }
   }
   // 输出目录必须全新；模块身份核验后才写，禁止复用旧成功报告。
-  // 全矩阵输入日志约 10GB（30KB/拍），运行目录须预留磁盘。
+  // 输入日志 v2（Memory 摘要化）后全矩阵四份日志约 350MB（~1KB/拍）。
   mkdirSync(out, { recursive: false });
   const summary = {
     version: 1,

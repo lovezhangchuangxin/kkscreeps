@@ -58,7 +58,7 @@ fn input_log_records_commits_and_resumes() -> anyhow::Result<()> {
     assert_eq!(report["input_log"]["first_tick"], 1);
     assert_eq!(report["input_log"]["last_tick"], 3);
 
-    // 独立读回：三段全为玩家轮，段号 1..=3，写回随段落位。v2：Memory
+    // 独立读回：三段全为玩家轮，段号 1..=3，写回随段落位。Memory
     // 只入摘要——逐段摘要形状合法且随每轮提交变化（seen 每轮自增）。
     let data = read_input_log(&log)?;
     assert_eq!(data.segments.len(), 3);

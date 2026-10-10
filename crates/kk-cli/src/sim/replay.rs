@@ -9,7 +9,7 @@ use std::path::Path;
 /// 进程内回放核对（G25.b）：restore 起点快照后逐段重放，比较整份检查点
 /// （剥离 last_console——回放无沙箱执行；剥离 metadata——调用方自定）。
 /// CPU 桶按记录桶逐位参与比较（ADR-013 决策 5，不做 freeze 处理）。
-/// v2：玩家 Memory 不随日志重建——比较前剥离两侧 raw_memory，改以
+/// 玩家 Memory 不随日志重建——比较前剥离两侧 raw_memory，以
 /// 「终态 Memory 摘要 == 回放窗口内最后非空摘要」对账；日志读取为流
 /// 式扫描，只驻留检查点之后的可回放后缀。
 pub(super) fn verify_in_process(

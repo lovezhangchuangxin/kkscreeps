@@ -203,8 +203,8 @@ pub fn rebuild_round(segment: &Value) -> anyhow::Result<ReplayRound> {
 }
 
 /// 玩家写回复建：CPU 新桶整桶反序列化（不从 cpu_billed_ms 重推——那只是
-/// 实测佐证）；**v2 起玩家 Memory 不随段携带值，只携带 sha256 摘要**——
-/// 回放不重建 Memory（结算端保持检查点值），终态一致性由核对入口以
+/// 实测佐证）；玩家 Memory 不随段携带值（只携带 sha256 摘要）——回放
+/// 不重建 Memory（结算端保持检查点值），终态一致性由核对入口以
 /// 「终态 Memory 摘要 == 窗口内最后非空摘要」验证（`verify_logged_memory`）；
 /// segments 重放 `from_runner`（日志存的就是它的原始输入，纯函数过滤，
 /// 同函数重放即逐位等价，无需逆转换）。
@@ -212,7 +212,7 @@ pub fn rebuild_round(segment: &Value) -> anyhow::Result<ReplayRound> {
 /// Memory 与 segments/ism_local 的不对称是机制性的：后两者是回放需要
 /// **重建**的结算状态（writeback 应用路径消费它们），且受 runner 限额
 /// 约束、体积小（段激活键/本地段），保留全值使金标准仍逐位覆盖；Memory
-/// 是体积主导项（v1 实测 30KB/拍中占 25KB）且回放语义就是「保持检查点
+/// 是体积主导项（长窗 bot 实测整串约 25KB/拍）且回放语义就是「保持检查点
 /// 值」，摘要化后由对账入口单独验证。
 fn rebuild_writeback(entry: &Value) -> anyhow::Result<PlayerWriteback> {
     anyhow::ensure!(
@@ -238,7 +238,8 @@ fn rebuild_writeback(entry: &Value) -> anyhow::Result<PlayerWriteback> {
         Value::Null => None,
         value => Some(SegmentWriteback::from_runner(value)),
     };
-    // 旧日志无 ism_local 键（特性前不产生写入）——缺失按 None。
+    // ism_local 缺失或 null 按 None：写入端恒携带该键，此处容忍手工
+    // 构造段的缺失（版本门已拒收协议外日志）。
     let ism_local = match entry.get("ism_local") {
         None | Some(Value::Null) => None,
         Some(Value::String(text)) => Some(text.clone()),
@@ -252,7 +253,7 @@ fn rebuild_writeback(entry: &Value) -> anyhow::Result<PlayerWriteback> {
     })
 }
 
-/// 检查点比较的 Memory 剥离（v2）：回放不重建玩家 Memory，直跑/回放两
+/// 检查点比较的 Memory 剥离：回放不重建玩家 Memory，直跑/回放两
 /// 份检查点的 raw_memory 合法不同，逐位比较前先移除；一致性改由
 /// `verify_logged_memory` 以摘要对账（调用须在其之后）。
 pub fn strip_checkpoint_memory(checkpoint: &mut Value) {

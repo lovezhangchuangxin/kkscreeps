@@ -2,10 +2,11 @@
 //! 可回放输入。段包含：轮身份（tick/generation/来源）、墙钟 now_ms、
 //! 意图（玩家轮为沙箱原始 JSON、外部轮为 `IntentBatch::to_json` 规范
 //! 形态）、实际消费的玩家写回（CPU 新桶整桶、**RawMemory 的 sha256
-//! 摘要**、段请求）与 cpu_billed_ms 佐证。v2 起玩家 Memory 整串不再
-//! 入段——它是玩家输出回显而非结算输入，全量记录使日志体积随拍数
-//! 无界增长（实测 30KB/拍中 Memory 占 25KB）；回放端 Memory 保持
-//! 检查点值，核对以「终态 Memory 摘要 == 窗口内最后非空摘要」验证。
+//! 摘要**、段请求）与 cpu_billed_ms 佐证。玩家 Memory 不入段（只存
+//! sha256 摘要）——它是玩家输出回显而非结算输入，全量携带会使日志体积
+//! 随拍数无界增长（长窗 bot 实测 Memory 整串约 25KB/拍）；回放端
+//! Memory 保持检查点值，核对以「终态 Memory 摘要 == 窗口内最后非空
+//! 摘要」验证。
 //! 失败/丢弃轮不记录；缓存轮重试按首次输入只记一次。诊断面
 //! （expr/console）不入日志——last_console 已随检查点。
 //!
@@ -16,8 +17,8 @@
 //! 之后：崩溃丢尾段（RPO=1 轮），检查点不得领先日志头（G25.b 配对
 //! 规则）。回放的 CPU 口径：直接用记录的新桶，不从实测值重推。
 //!
-//! 读取为**流式扫描**（v2，见 `embed/input_log_scan.rs`）：按保留策略
-//! 只驻留所需后缀，长窗日志不再整读进内存。
+//! 读取为**流式扫描**（见 `embed/input_log_scan.rs`）：按保留策略
+//! 只驻留所需后缀，长窗日志不整读进内存。
 //!
 //! 契约见 docs/architecture/input-log.md；写入在本模块，校验读取与截断
 //! 在 `embed/input_log_scan.rs`，段重建与回放编排在 `embed/replay.rs`（G25.b）。
@@ -63,7 +64,7 @@ fn identity_map(
     json!({"plan_hash": plan_hash, "execution_strategy": strategy, "disabled_mods": disabled})
 }
 
-/// 单玩家的回放输入记录。v2：Memory 只携带摘要（值本身不入段）；
+/// 单玩家的回放输入记录。Memory 只携带摘要（值本身不入段）；
 /// 摘要在构造点计算，字段持有所有权避免临时借用。
 pub(crate) struct PlayerLogEntry<'a> {
     pub cpu_bucket: &'a kk_core::cpu::Bucket,
@@ -209,8 +210,8 @@ impl InputLog {
     /// 续接要求既有日志完整无撕裂：从断链处续写会静默丢弃可回放历史。
     pub(crate) fn open(path: &Path, header: Map<String, Value>) -> Result<Self, InputLogError> {
         let (file, seq, prev_hash, segments_written, last_tick) = if path.exists() {
-            // 续接只驻留校验状态：v2 起整读改流式扫描，长历史不再整驻
-            // 内存。链校验/撕裂检测覆盖全部行，与整读版同强。
+            // 续接只驻留校验状态：零保留流式扫描，长历史不整驻内存；
+            // 链校验/撕裂检测仍覆盖全部行。
             let data = scan_input_log(path, Retain::None).map_err(|error| match error {
                 ScanError::Format(error) => error,
                 // None 保留不产生配对失败；防御性归并回格式族。

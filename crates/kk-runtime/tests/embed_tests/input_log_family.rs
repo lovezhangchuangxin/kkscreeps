@@ -144,7 +144,7 @@ pub(super) fn three_sources_round_trip_impl() -> anyhow::Result<()> {
         "回放直接消费的新桶整桶"
     );
     assert!(writeback["cpu_billed_ms"].is_number(), "实测计费佐证");
-    // v2：Memory 只随段携带摘要——与终态检查点的提交值对账（推进轮不
+    // Memory 只随段携带摘要——与终态检查点的提交值对账（推进轮不
     // 改 Memory，值自玩家轮后保持不变）。
     let committed = engine.checkpoint(Value::Null)?["engine"]["players"]["p1"]["raw_memory"]
         .as_str()
@@ -382,7 +382,7 @@ pub(super) fn torn_tail_byte_forms_impl() -> anyhow::Result<()> {
     let case = Case::new("torn-bytes");
     let (mut engine, log) = new_engine(&case, "input.jsonl")?;
     engine.enable_input_log(&log, json!({"备注": "中文"}))?;
-    // v2：Memory 只入摘要（ASCII），多字节字符经意图载荷进段。
+    // Memory 只入摘要（ASCII），多字节字符经意图载荷进段。
     let code = "Game.creeps.c1.say('撕裂试验'); true";
     engine.run_players(&BTreeMap::from([("p1".to_string(), code.to_string())]))?;
     engine.tick(1)?;
@@ -408,7 +408,7 @@ pub(super) fn torn_tail_byte_forms_impl() -> anyhow::Result<()> {
         other => panic!("玩家段被切进多字节字符应收敛 TornTail 且前缀为 0 段：{other:?}"),
     }
 
-    // 前缀中段非法 UTF-8：报实际行号（第 2 行），不再恒报 1。
+    // 前缀中段非法 UTF-8：报实际行号（第 2 行）。
     let mut corrupted = bytes.clone();
     corrupted[player_start] = 0x80; // 裸续字节，非法 UTF-8 起始
     let path = case.path("utf8-mid.jsonl");
@@ -431,8 +431,8 @@ pub(super) fn torn_tail_byte_forms_impl() -> anyhow::Result<()> {
         "append 会把新段拼进旧行，必须拒绝续接：{rejected:#}"
     );
 
-    // 末行撕裂签名后跟空白块：末行口径取最后一个非空行（与 v1 整读版
-    // 同形），尾随空白不把撕裂行升级成中段损坏。切掉行尾 20 字节落在
+    // 末行撕裂签名后跟空白块：末行口径取最后一个非空行，尾随空白不把
+    // 撕裂行升级成中段损坏。切掉行尾 20 字节落在
     // sha256/花括号的 ASCII 区，构造解析失败签名且不切进多字节字符。
     let torn_line = &lines[2][..lines[2].len() - 20];
     let path = case.path("torn-blank.jsonl");
