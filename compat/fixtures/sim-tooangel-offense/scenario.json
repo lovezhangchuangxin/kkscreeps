@@ -1,0 +1,559 @@
+{
+  "version": 1,
+  "shard": {
+    "players": [
+      "bot",
+      "enemy"
+    ],
+    "rooms": [
+      {
+        "name": "W1N1",
+        "owner": "bot",
+        "rcl": 5
+      },
+      {
+        "name": "W2N1",
+        "controller": false
+      }
+    ]
+  },
+  "bots": [
+    {
+      "player": "bot",
+      "modules": "modules",
+      "entry": "kk_offense",
+      "memory": {
+        "creeps": {
+          "scout-1": {
+            "role": "scout",
+            "routing": {
+              "targetRoom": "W2N1",
+              "reached": true
+            },
+            "base": "W1N1",
+            "born": 1,
+            "number": 1
+          }
+        },
+        "players": {
+          "enemy": {
+            "reputation": -100
+          }
+        }
+      }
+    },
+    {
+      "player": "enemy",
+      "modules": "enemy",
+      "memory": {}
+    }
+  ],
+  "objects": [
+    {
+      "alias": "spawn",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "spawn",
+        "name": "Spawn1",
+        "owner": "bot",
+        "pos": [
+          5,
+          5
+        ],
+        "store": {
+          "energy": 300
+        }
+      }
+    },
+    {
+      "alias": "storage",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "storage",
+        "owner": "bot",
+        "pos": [
+          3,
+          3
+        ],
+        "store": {
+          "energy": 150000
+        }
+      }
+    },
+    {
+      "alias": "ext1",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "extension",
+        "owner": "bot",
+        "pos": [
+          4,
+          2
+        ],
+        "store": {
+          "energy": 50
+        }
+      }
+    },
+    {
+      "alias": "ext2",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "extension",
+        "owner": "bot",
+        "pos": [
+          2,
+          3
+        ],
+        "store": {
+          "energy": 50
+        }
+      }
+    },
+    {
+      "alias": "ext3",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "extension",
+        "owner": "bot",
+        "pos": [
+          5,
+          2
+        ],
+        "store": {
+          "energy": 50
+        }
+      }
+    },
+    {
+      "alias": "ext4",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "extension",
+        "owner": "bot",
+        "pos": [
+          5,
+          3
+        ],
+        "store": {
+          "energy": 50
+        }
+      }
+    },
+    {
+      "alias": "ext5",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "extension",
+        "owner": "bot",
+        "pos": [
+          6,
+          3
+        ],
+        "store": {
+          "energy": 50
+        }
+      }
+    },
+    {
+      "alias": "ext6",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "extension",
+        "owner": "bot",
+        "pos": [
+          6,
+          4
+        ],
+        "store": {
+          "energy": 50
+        }
+      }
+    },
+    {
+      "alias": "ext7",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "extension",
+        "owner": "bot",
+        "pos": [
+          7,
+          4
+        ],
+        "store": {
+          "energy": 50
+        }
+      }
+    },
+    {
+      "alias": "ext8",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "extension",
+        "owner": "bot",
+        "pos": [
+          7,
+          5
+        ],
+        "store": {
+          "energy": 50
+        }
+      }
+    },
+    {
+      "alias": "ext9",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "extension",
+        "owner": "bot",
+        "pos": [
+          5,
+          6
+        ],
+        "store": {
+          "energy": 50
+        }
+      }
+    },
+    {
+      "alias": "ext10",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "extension",
+        "owner": "bot",
+        "pos": [
+          7,
+          7
+        ],
+        "store": {
+          "energy": 50
+        }
+      }
+    },
+    {
+      "alias": "ext11",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "extension",
+        "owner": "bot",
+        "pos": [
+          6,
+          7
+        ],
+        "store": {
+          "energy": 50
+        }
+      }
+    },
+    {
+      "alias": "ext12",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "extension",
+        "owner": "bot",
+        "pos": [
+          8,
+          4
+        ],
+        "store": {
+          "energy": 50
+        }
+      }
+    },
+    {
+      "alias": "ext13",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "extension",
+        "owner": "bot",
+        "pos": [
+          9,
+          4
+        ],
+        "store": {
+          "energy": 50
+        }
+      }
+    },
+    {
+      "alias": "ext14",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "extension",
+        "owner": "bot",
+        "pos": [
+          9,
+          5
+        ],
+        "store": {
+          "energy": 50
+        }
+      }
+    },
+    {
+      "alias": "ext15",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "extension",
+        "owner": "bot",
+        "pos": [
+          10,
+          6
+        ],
+        "store": {
+          "energy": 50
+        }
+      }
+    },
+    {
+      "alias": "ext16",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "extension",
+        "owner": "bot",
+        "pos": [
+          9,
+          7
+        ],
+        "store": {
+          "energy": 50
+        }
+      }
+    },
+    {
+      "alias": "ext17",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "extension",
+        "owner": "bot",
+        "pos": [
+          10,
+          4
+        ],
+        "store": {
+          "energy": 50
+        }
+      }
+    },
+    {
+      "alias": "ext18",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "extension",
+        "owner": "bot",
+        "pos": [
+          11,
+          4
+        ],
+        "store": {
+          "energy": 50
+        }
+      }
+    },
+    {
+      "alias": "ext19",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "extension",
+        "owner": "bot",
+        "pos": [
+          11,
+          5
+        ],
+        "store": {
+          "energy": 50
+        }
+      }
+    },
+    {
+      "alias": "ext20",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "extension",
+        "owner": "bot",
+        "pos": [
+          12,
+          6
+        ],
+        "store": {
+          "energy": 50
+        }
+      }
+    },
+    {
+      "alias": "source1",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "source",
+        "pos": [
+          10,
+          10
+        ],
+        "energy": 3000
+      }
+    },
+    {
+      "alias": "source2",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "source",
+        "pos": [
+          40,
+          40
+        ],
+        "energy": 3000
+      }
+    },
+    {
+      "alias": "mineral1",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "mineral",
+        "pos": [
+          30,
+          30
+        ],
+        "mineralType": "H",
+        "mineralAmount": 50000
+      }
+    },
+    {
+      "alias": "w2controller",
+      "room": "W2N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "controller",
+        "pos": [
+          1,
+          1
+        ],
+        "level": 0,
+        "reservation": {
+          "user": "enemy",
+          "endTime": 5000
+        }
+      }
+    },
+    {
+      "alias": "w2source1",
+      "room": "W2N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "source",
+        "pos": [
+          10,
+          10
+        ],
+        "energy": 3000
+      }
+    },
+    {
+      "alias": "w2source2",
+      "room": "W2N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "source",
+        "pos": [
+          40,
+          40
+        ],
+        "energy": 3000
+      }
+    },
+    {
+      "alias": "w2mineral",
+      "room": "W2N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "mineral",
+        "pos": [
+          30,
+          30
+        ],
+        "mineralType": "O",
+        "mineralAmount": 50000
+      }
+    },
+    {
+      "alias": "reserver",
+      "room": "W2N1",
+      "kind": "creep",
+      "spec": {
+        "name": "reserver",
+        "owner": "enemy",
+        "pos": [
+          2,
+          1
+        ],
+        "body": [
+          "claim",
+          "move",
+          "move"
+        ],
+        "ticksToLive": 3600
+      }
+    },
+    {
+      "alias": "scout1",
+      "room": "W2N1",
+      "kind": "creep",
+      "spec": {
+        "name": "scout-1",
+        "owner": "bot",
+        "pos": [
+          30,
+          25
+        ],
+        "body": [
+          "move"
+        ],
+        "ticksToLive": 4000
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "pointer": "/objects/spawn",
+      "op": "exists"
+    },
+    {
+      "pointer": "/objects/reserver",
+      "op": "missing"
+    },
+    {
+      "pointer": "/rooms/W1N1/controller/owner",
+      "op": "eq",
+      "value": "bot"
+    },
+    {
+      "pointer": "/players/bot/memory/__kkAcceptance/loops",
+      "op": "gte",
+      "value": 100
+    }
+  ]
+}

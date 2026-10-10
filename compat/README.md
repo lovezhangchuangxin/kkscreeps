@@ -141,6 +141,18 @@ node compat/scripts/bot-battle.mjs --out /tmp/tooangel-battle
 
 **窗口设计依据（确定性时序）**：防御链三腿（塔自 2 拍攻击、防御者 394 拍出生、安全模式 399 拍激活）全部落在 520 拍内；556 拍处 TooAngel defendmelee 会与敌方坦克同格后触发其自身潜在缺陷崩溃（`PathFinder.search(自,自)` 返回空 path，`search.path[0]` 未定义——官方引擎同样返回空 path，属 bot 潜在缺陷而非 kk 差异；堆叠本身是官方语义：安全模式下房主 creep 可穿行敌方 creep，官方 movement.js `checkObstacleAtXY` 与 kk `check_obstacle_at_xy` 同形）。窗口选在两者之间，验收不触发该崩溃。玩家 CPU 计量为墙钟语义（官方同形），机器重负载下防御时序会平移（实测并发负载下防御者出生 394→420），指标阈值均为留有裕度的下限；引擎结算确定性由每段逐位回放保证。多房进攻（attackunreserve/Overmind 指令旗标）、bot 对战与长期存活仍是独立切片，不因本片关闭。
 
+### TooAngel 多房进攻与冷恢复
+
+真实 bot 多房进攻首片：锁定提交的 TooAngel 在 W1N1（RCL5、按 bot 自算布局位播种 spawn/存储 150k/20 extension——布局错位会置 misplacedSpawn 使进攻门 isHealthy 永假）对邻房 W2N1 的敌方脚本 reserver（claim+2move 贴控制器持续预留，控制器播种 `reservation{user:enemy}`）发动 attackunreserve 跨房出击。进攻链全程 bot 自主决策：`handleHostileReservedRoom` 判定敌方预留（首见后 1600 拍 `noReservedRoomInterval` 门 + RCL≥5 + isHealthy + spawnIdle 门）→ 排队 attackunreserve → 跨房行军 → 按 CLAIM 部件优先锁定 reserver 击杀。可见性由播种的 bot 方 scout 提供（出生即在 W2N1）。有限世界下该 scout 永久滞留 W2N1，机制有四环：未注册邻房在寻路地形包中为全墙占位，`PathFinder.search` 只返回 incomplete 的房内部分路径（不跨界）；scout 的 memory.path 经 Memory 序列化丢失路径形态，每拍 moveByPath NOT_FOUND→重搜→新路径首步 OK→incompleteCount 清零（25 拍救援永不触发）；停在边缘格时结算期跨房过渡把对象放回原格（未注册目标房）；`getNextRoom` 的 lastSeen 启发式使未注册邻房恒被优先、唯一已注册邻房 W1N1 永不被选中。四环共同维持 W2N1 全窗口可见（有限世界下的官方同构行为）。bot 自产 scout 最早也要 1497 拍（房级 `handleScout` 相位门），brain 层 nextroomer 排队（含 scout）被 `resourceStats` EMA（τ=10000，cpuUsed 初值=limit、cpuIdle=0）在 sim 时限内永假——u=0 理想情况也需 ≥6931 拍，冷恢复还会重置 EMA，故首拍可见性必须播种。Memory 预置 `players.enemy.reputation = -100` 判敌与 scout 的角色记忆（creep memory 即 `Memory.creeps[name]`）。W2N1 须播种 mineral——外房 `updateBasicData` 对无矿控制器房读 `minerals[0].mineralType` 会每拍抛错。在仓库根目录执行（输出目录须不存在）：
+
+```bash
+bash scripts/fetch-bots.sh
+cargo build --release -p kk-cli
+node compat/scripts/bot-offense.mjs --out /tmp/tooangel-offense
+```
+
+模块身份核验复用 [bot-gameplay.mjs](scripts/bot-gameplay.mjs) 的 prepareModules（观察器以 kk_offense 模块身份部署）；观察器 [observer.js](fixtures/sim-tooangel-offense/observer.js) 包裹 bot 主循环，统计 W2N1 可见性与敌方预留观察、attackunreserve 出生（按 creep 名前缀）、对 reserver 的攻击事件与击杀（按目标 id 归因；EVENT_ATTACK 的伤害字段是 damage）与经济共存指标。默认 `--ticks 2900 --split 2400`（`--ticks` 下限 2200，`--split` 须为 1..ticks-1；实测击杀落在 1861-2135 拍——标定期 debug 与 release 十二段观测，终版入库 release 六段为 1888-2048；玩家 CPU 墙钟计量下有抖动，截点留裕度使前缀段 `/objects/reserver missing` 断言稳定成立）：JSON/KKPV 各一段连跑与一段跨进程冷恢复续跑（前缀段只验通用与 harness 检查，进攻指标在完整窗口段判定），每段 `--verify-replay` 逐位重放并比较完整检查点，观察器与敌方脚本哈希逐段比对。最终断言含场景内 `/objects/reserver missing`（reserver 被击杀）、`/rooms/W1N1/controller/owner == bot` 与 spawn 存活；[入库汇总](reports/gameplay-tooangel-offense/summary.json)记录六段报告与指标。结构计数（offenseBirths/attackEventsOnReserver/reserverDamage/可见拍数）四段全窗口一致，时序类指标随墙钟抖动、阈值均为留裕度下限；引擎结算确定性由每段逐位回放保证。bot 对战、多房扩张运营（claim/预留自有房）与长期存活仍是独立切片，不因本片关闭。
+
 Mod 生命周期场景可运行 `target/release/kkscreeps sim run --scenario compat/fixtures/sim-mod-tick/scenario.json --ticks 50 --report /tmp/sim-mod-tick.json`。它显式装载官方原型 clockwork，验证两房对象自主更新、玩家类和查询、Mod state 与真实计划身份；没有玩家意图或按官方包 ID 特殊处理。该场景不含对象增删、生产建筑和内容预设。另有 `sim-mod-objects/scenario.json`，使用相同命令运行至少 53 轮，验证 nursery 双房自主生成/到期删除、玩家类/空间查询；报告 mod_objects 包含全部动态 Mod 对象。两场景的 root 都装载 official 的直接子包，尚不是内容预设或显式包选择。
 
 独立 JS 处理器组合可运行 `target/release/kkscreeps mod inspect --root compat/fixtures/mod-composition --report /tmp/composition.json`，使用 `--disable z-gate` 预览依赖闭包。`sim-mod-composition/scenario.json` 至少运行 100 轮，真实玩家核验链序 trace，报告 composition 与实际装配同源。接口和约束见[组合诊断](../docs/architecture/mod-composition.md)。

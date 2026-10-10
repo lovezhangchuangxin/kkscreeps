@@ -6,12 +6,12 @@
 
 - 2026-10-09 review 修复（已提交 `2b68002`）：invaderCore 放置的孵化守军初始 `ageTime=0`，出生后再起算普通寿命；stronghold 部署绑定 `decayTime` 的路径保持原值。新增超过 1500 tick 孵化回归；定向 `pnpm run check -- kk-runtime --test mod_chain_tests --filter invader_core_long_incubation` 与无参数 `pnpm run check` 均通过（不含 doctest；本次未改 doctest）。其余 G02/G03 与 NPC 后续消费者不受此修复影响，下一步按当前执行队列继续。
 
-- 更新日期：2026-10-10；控制器 INVULNERABILITY 消费者已提交 `d48d6ea`；Invader core 生命周期首片已提交 `2b68002`；Stronghold 布防首片已提交 `4f7dd2bd`；raid 调度首片已提交 `e316a07`；powerBank 生成与消费者首片已提交 `e5249ff2`；边缘环绕+核弹簇已提交 `9ff9d2e`；弃用告警已提交 `c39777a`；tick({random}) 注入已提交 `038c1aa`；InterShardMemory 本地段与 CPU shardLimits 已提交 `5daaa88`；动作记录导出与 captureActionLog 已提交 `4cef2ba`（套件最后 21 个跳过例全簇转绿、跳过清零）；TooAngel 防御战斗与冷恢复（敌方脚本坦克 + 真实防御链，520 tick 六阶段）随本提交交付。最近完整门禁 Rust 全绿；最近 release 棘轮 2905 passed / 9 failed / 0 skipped（**99% 检查点达成并超出 20 例**）。TooAngel/Overmind 经济六阶段与防御战斗为既有入库证据；本批未重跑经济长测。
+- 更新日期：2026-10-10；控制器 INVULNERABILITY 消费者已提交 `d48d6ea`；Invader core 生命周期首片已提交 `2b68002`；Stronghold 布防首片已提交 `4f7dd2bd`；raid 调度首片已提交 `e316a07`；powerBank 生成与消费者首片已提交 `e5249ff2`；边缘环绕+核弹簇已提交 `9ff9d2e`；弃用告警已提交 `c39777a`；tick({random}) 注入已提交 `038c1aa`；InterShardMemory 本地段与 CPU shardLimits 已提交 `5daaa88`；动作记录导出与 captureActionLog 已提交 `4cef2ba`（套件最后 21 个跳过例全簇转绿、跳过清零）；TooAngel 防御战斗与冷恢复（敌方脚本坦克 + 真实防御链，520 tick 六阶段）已提交 `c3c2d68`；TooAngel 多房进攻与冷恢复（敌方预留 + attackunreserve 跨房出击，2900 tick 六阶段）随本提交交付。最近完整门禁 Rust 全绿；最近 release 棘轮 2905 passed / 9 failed / 0 skipped（**99% 检查点达成并超出 20 例**）。TooAngel/Overmind 经济六阶段与防御战斗为既有入库证据；本批未重跑经济长测。
 - 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座、deposit 采集链、observer 限时视野已交付。**M2H.b 19/19 powers 全部接通**。
 - 当前接手：G02.d3 结构/rampart 计划级通行及默认玩家/NPC 寻路已提交 `fd27fbd`；G03 障碍追加后的同源链预演已提交 `3f3d9a7`；障碍摘要的安全模式主人已提交 `41de432`；控制器零升级量修复已提交 `10eb812`；G27.a 独立异步后台宿主已提交 `b25e280`；控制器 INVULNERABILITY 三处消费门已提交 `d48d6ea`；invaderCore 生命周期首片已提交 `2b68002`；stronghold 布防首片已提交 `4f7dd2bd`；raid 调度首片已提交 `e316a07`；powerBank 生成与消费者首片已提交 `e5249ff2`；边缘环绕+核弹簇（portal 传送/衰变/核爆免伤、roomStatus 种子域与 getRoomStatus/launchNuke 门、worldSize 活算与 map/market/terminal 三处环绕计费、检查点 v9）随本提交交付，生产者侧仍缺地图生成、战术 AI（maintainPopulation/refillTowers/focusClosest）与 create-creep 等意图。逐房通行粒度、摘要增强、完整仲裁替换仍未完成。
 - 本次完成：JSON/KKPV 各 200 tick 持续战斗、100+100 tick 跨进程冷恢复和完整检查点回放；实际位置/hits 证明移动、受伤与恢复，双通道及直跑/续跑世界与 Memory 等值。TooAngel v6 双通道 2000 tick 连跑及 1000+1000 tick 冷恢复六阶段复验通过。
-- 剩余：真实 bot 多房进攻（attackunreserve/Overmind 指令旗标）、bot 对战与长期存活；地图生成与 G21 Mod 世界事件；stronghold 战术 AI/create-creep 意图；walkTo/Keeper lastMove 按实际 stronghold 消费者接线；G02.d3 逐房/摘要后续、G03 完整仲裁替换与 G27.a。NPC 场景不标 M2B 或 G21 完成。
-- 兼容率 **2905/2914≈99.7%（99% 检查点 2885 已达成并超出 20 例；跳过清零）**，9 失败=8 既有官方对齐豁免+1 SHAPE-GAME-002 形状互斥豁免。剩余提升面在豁免例（须官方语义仲裁或上游形状通道）。下一队列：真实 bot 多房战斗验收（顺位 2）、G02.d3 逐房、G03 完整仲裁替换、G27.b outbox、玩家面 actionLog 投影/prelude 与渲染 feed 消费。
+- 剩余：bot 对战、长期存活与 Overmind 旗标出兵；地图生成与 G21 Mod 世界事件；stronghold 战术 AI/create-creep 意图；walkTo/Keeper lastMove 按实际 stronghold 消费者接线；G02.d3 逐房/摘要后续、G03 完整仲裁替换与 G27.a。NPC 场景不标 M2B 或 G21 完成。
+- 兼容率 **2905/2914≈99.7%（99% 检查点 2885 已达成并超出 20 例；跳过清零）**，9 失败=8 既有官方对齐豁免+1 SHAPE-GAME-002 形状互斥豁免。剩余提升面在豁免例（须官方语义仲裁或上游形状通道）。下一队列：bot 对战/长期存活切片、G02.d3 逐房、G03 完整仲裁替换、G27.b outbox、玩家面 actionLog 投影/prelude 与渲染 feed 消费。
 - Mod 扩展：移动策略、对象/建筑/资源、库存/耐久/受击、作者 CLI/类型、输入回放和检查点已有基础；未完成范围以任务表为准。默认玩法已有消费者不代表对应 Mod 替换能力已经开放。
 - 网络服务、持久 storage 后端与真实游戏客户端仍未实现；renderer R0–R6 已交付，R7 最终矩阵/长测未收口。现有 bot-check 不能代替持续推进世界中的可玩验收。
 - M2B 验收标准（2026-10-09 调整）：screeps-ok ≥95% 为中间检查点、≥99% 为后续覆盖目标；最终完成要求约定范围内功能全部通过验收，剩余例外逐项有明确范围、证据和可审查理由，见[路线图](../roadmap.md)。
@@ -21,7 +21,7 @@
 | 顺位 | 任务 | 首片与完成条件 |
 |---|---|---|
 | 1 | 零散红逐例归因与修复 | 8 条既有官方对齐豁免保留证据；Invader 自动远程攻击已交付；零步相邻近战已交付；普通 Invader 路径建筑改向/追击/治疗已贯通；NPC 持续战斗已验（Source Keeper 同房巡守/战斗、stronghold 布防、raid 生成已交付），剩余地图生成/powerBank 生成另拆；每例有官方源或套件仲裁证据 |
-| 2 | 真实 bot 验收与 G02.d3 后续 | TooAngel 单房经济/死亡后补员/冷恢复已验；Overmind 单房经济/寿命/冷恢复已验；TooAngel 防御战斗（塔/防御者/安全模式）已验；剩余多房进攻（attackunreserve/Overmind 旗标）、bot 对战与长期存活 |
+| 2 | 真实 bot 验收与 G02.d3 后续 | TooAngel 单房经济/死亡后补员/冷恢复已验；Overmind 单房经济/寿命/冷恢复已验；TooAngel 防御战斗（塔/防御者/安全模式）已验；TooAngel 多房进攻（attackunreserve 跨房出击击杀 reserver）已验；剩余 bot 对战、长期存活与 Overmind 旗标出兵 |
 | 独立候选 | G02.d3 后续、G27.a | 前者继续逐房粒度与摘要增强（结构/rampart 已贯通）；后者提供异步后台生命周期，随后才接 storage/outbox/网络 |
 
 维护优化已完成的轮次不作为新功能前置。任务首次实施前按业务闭环拆片；G30.a 覆盖清单与 G30.d 同功能参考随领域滚动，不等最终收口才补证据。
@@ -330,6 +330,15 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - 独立 worker/realm、原生登记能力门、同步注册/异步生命周期、队列快拒绝、过期/跨包/未授予/调用和字节限额及共享 VM 预算已接线；FileProbe 使用常规文件的有限只读异步任务。实际发现异步 op 会在 V8 调用时提前轮询，首轮测试因没有 Tokio 上下文而中止，已将预算调用统一进入 worker 执行器上下文；随后宿主六组、CLI 三组与双通道持续世界一组定向回归通过。CLI 冷检查点身份读取/输入守卫、后台等待读期间世界继续推进及重启 calls 归零均实测。新增 ADR-017、现行后台契约/源码导航/状态域清单与公共示例，无新玩法持久域或载荷版本；可选 services 清单/代码沿既有 Mod 身份与包摘要保存，无服务旧清单保持原序列化形态。首轮完整门禁通过，最后的故障来源诊断和协议常量收口后须再次完整复验。
 
 - 最终无参数完整门禁通过：Rust 1512 passed / 0 failed，Clippy、JS workspace/维护工具、307 个 Markdown / 1971 个本地链接与 936 个源码/测试规模通过。release CLI 重建通过，公共 services 包由 release 实际运行，start/request/stop 与 world_unchanged=true 验收通过；JS 格式检查通过，无 doctest 改动。固定 bot 准备、适配器构建和显式 release 兼容棘轮通过：2802 passed / 8 failed / 104 skipped、floor 2802、0 转红/0 转绿（8 例既有豁免）。本片未运行 bot 长测，不标网络/耐久任务完成；实现/测试/公共示例/契约及报告随本批提交。
+
+## 2026-10-10 TooAngel 多房进攻与冷恢复（已完成，随本提交交付）
+
+- 基线 `c3c2d68`（防御战斗批），起始工作区干净。真实 bot 多房进攻首片：锁定 TooAngel 在 W1N1（RCL5）对邻房 W2N1 的敌方脚本 reserver 发动 attackunreserve——`handleHostileReservedRoom` 判定敌方预留（首见 1600 拍 `noReservedRoomInterval` 门 + RCL≥5 + isHealthy（存储 ≥100k）+ spawnIdle EMA 门）→ 排队（优先级缺省 20+距离+年龄）→ 跨房行军 → 按 CLAIM 部件优先锁定击杀。夹具 `compat/fixtures/sim-tooangel-offense/`（场景/敌方脚本/观察器）+ wrapper `compat/scripts/bot-offense.mjs`（默认 2900/2400 即验证窗口，观察器以 kk_offense 模块身份部署，二进制/观察器/敌方哈希逐段断言）。入库证据 `compat/reports/gameplay-tooangel-offense/`（六报告+summary 含溯源补注；终版实测击杀 1888-2048 拍（标定期十二段观测 1861-2135）、attackEvents 10/reserverDamage 360、可见拍数 2900/2900）。
+- 夹具四个非显然约束（研究期逐个排除）：(1) **结构必须按 bot 自算布局位播种**—— TooAngel 布局从控制器邻位推导（存储=upgrader 位最佳邻位、spawn 位沿路径），乱放触发 `checkForMisplacedSpawn` 置 misplacedSpawn → isRampingUp 恒真 → isHealthy 永假 → 进攻门不开且能量死亡螺旋（错位 extension 堵塞 filler 区使 universal 无路由目标）；按战斗批 Memory 里已算好的布局位（spawn(5,5)/存储(3,3)/extension 前 20 位）重播后经济链即通。(2) **可见性必须播种**——bot 自产 scout 最早 1497 拍（`handleScout` 相位门），brain 层 nextroomer 排队（含 scout）被 `resourceStats` EMA（τ=10000，cpuUsed 初值=limit、cpuIdle=0）在 sim 时限内永假（u=0 理想情况也需 ≥6931 拍，冷恢复重置 EMA）；播种 bot 方 scout（出生即在 W2N1 + Memory.creeps 预置角色记忆，creep memory 即 Memory.creeps[name]）提供首拍可见性。(3) **世界边缘滞留是官方同构行为（四环机制）**——未注册邻房在寻路地形包中为全墙占位（kk-runner/pathfinder.rs ring_rooms+ALL_WALL），PathFinder.search 只返回 incomplete 的房内部分路径不跨界；scout 的 memory.path 经 Memory 序列化丢失路径形态，每拍 moveByPath NOT_FOUND→重搜→新路径首步 OK→incompleteCount 清零，25 拍救援永不触发（kk moveByPath 末端语义与官方一致）；停在边缘格时结算期跨房过渡放回原格（settle/inter_room.rs 未注册目标房）；getNextRoom 的 lastSeen 启发式使未注册邻房恒被优先、唯一已注册邻房 W1N1 永不被选中——四环使播种 scout 永久滞留 W2N1 维持全程可见。(4) **外房必须播种 mineral**——`updateBasicData` 对有控制器无矿房读 `minerals[0].mineralType` 每拍抛错。
+- 冷恢复语义：截点 2400 在击杀（最晚 2122）之后，前缀段 `/objects/reserver missing` 断言成立；reserver 死后预留持续至绝对期限 end_time（种子 5000、结算按绝对期限制不逐拍递减；玩家面 ticksToEnd 读数随之递减），W2N1 全窗口保持 HostileReserved 不触发 bot 自预留/扩张；恢复后 heap（global.data.rooms/scout data.nextRoom）丢失无碍——scout 冻结态由 Memory.path 维持、攻击已在前缀完成、Memory 计数器跨检查点接续。结构计数四段全窗口一致（offenseBirths/attackEventsOnReserver/reserverDamage/可见拍数），时序类指标随墙钟抖动、阈值留裕度。
+- 登记：bot 对战（双方真实 bot 互攻）、长期存活（≥72h 等价长窗）、Overmind 指令旗标出兵（Overmind 侧战争系统更重，旗标驱动 squad）为独立切片；TooAngel `handleHostileOccupiedRoom`（RCL6 门 + storage 能量分档 squad）未在本片范围；scout 边缘冻结若未来引擎引入"世界边界回退"语义需复审此夹具的可见性假设。
+- 三路复审（夹具断言/官方语义时序/验收纪律）发现当批清偿：判定强化两处——"进攻发起于预留观察之后"只排除非触发链出生、判别力近恒真，改为 `offenseFirstBirthTick >= w2HostileReservationTick + 1600` 使 1600 拍门合规进入自动判定；对 reserver 的攻击事件补攻击者归属核验（`Game.getObjectById(objectId).my`，对齐战斗批塔归因纪律）。文档口径——README 击杀范围注明标定期/终版两口径、roadmap 未收口清单补回 Overmind 旗标出兵。其余全通过（事件字段/objectId 归因/命名前缀唯一性/触发门参数/冷恢复接线/SHA 溯源链闭合均经写入点核实）。
+- 验证：debug 与 release 二进制六阶段全绿（强化断言后 release 终版证据 26/16 项检查零失败）；无参数 `pnpm run check` 通过；本片不关闭 M2B（bot 对战/长存仍开）。
 
 ## 2026-10-10 TooAngel 防御战斗与冷恢复（已完成，随本提交交付）
 
