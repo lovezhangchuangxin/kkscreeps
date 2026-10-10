@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "shard": {
+    "players": ["bot"],
+    "rooms": [{ "name": "W1N1", "owner": "bot", "rcl": 1 }]
+  },
+  "bots": [{ "player": "bot", "modules": "modules", "entry": "kk_survival", "memory": { "creeps": {} } }],
+  "objects": [
+    { "alias": "spawn", "room": "W1N1", "kind": "structure", "spec": { "structureType": "spawn", "name": "Spawn1", "owner": "bot", "pos": [5, 5], "store": { "energy": 300 } } },
+    { "alias": "source1", "room": "W1N1", "kind": "structure", "spec": { "structureType": "source", "pos": [10, 10], "energy": 3000 } },
+    { "alias": "source2", "room": "W1N1", "kind": "structure", "spec": { "structureType": "source", "pos": [40, 40], "energy": 3000 } },
+    { "alias": "mineral", "room": "W1N1", "kind": "structure", "spec": { "structureType": "mineral", "pos": [30, 30], "mineralType": "H", "mineralAmount": 50000 } }
+  ],
+  "assertions": [
+    { "pointer": "/objects/spawn", "op": "exists" },
+    { "pointer": "/rooms/W1N1/controller/owner", "op": "eq", "value": "bot" }
+  ]
+}

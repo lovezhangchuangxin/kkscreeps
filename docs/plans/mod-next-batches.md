@@ -4,9 +4,11 @@
 
 ## 当前接手位置
 
-- 2026-10-10 review 修复（待提交）：房间状态种子保留原值，玩家面与结算消费者按墙钟严格到期求有效状态；普通边缘跨房和 `isRoomAvailable` 拒绝有效 closed 房；powerBank 生成器补有效 closed 过滤（novice/respawn 的官方 db status 仍为 normal，继续参与扫描）。已补状态边界、portal、跨房、核弹、生成器和检查点恢复回归；无参数 `pnpm run check`、release CLI 构建、兼容适配器构建与 release ratchet 均通过，ratchet 为 2905 passed / 9 failed / 0 skipped、无新增转红（既有未命中豁免警告）。本轮继续深度复审差异，后续消费者依执行队列推进。
+- 2026-10-10 长期存活批暂停（夹具随本提交交付，六阶段待日志 v2 后补跑）：夹具/有界观察器/包装器已交付——spawn 落 TooAngel 布局锚点 (5,5)（控制器自动 (1,1)、misplacedSpawn 不触发），观察器全部持久化统计有界（孵化名字表替代 seen 全集、采样数组封顶、按角色前缀归类出生、Memory 字节采样曲线），包装器阈值按 86400 拍全长 debug 探针标定（RCL5@66728、storage 24225、link 67900、8 类角色 636 出生/628 死亡、采集 1.68M/升级 756k/建造 154k、bot Memory 峰值 29.5KB、零错误零跳帧、含逐位回放 749s≈115 拍/秒）。研究结论：kk 为单房夹具播种 GCL2，brain 层扩张链真正卡点是无可占的已侦察房（scout 冻结既知约束），nextroomer/claimer 不会出生、不该断言；creep 名字生日碰撞的 `spawnCreateCreep: -3` 日志走 `Room.prototype.log`（无错误关键字），不触发现察器错误正则。六阶段验收按用户指令暂停：现行输入日志约 30KB/拍（玩家 Memory 整串占 25KB）使 86400 拍单段日志 2.6GB、六阶段临时日志约 10GB，日志问题解决前跑验收是浪费。输入日志 v2 方向已获用户认可：A 摘要化（Memory 出日志改存 sha256，~30KB/拍→~1KB/拍，verify-replay 的 Memory 比较改摘要级）+ B 流式读取（逐行解析+增量链校验+游标后缀加载）先行；C 生产不写输入日志（持久化=周期检查点，RPO=间隔，官方/xxscreeps 同级取舍）跟在 embed 服务形态清楚后；D 满员 isolate 足迹实测排期。部署基准（用户拍板）：2GB 内存、≥4 区块×81 房满员带得动、性能高内存小、不过度设计；官方引擎与 xxscreeps 持久化盘点证据见本条记录。下一片：输入日志 v2（A+B），完成后长存批在 v2 格式上补跑六阶段。
 
-- 2026-10-10 `e5249ff2^..HEAD` 代码复审（待提交）：修复 `tick({random})` 成功拍的输入日志缺失随机值问题，`advance` 段逐拍保存实际消费值、回放注入并校验消费完毕；新增矿物再生的日志回放等值用例。定向 `pnpm run check -- kk-runtime --test embed_tests` 与无参数 `pnpm run check` 已通过（不含 doctest；本次未改 doctest）。复审发现的房间状态三处消费者问题已按上条修复；其中 powerBank 只排除有效 closed，原“非 normal 全部排除”的判断已依据官方 db status 更正。不将本轮标作全领域完成。
+- 2026-10-10 review 修复（已提交 `d354f9ff`）：房间状态种子保留原值，玩家面与结算消费者按墙钟严格到期求有效状态；普通边缘跨房和 `isRoomAvailable` 拒绝有效 closed 房；powerBank 生成器补有效 closed 过滤（novice/respawn 的官方 db status 仍为 normal，继续参与扫描）。已补状态边界、portal、跨房、核弹、生成器和检查点恢复回归；无参数 `pnpm run check`、release CLI 构建、兼容适配器构建与 release ratchet 均通过，ratchet 为 2905 passed / 9 failed / 0 skipped、无新增转红（既有未命中豁免警告）。本轮继续深度复审差异，后续消费者依执行队列推进。
+
+- 2026-10-10 `e5249ff2^..HEAD` 代码复审（已提交，随 `d354f9ff`）：修复 `tick({random})` 成功拍的输入日志缺失随机值问题，`advance` 段逐拍保存实际消费值、回放注入并校验消费完毕；新增矿物再生的日志回放等值用例。定向 `pnpm run check -- kk-runtime --test embed_tests` 与无参数 `pnpm run check` 已通过（不含 doctest；本次未改 doctest）。复审发现的房间状态三处消费者问题已按上条修复；其中 powerBank 只排除有效 closed，原“非 normal 全部排除”的判断已依据官方 db status 更正。不将本轮标作全领域完成。
 
 - 2026-10-09 review 修复（已提交 `2b68002`）：invaderCore 放置的孵化守军初始 `ageTime=0`，出生后再起算普通寿命；stronghold 部署绑定 `decayTime` 的路径保持原值。新增超过 1500 tick 孵化回归；定向 `pnpm run check -- kk-runtime --test mod_chain_tests --filter invader_core_long_incubation` 与无参数 `pnpm run check` 均通过（不含 doctest；本次未改 doctest）。其余 G02/G03 与 NPC 后续消费者不受此修复影响，下一步按当前执行队列继续。
 
@@ -15,7 +17,7 @@
 - 当前接手：G02.d3 结构/rampart 计划级通行及默认玩家/NPC 寻路已提交 `fd27fbd`；G03 障碍追加后的同源链预演已提交 `3f3d9a7`；障碍摘要的安全模式主人已提交 `41de432`；控制器零升级量修复已提交 `10eb812`；G27.a 独立异步后台宿主已提交 `b25e280`；控制器 INVULNERABILITY 三处消费门已提交 `d48d6ea`；invaderCore 生命周期首片已提交 `2b68002`；stronghold 布防首片已提交 `4f7dd2bd`；raid 调度首片已提交 `e316a07`；powerBank 生成与消费者首片已提交 `e5249ff2`；边缘环绕+核弹簇（portal 传送/衰变/核爆免伤、roomStatus 种子域与 getRoomStatus/launchNuke 门、worldSize 活算与 map/market/terminal 三处环绕计费、检查点 v9）随本提交交付，生产者侧仍缺地图生成、战术 AI（maintainPopulation/refillTowers/focusClosest）与 create-creep 等意图。逐房通行粒度、摘要增强、完整仲裁替换仍未完成。
 - 本次完成：JSON/KKPV 各 200 tick 持续战斗、100+100 tick 跨进程冷恢复和完整检查点回放；实际位置/hits 证明移动、受伤与恢复，双通道及直跑/续跑世界与 Memory 等值。TooAngel v6 双通道 2000 tick 连跑及 1000+1000 tick 冷恢复六阶段复验通过。
 - 剩余：bot 对战、长期存活与 Overmind 旗标出兵；地图生成与 G21 Mod 世界事件；stronghold 战术 AI/create-creep 意图；walkTo/Keeper lastMove 按实际 stronghold 消费者接线；G02.d3 逐房/摘要后续、G03 完整仲裁替换与 G27.a。NPC 场景不标 M2B 或 G21 完成。
-- 兼容率 **2905/2914≈99.7%（99% 检查点 2885 已达成并超出 20 例；跳过清零）**，9 失败=8 既有官方对齐豁免+1 SHAPE-GAME-002 形状互斥豁免。剩余提升面在豁免例（须官方语义仲裁或上游形状通道）。下一队列：bot 对战/长期存活切片、G02.d3 逐房、G03 完整仲裁替换、G27.b outbox、玩家面 actionLog 投影/prelude 与渲染 feed 消费。
+- 兼容率 **2905/2914≈99.7%（99% 检查点 2885 已达成并超出 20 例；跳过清零）**，9 失败=8 既有官方对齐豁免+1 SHAPE-GAME-002 形状互斥豁免。剩余提升面在豁免例（须官方语义仲裁或上游形状通道）。下一队列：输入日志 v2（用户拍板优先）、bot 对战/长期存活补跑、G02.d3 逐房、G03 完整仲裁替换、G27.b outbox、玩家面 actionLog 投影/prelude 与渲染 feed 消费。
 - Mod 扩展：移动策略、对象/建筑/资源、库存/耐久/受击、作者 CLI/类型、输入回放和检查点已有基础；未完成范围以任务表为准。默认玩法已有消费者不代表对应 Mod 替换能力已经开放。
 - 网络服务、持久 storage 后端与真实游戏客户端仍未实现；renderer R0–R6 已交付，R7 最终矩阵/长测未收口。现有 bot-check 不能代替持续推进世界中的可玩验收。
 - M2B 验收标准（2026-10-09 调整）：screeps-ok ≥95% 为中间检查点、≥99% 为后续覆盖目标；最终完成要求约定范围内功能全部通过验收，剩余例外逐项有明确范围、证据和可审查理由，见[路线图](../roadmap.md)。
@@ -24,8 +26,9 @@
 
 | 顺位 | 任务 | 首片与完成条件 |
 |---|---|---|
-| 1 | 零散红逐例归因与修复 | 8 条既有官方对齐豁免保留证据；Invader 自动远程攻击已交付；零步相邻近战已交付；普通 Invader 路径建筑改向/追击/治疗已贯通；NPC 持续战斗已验（Source Keeper 同房巡守/战斗、stronghold 布防、raid 生成已交付），剩余地图生成/powerBank 生成另拆；每例有官方源或套件仲裁证据 |
-| 2 | 真实 bot 验收与 G02.d3 后续 | TooAngel 单房经济/死亡后补员/冷恢复已验；Overmind 单房经济/寿命/冷恢复已验；TooAngel 防御战斗（塔/防御者/安全模式）已验；TooAngel 多房进攻（attackunreserve 跨房出击击杀 reserver）已验；剩余 bot 对战、长期存活与 Overmind 旗标出兵 |
+| 1 | 输入日志 v2（用户拍板优先） | A：玩家 Memory 出日志改存 sha256 摘要（~30KB/拍→~1KB/拍），verify-replay 的 Memory 比较改摘要级；B：read_input_log 流式化（逐行+增量链校验+游标后缀加载，撕裂语义不变）。完成条件：embed/replay 全部消费方与测试迁移到 v2，长期存活批六阶段在 v2 格式上全绿 |
+| 2 | 零散红逐例归因与修复 | 8 条既有官方对齐豁免保留证据；Invader 自动远程攻击已交付；零步相邻近战已交付；普通 Invader 路径建筑改向/追击/治疗已贯通；NPC 持续战斗已验（Source Keeper 同房巡守/战斗、stronghold 布防、raid 生成已交付），剩余地图生成/powerBank 生成另拆；每例有官方源或套件仲裁证据 |
+| 3 | 真实 bot 验收与 G02.d3 后续 | TooAngel 单房经济/死亡后补员/冷恢复已验；Overmind 单房经济/寿命/冷恢复已验；TooAngel 防御战斗（塔/防御者/安全模式）已验；TooAngel 多房进攻（attackunreserve 跨房出击击杀 reserver）已验；剩余 bot 对战、长期存活（夹具已交付待六阶段）与 Overmind 旗标出兵 |
 | 独立候选 | G02.d3 后续、G27.a | 前者继续逐房粒度与摘要增强（结构/rampart 已贯通）；后者提供异步后台生命周期，随后才接 storage/outbox/网络 |
 
 维护优化已完成的轮次不作为新功能前置。任务首次实施前按业务闭环拆片；G30.a 覆盖清单与 G30.d 同功能参考随领域滚动，不等最终收口才补证据。
