@@ -36,6 +36,7 @@
   const __Infinity = Infinity;
   const __Error = Error;
   const __Uint8Array = Uint8Array;
+  const __Set = Set;
 
   const HEADER_LEN = 160;
   // 2^32 在 double 中精确；i64 取负经补码量值合成（见 readInt）。
@@ -276,12 +277,16 @@
   const __Symbol = Symbol;
   const DECODE_CTX = __Symbol('kk.decodeCtx');
 
-  function makeLazyAccessors(field) {
+  // 变长字段的共享惰性访问器按**字段索引**工作：字段元数据（含列偏移）
+  // 随块布局逐 tick 变化，因此放在 DECODE_CTX 里按索引取，而不是在闭包
+  // 里捕获——访问器于是对常驻记录终身有效，就地更新只需换 ctx。
+  function makeLazyAccessors(index) {
     return {
       enumerable: true,
       configurable: true,
       get() {
         const ctx = this[DECODE_CTX];
+        const field = ctx.fields[index];
         const v = readField(ctx.dv, field, ctx.row, ctx.arenaBase, ctx.arenaLen);
         __defineProperty(this, field.key, {
           value: v,
@@ -292,6 +297,7 @@
         return v;
       },
       set(v) {
+        const field = this[DECODE_CTX].fields[index];
         __defineProperty(this, field.key, {
           value: v,
           writable: true,
@@ -353,9 +359,15 @@
     };
   }
 
+  // 常驻记录的布局签名键：记下创建时桶的字段序与列类型；后续 tick 的
+  // 桶签名一致才允许就地更新（访问器的字段索引语义不变），否则重建。
+  const RESIDENT_SIG = __Symbol('kkpvResidentSig');
+
   // 解析单块并把记录按目录顺序追加进 records；私有束只接受私有块
-  // （公开块出现在私有束说明通道装配有误）。
-  function decodeBlockInto(dv, records, start, len, expectedTick) {
+  // （公开块出现在私有束说明通道装配有误）。resident 非 null 时启用
+  // 跨 tick 记录常驻：id 命中且布局签名一致就就地更新（ctx 重指新块、
+  // 急读属性重写、变长属性重装共享访问器），目录外的 id 由调用方清扫。
+  function decodeBlockInto(dv, records, start, len, expectedTick, resident, seen) {
     const h = checkBlockHeader(dv, start, len, expectedTick);
     if ((h.flags & 1) !== 1) fail('私有束要求私有块');
     if (h.terrain[1] !== 0) fail('私有对象块不带地形段');
@@ -416,13 +428,24 @@
         fields[f].key = utf8(dv, arenaBase + fields[f].keyOff, fields[f].keyLen);
         // "id" 由目录承担；字段键不得覆盖记录身份（与编码端拒绝一致）。
         if (fields[f].key === 'id') fail('字段键不得为 id');
-        // 变长字段的共享惰性访问器：每桶每字段一份，不逐对象分配。
+        // 变长字段的共享惰性访问器：每桶每字段一份（按索引工作，终身
+        // 有效），不逐对象分配。
         if (fields[f].kind >= 5) {
           if (lazyAccessors === null) lazyAccessors = new Array(fieldCount).fill(null);
-          lazyAccessors[f] = makeLazyAccessors(fields[f]);
+          lazyAccessors[f] = makeLazyAccessors(f);
         }
       }
-      bucketList[bucketList.length] = { rows, fields, lazyAccessors };
+      // 桶布局签名（字段键 + 列类型的有序串，每桶一次）：变长访问器按
+      // 字段索引工作，签名一致才允许常驻记录就地更新。
+      let sig = null;
+      if (resident !== null) {
+        const parts = [];
+        for (let f = 0; f < fieldCount; f++) {
+          parts.push(fields[f].key, fields[f].kind);
+        }
+        sig = parts.join('\u0000');
+      }
+      bucketList[bucketList.length] = { rows, fields, lazyAccessors, sig };
     }
     if (cur !== bucketsEnd) fail('桶段消费不符');
 
@@ -442,16 +465,32 @@
       if (handle >= bucketList.length) fail('未知类型句柄');
       const bucket = bucketList[handle];
       if (row >= bucket.rows) fail('行号越界');
+      const id = idFromHalves(lo, hi);
+      // 常驻命中：布局签名一致（访问器的字段索引语义不变）就就地更新，
+      // 免去每拍重建记录对象；布局变化（字段增删/列类型变/换桶）重建。
+      if (resident !== null) {
+        seen.add(id);
+        const existing = resident.get(id);
+        if (existing !== undefined) {
+          if (existing[RESIDENT_SIG] === bucket.sig) {
+            updateResident(existing, dv, bucket, row, arenaBase, arenaLen);
+            records[records.length] = existing;
+            continue;
+          }
+          resident.delete(id);
+        }
+      }
       const rec = {};
-      rec.id = idFromHalves(lo, hi);
+      rec.id = id;
       // 定宽列（bool/int/uint/float/ref）一次 DataView 读即值：急切装
       // 普通数据属性比逐对象逐字段装访问器便宜得多，也免去其闭包分配。
       // 变长列（str/array/object）保持首读惰性：共享访问器 + Symbol 上下文。
       const hasVariable = bucket.lazyAccessors !== null;
       if (hasVariable) {
-        rec[DECODE_CTX] = { dv, row, arenaBase, arenaLen };
+        rec[DECODE_CTX] = { dv, row, arenaBase, arenaLen, fields: bucket.fields };
       }
       const fields = bucket.fields;
+      if (resident !== null) rec[RESIDENT_SIG] = bucket.sig;
       for (let f = 0; f < fields.length; f++) {
         const field = fields[f];
         if (bitAt(dv, field.missingAt, row)) continue;
@@ -461,7 +500,33 @@
           __defineProperty(rec, field.key, bucket.lazyAccessors[f]);
         }
       }
+      if (resident !== null) resident.set(id, rec);
       records[records.length] = rec;
+    }
+  }
+
+  // 常驻记录的就地更新：ctx 换指新块（复用对象免分配），急读属性按新值
+  // 重写、缺失字段删除残留，变长字段重装共享访问器（顶掉已物化的旧值）。
+  // 调用前已由布局签名保证字段集、顺序与列类型不变。
+  function updateResident(rec, dv, bucket, row, arenaBase, arenaLen) {
+    if (bucket.lazyAccessors !== null) {
+      const ctx = rec[DECODE_CTX];
+      ctx.dv = dv;
+      ctx.row = row;
+      ctx.arenaBase = arenaBase;
+      ctx.arenaLen = arenaLen;
+      ctx.fields = bucket.fields;
+    }
+    const fields = bucket.fields;
+    for (let f = 0; f < fields.length; f++) {
+      const field = fields[f];
+      if (bitAt(dv, field.missingAt, row)) {
+        delete rec[field.key];
+      } else if (field.kind < 5) {
+        rec[field.key] = readField(dv, field, row, arenaBase, arenaLen);
+      } else {
+        __defineProperty(rec, field.key, bucket.lazyAccessors[f]);
+      }
     }
   }
 
@@ -493,7 +558,28 @@
     }
     const records = [];
     forEachBlock(dv, total, (start, len) => {
-      decodeBlockInto(dv, records, start, len, expectedTick);
+      decodeBlockInto(dv, records, start, len, expectedTick, null, null);
+    });
+    return records;
+  }
+
+  /** 常驻版解码：resident 是跨 tick 存活的 id → 记录 Map（调用方持有，
+   * 沙箱生命周期内复用）。id 命中且布局签名一致就地更新，未命中新建，
+   * 本 tick 目录之外的 id 清扫出表。记录对象跨 tick 保持同一性——与
+   * Memory 常驻同属已接受的观察面（依赖每拍新对象的代码在官方即坏）。 */
+  function decodeBundleResident(buffer, expectedTick, resident) {
+    const dv = new __DataView(buffer);
+    const total = __reflectApply(__dvByteLength, dv, []);
+    if (expectedTick === undefined || expectedTick === null) {
+      fail('缺少信封 tick 一致性参数');
+    }
+    const records = [];
+    const seen = new __Set();
+    forEachBlock(dv, total, (start, len) => {
+      decodeBlockInto(dv, records, start, len, expectedTick, resident, seen);
+    });
+    resident.forEach((_, id) => {
+      if (!seen.has(id)) resident.delete(id);
     });
     return records;
   }
@@ -536,5 +622,5 @@
     return out;
   }
 
-  globalThis.__kkp.gw.kkpv = { decodeBundle, decodePublicBundle };
+  globalThis.__kkp.gw.kkpv = { decodeBundle, decodeBundleResident, decodePublicBundle };
 })();

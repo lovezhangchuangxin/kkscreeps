@@ -15,6 +15,9 @@
   const __objectEntries = Object.entries;
 
   // refreshGame 由装配入口一次性传入；玩家执行时不回查已解绑的 __kkp。
+  // KKPV 记录常驻表：沙箱生命周期内跨 tick 复用记录对象（就地更新），
+  // 削每拍数千对象分配与 GC 压力；见 kkpv.js decodeBundleResident。
+  const residentRecords = new __Map();
   function createWorldTick(refreshGame) {
     return {
       /** 设置闭包 rawMemoryData，供下一次 beginTick 创建 RawMemory 时使用。
@@ -68,7 +71,7 @@
       let terrainViews = null;
       if (hasPrivate) {
         // 块头 tick 与信封 time 在解码器内交叉校验（同一投影的同界快照）。
-        gw.world.objects = gw.kkpv.decodeBundle(bundle, gw.world.time);
+        gw.world.objects = gw.kkpv.decodeBundleResident(bundle, gw.world.time, residentRecords);
         terrainViews = gw.kkpv.decodePublicBundle(publicBundle, gw.world.time);
       }
       // Game.cpu 真值合并（宿主 begin_tick 第二参数——官方 make.js 先算窗口
