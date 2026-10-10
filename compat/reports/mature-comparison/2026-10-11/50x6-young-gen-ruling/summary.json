@@ -1,0 +1,80 @@
+{
+  "date": "2026-10-11",
+  "profile": "mature-rcl8-v1",
+  "players": 50,
+  "warmup": 5,
+  "ticks": 100,
+  "concurrency": 4,
+  "thermal_protocol": "2 个丢弃窗预热后采集（冷首窗伪影可达 30%）",
+  "round1": {
+    "form": "同二进制 env 旗标 on/off O,N,N,O",
+    "rows": [
+      {
+        "tag": "o1",
+        "flag": false,
+        "wall_p50": 709.23,
+        "run_p50": 325.29,
+        "cpu": 2338.48,
+        "rss_gb": 2.729
+      },
+      {
+        "tag": "n1",
+        "flag": true,
+        "wall_p50": 689.62,
+        "run_p50": 307.12,
+        "cpu": 2184.78,
+        "rss_gb": 3.581
+      },
+      {
+        "tag": "n2",
+        "flag": true,
+        "wall_p50": 692.79,
+        "run_p50": 318.7,
+        "cpu": 2195.64,
+        "rss_gb": 3.555
+      },
+      {
+        "tag": "o2",
+        "flag": false,
+        "wall_p50": 706.89,
+        "run_p50": 326.87,
+        "cpu": 2348.3,
+        "rss_gb": 2.753
+      }
+    ]
+  },
+  "round2": {
+    "form": "冻结二进制 old=e450851a/new=931bbb93 O,N,N,O",
+    "rows": [
+      {
+        "tag": "old1",
+        "wall_p50": 732.12,
+        "run_p50": 345.4,
+        "cpu": 2403.89,
+        "rss_gb": 2.726
+      },
+      {
+        "tag": "new2",
+        "wall_p50": 695.91,
+        "run_p50": 313.59,
+        "cpu": 2232.38,
+        "rss_gb": 3.615
+      },
+      {
+        "tag": "new3",
+        "wall_p50": 693.11,
+        "run_p50": 301.13,
+        "cpu": 2185.62,
+        "rss_gb": 3.61
+      },
+      {
+        "tag": "old4",
+        "wall_p50": 690.0,
+        "run_p50": 316.77,
+        "cpu": 2277.27,
+        "rss_gb": 2.751
+      }
+    ]
+  },
+  "conclusion": "两轮方向一致：wall −2.3~2.4%、CPU −5.6~6.5%、run −7.2%、RSS 峰值 +0.9GB（+30%）。裁定不设默认：进程级半空间使 48MB 小堆（2GB 部署形态）近堆恢复不变量两例顶穿，近堆双闸门是部署保护面。KK_V8_FLAGS 逃生口保留，待 L4b 分配削减后复评。"
+}

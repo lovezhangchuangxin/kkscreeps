@@ -207,6 +207,9 @@ impl EmbedEngine {
         spec: &Value,
         mod_install: Option<(&BTreeMap<String, ModPackage>, &RegisterOptions)>,
     ) -> anyhow::Result<()> {
+        // V8 年轻代旗标须先于本函数将创建的一切 isolate（含下方 mod realm）；
+        // 非 CLI 宿主不经 main() 时由此兜底（幂等 Once，见 kk-runner 文档）。
+        kk_runner::sandbox::apply_v8_young_gen_default();
         // 输入校验先于回收旧沙箱，失败时保留现有分片；其后的 mod 注册、
         // 玩家面导出与 canary 安装失败发生在回收之后——旧分片已销毁、
         // 引擎已重置为空（零房间零玩家），宿主须重新调用创建接口。

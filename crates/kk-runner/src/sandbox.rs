@@ -157,8 +157,36 @@ pub struct Sandbox {
     _isolate_order: kk_vm::isolate_order::IsolateOrder,
 }
 
+/// 进程级 V8 旗标透传（KK_V8_FLAGS 环境变量，研究逃生口：--trace-gc、
+/// --max-semi-space-size 等）。**必须在首个 isolate 创建前调用**——V8 初始化
+/// 后旗标冻结，迟到调用直接 `Check failed: !IsFrozen()` 崩溃（mod realm 先建
+/// 运行时的 sim 流程曾踩中）；入口（kk-cli main、embed setup）最早调用，
+/// Sandbox::new 作直连库用户的兜底。
+///
+/// 【不设默认值的裁定 2026-10-11】--max-semi-space-size=8（默认堆 64MiB 的
+/// 1/8）在 50×6 成熟房两轮独立对照 wall −2.3~2.4%/CPU −5.6~6.5%，但代价
+/// RSS 峰值 +30%，且进程级半空间对小堆沙箱失衡（48MB 堆的年轻代占比
+/// 33%，近堆双闸门恢复不变量两例顶穿）——近堆机制是 2GB 部署的保护面，
+/// 不为个位数百分比墙钟冒险。数据登记在研究补记，待 L4b 分配削减降低
+/// 清道夫压力后复评（届时收益与代价都可能变化）。
+pub fn apply_v8_young_gen_default() {
+    static V8_YOUNG_GEN_ONCE: std::sync::Once = std::sync::Once::new();
+    V8_YOUNG_GEN_ONCE.call_once(|| {
+        let Ok(extra) = std::env::var("KK_V8_FLAGS") else {
+            return;
+        };
+        if extra.is_empty() {
+            return;
+        }
+        let mut args = vec!["kkscreeps".to_string()];
+        args.extend(extra.split_whitespace().map(String::from));
+        let _ = v8::V8::set_flags_from_command_line(args);
+    });
+}
+
 impl Sandbox {
     pub fn new(config: SandboxConfig) -> anyhow::Result<Self> {
+        apply_v8_young_gen_default();
         crate::cpu_clock::thread_cpu_time()?;
         let tokio = tokio::runtime::Builder::new_current_thread()
             .enable_all()

@@ -12,6 +12,9 @@ mod sim;
 mod support;
 
 fn main() {
+    // V8 旗标须在首个 isolate 创建前设置（初始化后冻结、迟到即崩溃）；
+    // CLI 是本进程一切 V8 运行时（玩家沙箱/Mod realm/诊断探针）的最早入口。
+    kk_runner::sandbox::apply_v8_young_gen_default();
     let cli = Cli::parse();
     match cli.command {
         Command::Mod { command } => std::process::exit(command.run()),
