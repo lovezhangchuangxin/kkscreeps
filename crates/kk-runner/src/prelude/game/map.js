@@ -25,6 +25,12 @@
     // getRoomStatus 与 launchNuke 等消费门；getWorldSize 按官方
     // calcWorldSize 从当前房集活算（含跨度包含式、E/S 半轴锚 0）。
     const worldRooms = gw.world.rooms || {};
+    const wallNow = Date.now();
+    function activeStatus(roomName) {
+      const room = worldRooms[roomName];
+      return room && room.statusTimestamp > wallNow ? room.status : 'normal';
+    }
+    gw.activeRoomStatus = activeStatus;
     const ROOM_NAME_RE = /^(W|E)\d+(N|S)\d+$/;
     const ROUTE_RE = /(W|E)\d+(N|S)\d+$/;
     // 官方 map.js:9 kRouteGrid=30：A* 搜索网格半径（originX=fromX+30，
@@ -293,13 +299,13 @@
       },
       // 官方 map.js:209-233：closed>novice>respawn 优先（种子域两两
       // 互斥，此处单键直读）、在场 normal、合法名 off-world closed
-      //（timestamp null）、非法名 undefined（正则对非字符串的 .test
+      //（timestamp null）、过期种子在场 normal、非法名 undefined（正则对非字符串的 .test
       // 强转语义官方同形）；novice/respawn/closed 的 timestamp 为种子
       // 墙钟毫秒（vanilla 适配同款未来 1 小时）。
       getRoomStatus(roomName) {
         if (!ROOM_NAME_RE.test(roomName)) return undefined;
         if (Object.prototype.hasOwnProperty.call(worldRooms, roomName)) {
-          const status = worldRooms[roomName].status;
+          const status = activeStatus(roomName);
           if (status && status !== 'normal') {
             return { status, timestamp: worldRooms[roomName].statusTimestamp ?? null };
           }
@@ -316,13 +322,16 @@
         return route[0].exit;
       },
       // 官方 map.js:199-207：弃用告警先于房名校验（非法名也告警），
-      // 在场房 true（accessibleRooms=世界全房表）。
+      // 在场且非有效 closed 房 true（accessibleRooms 口径）。
       isRoomAvailable(roomName) {
         deprecated(
           'Method `Game.map.isRoomAvailable` is deprecated and will be removed. Please use `Game.map.getRoomStatus` instead.',
         );
         if (!ROOM_NAME_RE.test(roomName)) return false;
-        return Object.prototype.hasOwnProperty.call(worldRooms, roomName);
+        return (
+          Object.prototype.hasOwnProperty.call(worldRooms, roomName) &&
+          activeStatus(roomName) !== 'closed'
+        );
       },
       // 官方 map.js:262-264：getRoomTerrain 返回 Room.Terrain 实例
       getRoomTerrain: (roomName) => new gw.Terrain(roomName),

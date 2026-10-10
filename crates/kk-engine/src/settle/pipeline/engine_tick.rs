@@ -33,7 +33,7 @@ impl Engine {
         {
             // 核弹发射在全部房间结算后跨房落位（terminal send 同款标记模式）；
             // 先于市场阶段，nuker 的库与冷却在提交前一并定型。
-            nukes::settle_launches(&mut txn.rooms, &txn.state, txn.time)?;
+            nukes::settle_launches(&mut txn.rooms, &txn.state, txn.time, txn.input.now_ms)?;
             let mut state = txn.state.inner.borrow_mut();
             market::settle_market(
                 &mut txn.rooms,
@@ -181,14 +181,15 @@ impl Engine {
         // 的 portal 标记覆盖 edge 标记——既在边缘格又在 portal 格的对象只
         // 走传送；目的房未注册或 closed 时对象保持原位逐拍重试）。fresh_age
         // 是本拍刚初始化寿命的 creep，官方门在其补设前求值故当拍豁免。
-        let portal_moves = portals::collect_portal_transports(&txn.rooms, &fresh_age);
+        let portal_moves =
+            portals::collect_portal_transports(&txn.rooms, &fresh_age, txn.input.now_ms);
         let portal_ids: std::collections::BTreeSet<_> =
             portal_moves.iter().map(|mv| mv.id).collect();
         inter_room_moves.retain(|mv| !portal_ids.contains(&mv.id));
-        inter_room::apply_inter_room_moves(&mut txn.rooms, &portal_moves);
+        inter_room::apply_inter_room_moves(&mut txn.rooms, &portal_moves, txn.input.now_ms);
         // 跨房过渡随后应用到候选：到达对象不参与目的房本 tick 的结算
         //（其对象 tick 已在来源房执行），发布后对下一轮可见。
-        inter_room::apply_inter_room_moves(&mut txn.rooms, &inter_room_moves);
+        inter_room::apply_inter_room_moves(&mut txn.rooms, &inter_room_moves, txn.input.now_ms);
         Ok(())
     }
 

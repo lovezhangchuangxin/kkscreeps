@@ -330,6 +330,10 @@ fn embed_engine_suite() -> anyhow::Result<()> {
         three_sources_replay_matches_live_impl,
     )?;
     scenarios.run(
+        "injected_random_replay_matches_live_impl",
+        injected_random_replay_matches_live_impl,
+    )?;
+    scenarios.run(
         "dice_replay_matches_live_impl",
         dice_replay_matches_live_impl,
     )?;
@@ -349,7 +353,7 @@ fn embed_engine_suite() -> anyhow::Result<()> {
         cursor_and_header_pairing_impl,
     )?;
     scenarios.run("resume_and_lifecycle_impl", resume_and_lifecycle_impl)?;
-    scenarios.finish(96)?;
+    scenarios.finish(97)?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
     Ok(())
 }

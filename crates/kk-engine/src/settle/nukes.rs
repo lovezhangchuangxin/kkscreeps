@@ -88,7 +88,7 @@ pub fn launch_nuke(w: &mut Working, id: ObjId, d: &IntentData) {
     // 官方 launch-nuke.js:22-24：源房 novice/respawn 到期前服务端静默丢弃
     //（目标房门只在玩家面 roomStatusData 检查；飞行核弹落入保护区由
     // nuke_tick 的移除分支兜底）。
-    if source_room_protected(&w.room) {
+    if source_room_protected(&w.room, w.now_ms) {
         return;
     }
     let Some(target) = d.target_room_name.as_deref() else {
@@ -122,12 +122,14 @@ fn truthy(v: &Value) -> bool {
 
 /// 源房是否处于 novice/respawn 保护（官方 `room.novice/respawnArea >
 /// Date.now()` 的种子域等价判定；closed 不拦发射）。
-fn source_room_protected(room: &RoomState) -> bool {
+fn source_room_protected(room: &RoomState, now_ms: u64) -> bool {
     room.room_status.as_ref().is_some_and(|status| {
         matches!(
-            status.status,
-            kk_world::domain::room_status::RoomStatusKind::Novice
-                | kk_world::domain::room_status::RoomStatusKind::Respawn
+            status.active_kind(now_ms),
+            Some(
+                kk_world::domain::room_status::RoomStatusKind::Novice
+                    | kk_world::domain::room_status::RoomStatusKind::Respawn
+            )
         )
     })
 }
@@ -139,6 +141,7 @@ pub fn settle_launches(
     rooms: &mut [(String, RoomState)],
     state: &TickState,
     time: u64,
+    now_ms: u64,
 ) -> Result<(), SettleError> {
     struct Pending {
         launch_room: String,
@@ -148,7 +151,7 @@ pub fn settle_launches(
     }
     let mut launches: Vec<Pending> = Vec::new();
     for (name, room) in rooms.iter_mut() {
-        let source_protected = source_room_protected(room);
+        let source_protected = source_room_protected(room, now_ms);
         for obj in room.objects.values_mut() {
             let RoomObject::Generic(g) = obj else {
                 continue;
@@ -245,13 +248,7 @@ pub fn nuke_tick(w: &mut Working, id: ObjId) {
     let Some(land_time) = data.get("landTime").and_then(Value::as_u64) else {
         return;
     };
-    if let Some(status) = &w.room.room_status
-        && matches!(
-            status.status,
-            kk_world::domain::room_status::RoomStatusKind::Novice
-                | kk_world::domain::room_status::RoomStatusKind::Respawn
-        )
-    {
+    if source_room_protected(&w.room, w.now_ms) {
         w.remove_obj(id);
         return;
     }

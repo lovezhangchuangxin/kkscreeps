@@ -5,8 +5,8 @@
 //! `updateRoomStatusData` 折叠成玩家面 `roomStatusData` 三张表。kk 把
 //! 种子态聚合为本域（`RoomState.room_status`，normal 为 None 随完整
 //! 检查点保存），投影层还原官方玩家面形态；时间戳语义与官方一致为
-//! Unix 毫秒墙钟（官方到期判定 `> Date.now()`，本域不做到期自动迁移
-//! ——夹具种子未来 1 小时，cron 级状态轮转不在本域）。
+//! Unix 毫秒墙钟（官方到期判定 `> Date.now()`）。保存原始种子；消费者
+//! 按输入墙钟求有效状态，过期即 normal，避免恢复后重新激活旧保护。
 
 /// 非 normal 的房间公共状态种类。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -45,6 +45,20 @@ pub struct RoomStatus {
     pub timestamp: u64,
 }
 
+impl RoomStatus {
+    pub fn active_kind(&self, now_ms: u64) -> Option<RoomStatusKind> {
+        (self.timestamp > now_ms).then_some(self.status)
+    }
+}
+
+/// 管理命令的墙钟输入；结算和回放使用各自已记录的 TickInput.now_ms。
+pub fn wall_now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 /// 值域校验：时间戳须为正安全整数（玩家面 `getRoomStatus` 断言
 /// `timestamp > 0`；检查点恢复与 createShard 种子共用）。
 pub fn validate(status: &RoomStatus) -> Result<(), String> {
@@ -76,6 +90,17 @@ mod tests {
         }
         assert!(RoomStatusKind::parse("normal").is_err());
         assert!(RoomStatusKind::parse("").is_err());
+    }
+
+    #[test]
+    fn expiry_is_strict_at_wall_clock_boundary() {
+        let status = RoomStatus {
+            status: RoomStatusKind::Closed,
+            timestamp: 100,
+        };
+        assert_eq!(status.active_kind(99), Some(RoomStatusKind::Closed));
+        assert_eq!(status.active_kind(100), None);
+        assert_eq!(status.active_kind(101), None);
     }
 
     #[test]

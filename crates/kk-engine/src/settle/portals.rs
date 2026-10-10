@@ -74,6 +74,7 @@ fn portal_destination(data: &serde_json::Value) -> Option<serde_json::Value> {
 pub fn collect_portal_transports(
     rooms: &[(String, RoomState)],
     fresh_age: &std::collections::BTreeSet<ObjId>,
+    now_ms: u64,
 ) -> Vec<InterRoomMove> {
     let mut moves = Vec::new();
     // 官方 `_.find` 对同格多 portal 只取对象表序（_id 升序）首个——每对象
@@ -115,7 +116,7 @@ pub fn collect_portal_transports(
                     && room
                         .room_status
                         .as_ref()
-                        .is_some_and(|s| s.status == RoomStatusKind::Closed)
+                        .is_some_and(|s| s.active_kind(now_ms) == Some(RoomStatusKind::Closed))
             });
             if dest_closed {
                 continue;
@@ -210,7 +211,7 @@ mod tests {
         });
         room.insert_with_id(4, pc).unwrap();
         let rooms = vec![(name, room)];
-        let moves = collect_portal_transports(&rooms, &Default::default());
+        let moves = collect_portal_transports(&rooms, &Default::default(), 0);
         assert_eq!(moves.len(), 3, "两只活 creep 与 powerCreep 各一条");
         assert!(moves.contains(&InterRoomMove {
             id: ObjId(2),
@@ -245,7 +246,7 @@ mod tests {
         .unwrap();
         room.insert_with_id(2, creep(2, 25, 25, 100)).unwrap();
         let rooms = vec![("W1N1".into(), room)];
-        let moves = collect_portal_transports(&rooms, &Default::default());
+        let moves = collect_portal_transports(&rooms, &Default::default(), 0);
         assert_eq!(moves.len(), 1);
         assert_eq!(moves[0].to_room, "W3N1", "ID 序首个 portal（1 < 9）生效");
     }
@@ -260,7 +261,7 @@ mod tests {
         room.insert_with_id(2, creep(2, 25, 25, 100)).unwrap();
         room.insert_with_id(3, creep(3, 10, 10, 100)).unwrap();
         let rooms = vec![(name, room)];
-        assert!(collect_portal_transports(&rooms, &Default::default()).is_empty());
+        assert!(collect_portal_transports(&rooms, &Default::default(), 0).is_empty());
     }
 
     #[test]
@@ -274,7 +275,7 @@ mod tests {
         room.insert_with_id(3, creep(3, 25, 25, 1100)).unwrap();
         let rooms = vec![(name, room)];
         let fresh = std::collections::BTreeSet::from_iter([ObjId(3)]);
-        let moves = collect_portal_transports(&rooms, &fresh);
+        let moves = collect_portal_transports(&rooms, &fresh, 0);
         assert_eq!(moves.len(), 1);
         assert_eq!(moves[0].id, ObjId(2), "fresh creep 当拍不传送");
     }
@@ -282,17 +283,22 @@ mod tests {
     #[test]
     fn collect_skips_closed_destination_room() {
         // 目的房 status=closed 不传送（novice/respawn 保持可达）。
-        let (name, room) = portal_room(serde_json::json!({
+        let (name, mut room) = portal_room(serde_json::json!({
             "type": "structure", "structureType": "portal",
             "destination": { "room": "W2N1", "x": 10, "y": 10 }
         }));
+        room.insert_with_id(2, creep(2, 25, 25, 100)).unwrap();
         let mut closed_room = RoomState::new("W2N1", kk_core::Terrain::plains());
         closed_room.room_status = Some(kk_world::domain::room_status::RoomStatus {
             status: kk_world::domain::room_status::RoomStatusKind::Closed,
-            timestamp: 1,
+            timestamp: 100,
         });
         let rooms = vec![(name, room), ("W2N1".into(), closed_room)];
-        assert!(collect_portal_transports(&rooms, &Default::default()).is_empty());
+        assert!(collect_portal_transports(&rooms, &Default::default(), 99).is_empty());
+        assert_eq!(
+            collect_portal_transports(&rooms, &Default::default(), 100).len(),
+            1
+        );
     }
 
     #[test]

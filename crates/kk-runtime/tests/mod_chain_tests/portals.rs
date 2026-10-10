@@ -364,7 +364,7 @@ fn launch_nuke_room_status_gates_reject_without_consuming() -> anyhow::Result<()
         assert_eq!(snapshot["cooldown"], json!(0));
     }
     // 反向：closed 源房不拦发射（官方门只含 novice/respawnArea——
-    /// closed 经 openTime 不参与 launchNuke 门序）。
+    // closed 经 openTime 不参与 launchNuke 门序）。
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({ "players": ["p1"], "rooms": [
         { "name": ROOM, "rcl": 8, "owner": "p1", "status": "closed" },
@@ -503,6 +503,7 @@ fn room_status_surface_impl(binary: bool) -> anyhow::Result<()> {
         "({ \
             normal: Game.map.getRoomStatus('W1N1'), \
             closedSeed: Game.map.getRoomStatus('W2N1'), \
+            closedAvailable: Game.map.isRoomAvailable('W2N1'), \
             offWorld: Game.map.getRoomStatus('W99N99'), \
             invalid: Game.map.getRoomStatus('junk'), \
             unseen: Game.map.getRoomStatus('E1S1').status, \
@@ -514,6 +515,7 @@ fn room_status_surface_impl(binary: bool) -> anyhow::Result<()> {
     let v = &run.expr["value"];
     assert_eq!(v["normal"], json!({"status": "normal", "timestamp": null}));
     assert_eq!(v["closedSeed"]["status"], json!("closed"));
+    assert_eq!(v["closedAvailable"], json!(false));
     assert!(v["closedSeed"]["timestamp"].as_u64().is_some_and(|t| t > 0));
     assert_eq!(
         v["offWorld"],
@@ -528,6 +530,20 @@ fn room_status_surface_impl(binary: bool) -> anyhow::Result<()> {
     assert_eq!(v["worldSize"], json!(5));
     assert_eq!(v["across"], json!([3, 2]));
     assert_eq!(v["within"], json!(1));
+    let mut expired = e.checkpoint(Value::Null)?;
+    expired["engine"]["world"]["rooms"]["W2N1"]["room_status"]["timestamp"] = json!(1);
+    drop(e);
+    let mut resumed = engine_on(binary);
+    resumed.restore_checkpoint(expired, None)?;
+    let after = resumed.run_player(
+        "p1",
+        "({status: Game.map.getRoomStatus('W2N1'), available: Game.map.isRoomAvailable('W2N1')})",
+    )?;
+    assert_eq!(
+        after.expr["value"]["status"],
+        json!({"status":"normal","timestamp":null})
+    );
+    assert_eq!(after.expr["value"]["available"], json!(true));
     Ok(())
 }
 

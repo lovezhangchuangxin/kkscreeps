@@ -125,6 +125,7 @@ impl EmbedEngine {
                         now_ms,
                         intents,
                         players,
+                        None,
                     )
                 {
                     return Err(self.drop_log_for_io_failure(e));
@@ -539,6 +540,7 @@ impl EmbedEngine {
 
     /// 结算成功后向输入日志追加一段（未启用时无操作）。调用点必须在引擎
     /// 提交之后；失败轮/被丢弃轮不得调用。返回 Err 表示日志 I/O 故障。
+    #[allow(clippy::too_many_arguments)]
     fn log_round(
         &mut self,
         tick: u64,
@@ -547,6 +549,7 @@ impl EmbedEngine {
         now_ms: u64,
         intents: Value,
         players: Value,
+        processor_random: Option<&[f64]>,
     ) -> Result<(), String> {
         if self.input_log.is_none() {
             return Ok(());
@@ -565,6 +568,7 @@ impl EmbedEngine {
             now_ms,
             intents,
             players,
+            processor_random,
             &plan_hash,
             strategy.as_deref(),
             &disabled,
@@ -640,6 +644,7 @@ impl EmbedEngine {
                 input.now_ms,
                 intents,
                 json!({}),
+                None,
             )
         {
             return Err(self.drop_log_for_io_failure(e));
@@ -731,11 +736,8 @@ impl EmbedEngine {
             }
         }
         let injected = random.map(|values| {
-            let total = values.len();
-            (
-                total,
-                std::rc::Rc::new(std::cell::RefCell::new(values.into_iter().collect())),
-            )
+            let queue = std::rc::Rc::new(std::cell::RefCell::new(values.iter().copied().collect()));
+            (values, queue)
         });
         if let Some((_, rc)) = &injected {
             self.engine
@@ -746,7 +748,14 @@ impl EmbedEngine {
                 let (tick, generation) =
                     (self.engine.world().time(), self.engine.world().generation());
                 let input = TickInput::now();
+                let random_start = injected
+                    .as_ref()
+                    .map(|(values, rc)| values.len() - rc.borrow().len());
                 self.settle_world(IntentBatch::default(), input)?;
+                let consumed_random = injected.as_ref().map(|(values, rc)| {
+                    &values[random_start.expect("注入源必有起始游标")
+                        ..values.len() - rc.borrow().len()]
+                });
                 if self.input_log.is_some()
                     && let Err(e) = self.log_round(
                         tick,
@@ -755,6 +764,7 @@ impl EmbedEngine {
                         input.now_ms,
                         json!({}),
                         json!({}),
+                        consumed_random,
                     )
                 {
                     return Err(self.drop_log_for_io_failure(e));
@@ -763,9 +773,9 @@ impl EmbedEngine {
             Ok(())
         })();
         let consumed = match &injected {
-            Some((total, rc)) => {
+            Some((values, rc)) => {
                 let left = rc.borrow().len();
-                u64::try_from(total - left).unwrap_or(0)
+                u64::try_from(values.len() - left).unwrap_or(0)
             }
             None => 0,
         };
@@ -833,10 +843,30 @@ impl EmbedEngine {
                 self.engine.world().generation()
             );
             let round = replay::rebuild_round(segment).with_context(at)?;
-            self.settle_replayed_round(round.batch, round.input, round.writebacks)
-                .with_context(|| {
-                    format!("{}回放结算失败（原轮必然成功——实现缺陷或载荷损坏）", at())
-                })?;
+            let replay_random = round.processor_random.as_ref().map(|values| {
+                std::rc::Rc::new(std::cell::RefCell::new(values.iter().copied().collect()))
+            });
+            if let Some(queue) = &replay_random {
+                self.engine
+                    .set_processor_random(kk_engine::settle::ProcessorRandom::Injected(
+                        queue.clone(),
+                    ));
+            }
+            let replay_result =
+                self.settle_replayed_round(round.batch, round.input, round.writebacks);
+            self.engine
+                .set_processor_random(kk_engine::settle::ProcessorRandom::default());
+            replay_result.with_context(|| {
+                format!("{}回放结算失败（原轮必然成功——实现缺陷或载荷损坏）", at())
+            })?;
+            if let Some(queue) = replay_random {
+                anyhow::ensure!(
+                    queue.borrow().is_empty(),
+                    "{}处理器随机消费数与日志不符（剩余 {} 个值）",
+                    at(),
+                    queue.borrow().len()
+                );
+            }
         }
         Ok(())
     }

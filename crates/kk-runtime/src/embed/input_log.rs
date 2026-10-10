@@ -267,6 +267,7 @@ impl InputLog {
         now_ms: u64,
         intents: Value,
         players: Value,
+        processor_random: Option<&[f64]>,
         plan_hash: &str,
         strategy: Option<&str>,
         disabled: &BTreeMap<String, Value>,
@@ -282,6 +283,9 @@ impl InputLog {
         record.insert("now_ms".into(), json!(now_ms));
         record.insert("intents".into(), intents);
         record.insert("players".into(), players);
+        if let Some(values) = processor_random {
+            record.insert("processor_random".into(), json!(values));
+        }
         record.insert(
             "identity".into(),
             identity_map(plan_hash, strategy, disabled),

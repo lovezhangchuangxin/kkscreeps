@@ -262,6 +262,33 @@ fn spawner_skips_non_highway_without_consuming_random() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[test]
+fn spawner_skips_only_closed_highway_and_restores_it_after_expiry() -> anyhow::Result<()> {
+    let mut e = EmbedEngine::new();
+    e.create_shard(&plain_rooms(vec![
+        json!({"name": "E0N1", "status": "novice"}),
+        json!({"name": "E0N2", "status": "respawn"}),
+        json!({"name": "E0N3", "status": "closed"}),
+    ]))?;
+    e.run_power_bank_spawner(Some(vec![0.5, 0.5]))?;
+    let mut saved = e.checkpoint(Value::Null)?;
+    for name in ["E0N1", "E0N2"] {
+        assert!(saved["engine"]["world"]["rooms"][name]["power_bank_time"].is_u64());
+    }
+    assert_eq!(
+        saved["engine"]["world"]["rooms"]["E0N3"]["power_bank_time"],
+        Value::Null
+    );
+    saved["engine"]["world"]["rooms"]["E0N3"]["room_status"]["timestamp"] = json!(1);
+    drop(e);
+    let mut resumed = EmbedEngine::new();
+    resumed.restore_checkpoint(saved, None)?;
+    resumed.run_power_bank_spawner(Some(vec![0.5, 0.5, 0.5]))?;
+    let after = resumed.checkpoint(Value::Null)?;
+    assert!(after["engine"]["world"]["rooms"]["E0N3"]["power_bank_time"].is_u64());
+    Ok(())
+}
+
 /// 到期生成：位置 do/while 落在墙体格（3×3 有出口邻格）、容量掷骰与
 /// 暴击、对象形态（store.power/hits=hitsMax=2M/decayTime=+5000）、
 /// 到期时间重置为本次滚轮值。

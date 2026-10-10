@@ -4,6 +4,10 @@
 
 ## 当前接手位置
 
+- 2026-10-10 review 修复（待提交）：房间状态种子保留原值，玩家面与结算消费者按墙钟严格到期求有效状态；普通边缘跨房和 `isRoomAvailable` 拒绝有效 closed 房；powerBank 生成器补有效 closed 过滤（novice/respawn 的官方 db status 仍为 normal，继续参与扫描）。已补状态边界、portal、跨房、核弹、生成器和检查点恢复回归；无参数 `pnpm run check`、release CLI 构建、兼容适配器构建与 release ratchet 均通过，ratchet 为 2905 passed / 9 failed / 0 skipped、无新增转红（既有未命中豁免警告）。本轮继续深度复审差异，后续消费者依执行队列推进。
+
+- 2026-10-10 `e5249ff2^..HEAD` 代码复审（待提交）：修复 `tick({random})` 成功拍的输入日志缺失随机值问题，`advance` 段逐拍保存实际消费值、回放注入并校验消费完毕；新增矿物再生的日志回放等值用例。定向 `pnpm run check -- kk-runtime --test embed_tests` 与无参数 `pnpm run check` 已通过（不含 doctest；本次未改 doctest）。复审发现的房间状态三处消费者问题已按上条修复；其中 powerBank 只排除有效 closed，原“非 normal 全部排除”的判断已依据官方 db status 更正。不将本轮标作全领域完成。
+
 - 2026-10-09 review 修复（已提交 `2b68002`）：invaderCore 放置的孵化守军初始 `ageTime=0`，出生后再起算普通寿命；stronghold 部署绑定 `decayTime` 的路径保持原值。新增超过 1500 tick 孵化回归；定向 `pnpm run check -- kk-runtime --test mod_chain_tests --filter invader_core_long_incubation` 与无参数 `pnpm run check` 均通过（不含 doctest；本次未改 doctest）。其余 G02/G03 与 NPC 后续消费者不受此修复影响，下一步按当前执行队列继续。
 
 - 更新日期：2026-10-10；控制器 INVULNERABILITY 消费者已提交 `d48d6ea`；Invader core 生命周期首片已提交 `2b68002`；Stronghold 布防首片已提交 `4f7dd2bd`；raid 调度首片已提交 `e316a07`；powerBank 生成与消费者首片已提交 `e5249ff2`；边缘环绕+核弹簇已提交 `9ff9d2e`；弃用告警已提交 `c39777a`；tick({random}) 注入已提交 `038c1aa`；InterShardMemory 本地段与 CPU shardLimits 已提交 `5daaa88`；动作记录导出与 captureActionLog 已提交 `4cef2ba`（套件最后 21 个跳过例全簇转绿、跳过清零）；TooAngel 防御战斗与冷恢复（敌方脚本坦克 + 真实防御链，520 tick 六阶段）已提交 `c3c2d68`；TooAngel 多房进攻与冷恢复（敌方预留 + attackunreserve 跨房出击，2900 tick 六阶段）随本提交交付。最近完整门禁 Rust 全绿；最近 release 棘轮 2905 passed / 9 failed / 0 skipped（**99% 检查点达成并超出 20 例**）。TooAngel/Overmind 经济六阶段与防御战斗为既有入库证据；本批未重跑经济长测。

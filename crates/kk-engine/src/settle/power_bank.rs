@@ -9,6 +9,7 @@ use kk_core::constants as c;
 use kk_schema::room::{GenericObj, RoomObject};
 use kk_world::World;
 use kk_world::domain::power_bank;
+use kk_world::domain::room_status::{self, RoomStatusKind};
 
 use super::invader_raid::RaidRandom;
 
@@ -28,13 +29,21 @@ fn respawn_ticks(unit: f64) -> u64 {
 /// 单候选房等价，与 raid 生成器同款口径）。
 pub fn run_spawner(world: &mut World, random: &mut RaidRandom) -> Result<(), String> {
     let time = world.time();
+    let now_ms = room_status::wall_now_ms();
     let names: Vec<String> = world.rooms().keys().cloned().collect();
     for name in names {
         // 官方查询 {bus: true, status: 'normal'}：bus 是 world-gen 写入的
         // 高速路标志，kk 无该标志域，按房名编号推导（编号任一轴 ≡0
-        // (mod 10)）；房间状态域（novice/respawn/closed）尚未存在，全部
-        // 既有房间视同 normal——随 roomStatus 能力簇落地后补此门。
+        // (mod 10)）；novice/respawn 的 db status 仍是 normal，只有
+        // 有效 closed 房被查询排除。到期 closed 恢复 normal。
         if !power_bank::is_highway_room(&name) {
+            continue;
+        }
+        if world
+            .room(&name)
+            .and_then(|room| room.room_status.as_ref())
+            .is_some_and(|status| status.active_kind(now_ms) == Some(RoomStatusKind::Closed))
+        {
             continue;
         }
         // 官方 L199 对每个合格房都先掷 respawnTime（不进任何分支的

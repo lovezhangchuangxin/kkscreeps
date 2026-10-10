@@ -694,7 +694,7 @@ fn range_boundary_launches_and_power_creep_zeroed() {
 fn launch_from_protected_source_room_settle_side_silent_reject() {
     let seed = |kind| kk_world::domain::room_status::RoomStatus {
         status: kind,
-        timestamp: 1,
+        timestamp: 9_000_000_000_000_000,
     };
     use kk_world::domain::room_status::RoomStatusKind;
 
@@ -746,6 +746,25 @@ fn launch_from_protected_source_room_settle_side_silent_reject() {
     f3.launch(nuker3, "W2N1", 25, 25);
     assert_eq!(f3.nukes_in("W2N1").len(), 1, "closed 源房照常发射");
     assert_eq!(f3.data_of(nuker3).pointer("/store/energy"), Some(&json!(0)));
+
+    // 到期的 novice 种子按 normal 处理，不能永久挡住发射。
+    let mut expired = NukeFixture::new();
+    expired.controller(8);
+    let expired_nuker = expired.nuker(json!({"energy": 300000, "G": 5000}), None);
+    expired
+        .engine
+        .edit_world(|world| {
+            world.set_room_status(
+                "W1N1",
+                Some(kk_world::domain::room_status::RoomStatus {
+                    status: RoomStatusKind::Novice,
+                    timestamp: 1,
+                }),
+            )
+        })
+        .unwrap();
+    expired.launch(expired_nuker, "W2N1", 25, 25);
+    assert_eq!(expired.nukes_in("W2N1").len(), 1);
 
     // 飞行核弹落入 novice 房：tick 移除不爆（官方 nukes/tick.js:10-14）。
     let mut f4 = NukeFixture::new();

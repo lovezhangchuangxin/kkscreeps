@@ -153,6 +153,47 @@ pub(super) fn three_sources_replay_matches_live_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// 注入的处理器随机值须进入 advance 段；回放不能退回种子派生流。
+pub(super) fn injected_random_replay_matches_live_impl() -> anyhow::Result<()> {
+    let case = Case::new("injected-random");
+    let mut live = EmbedEngine::new();
+    live.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [{"name": "W1N1", "owner": "p1", "rcl": 1}]
+    }))?;
+    live.place_object(
+        "W1N1",
+        "structure",
+        &json!({"structureType": "mineral", "pos": [25, 25],
+            "mineralType": "H", "mineralAmount": 0, "density": 2,
+            "ticksToRegeneration": 3}),
+    )?;
+    let log = case.path("input.jsonl");
+    live.enable_input_log(&log, json!({}))?;
+    let start = live.checkpoint(Value::Null)?;
+    live.tick_with_random(5, Some(vec![0.04, 0.05]))?;
+    let final_live = live.checkpoint(Value::Null)?;
+    let data = read_input_log(&log)?;
+    assert!(
+        data.segments
+            .iter()
+            .any(|s| s["processor_random"] == json!([0.04, 0.05]))
+    );
+    let segments = segments_from_checkpoint(
+        start["engine"]["world"]["time"].as_u64().unwrap(),
+        &data.segments,
+    )?;
+    drop(live);
+    let mut replay = EmbedEngine::new();
+    replay.restore_checkpoint(start, None)?;
+    replay.replay_input_rounds(&data.header, segments)?;
+    assert_eq!(
+        strip_volatile(replay.checkpoint(Value::Null)?),
+        strip_volatile(final_live)
+    );
+    Ok(())
+}
+
 /// rebuild_round 的写回复建直测：raw_memory/segments 的 null 与 Some
 /// 两态都从真实段直接钉死。正常记段轮 raw_memory 恒为字符串，null 分支
 /// 服务未来/异构载荷（None=结算端保留旧值），故以字段改写直测而非

@@ -730,11 +730,13 @@
     if (!(pos instanceof gw.RoomPosition)) {
       return C.ERR_INVALID_ARGS; // :1360-1362
     }
-    const srcStatus = (gw.world.rooms || {})[this.room.name];
-    const dstStatus = (gw.world.rooms || {})[pos.roomName];
+    const srcStatus = gw.activeRoomStatus(this.room.name);
+    const dstStatus = gw.activeRoomStatus(pos.roomName);
     if (
-      (srcStatus && (srcStatus.status === 'novice' || srcStatus.status === 'respawn')) ||
-      (dstStatus && (dstStatus.status === 'novice' || dstStatus.status === 'respawn'))
+      srcStatus === 'novice' ||
+      srcStatus === 'respawn' ||
+      dstStatus === 'novice' ||
+      dstStatus === 'respawn'
     ) {
       return C.ERR_INVALID_TARGET; // :1363-1369
     }

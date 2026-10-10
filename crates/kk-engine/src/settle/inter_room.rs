@@ -11,6 +11,7 @@
 //! 与 powerCreep 的同机制属官方同文件相邻分支，随对应对象形态实现。
 
 use kk_core::RoomName;
+use kk_world::domain::room_status::RoomStatusKind;
 use kk_world::{ObjId, RoomState};
 
 /// 一次待应用的跨房过渡：对象从结算来源房移入目标房的镜像格。
@@ -46,7 +47,11 @@ pub fn edge_target(room_name: &str, x: u8, y: u8) -> Option<(String, u8, u8)> {
 /// 时跳过。目标房不在候选中（未注册房间）时对象放回原处——官方世界
 /// 全域存在房间，本仓世界仅含注册房，未注册即无处可去。对象的扩展
 /// 字段条目随对象迁移，源房不残留孤儿条目。
-pub fn apply_inter_room_moves(rooms: &mut [(String, RoomState)], moves: &[InterRoomMove]) {
+pub fn apply_inter_room_moves(
+    rooms: &mut [(String, RoomState)],
+    moves: &[InterRoomMove],
+    now_ms: u64,
+) {
     for mv in moves {
         let Some(source_idx) = rooms
             .iter()
@@ -61,6 +66,15 @@ pub fn apply_inter_room_moves(rooms: &mut [(String, RoomState)], moves: &[InterR
             rooms[source_idx].1.objects.insert(mv.id, obj);
             continue;
         };
+        if rooms[target_idx]
+            .1
+            .room_status
+            .as_ref()
+            .is_some_and(|status| status.active_kind(now_ms) == Some(RoomStatusKind::Closed))
+        {
+            rooms[source_idx].1.objects.insert(mv.id, obj);
+            continue;
+        }
         obj.set_pos(mv.x, mv.y);
         rooms[target_idx].1.objects.insert(mv.id, obj);
         if let Some(entries) = rooms[source_idx].1.effects.remove(&mv.id) {
@@ -84,6 +98,38 @@ pub fn apply_inter_room_moves(rooms: &mut [(String, RoomState)], moves: &[InterR
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kk_world::domain::room_status::{RoomStatus, RoomStatusKind};
+    #[test]
+    fn closed_destination_blocks_edge_until_expiry() {
+        let mut source = RoomState::new("W1N1", kk_core::Terrain::plains());
+        source
+            .insert_with_id(
+                1,
+                kk_schema::room::RoomObject::Generic(kk_schema::room::GenericObj {
+                    id: 1,
+                    x: 0,
+                    y: 20,
+                    data: r#"{"type":"powerCreep"}"#.into(),
+                }),
+            )
+            .unwrap();
+        let mut dest = RoomState::new("W2N1", kk_core::Terrain::plains());
+        dest.room_status = Some(RoomStatus {
+            status: RoomStatusKind::Closed,
+            timestamp: 100,
+        });
+        let mut rooms = vec![("W1N1".into(), source), ("W2N1".into(), dest)];
+        let moves = [InterRoomMove {
+            id: ObjId(1),
+            to_room: "W2N1".into(),
+            x: 49,
+            y: 20,
+        }];
+        apply_inter_room_moves(&mut rooms, &moves, 99);
+        assert!(rooms[0].1.objects.contains_key(&ObjId(1)));
+        apply_inter_room_moves(&mut rooms, &moves, 100);
+        assert!(rooms[1].1.objects.contains_key(&ObjId(1)));
+    }
     #[test]
     fn effect_state_moves_with_host_and_stays_when_destination_is_absent() {
         let mut source = RoomState::new("W1N1", kk_core::Terrain::plains());
@@ -113,14 +159,14 @@ mod tests {
             x: 49,
             y: 20,
         }];
-        apply_inter_room_moves(&mut rooms, &moves);
+        apply_inter_room_moves(&mut rooms, &moves, 0);
         assert_eq!(rooms[0].1.effects[&ObjId(1)], entries);
         assert_eq!(rooms[0].1.keeper_memory[&ObjId(1)], memory);
         rooms.push((
             "W2N1".into(),
             RoomState::new("W2N1", kk_core::Terrain::plains()),
         ));
-        apply_inter_room_moves(&mut rooms, &moves);
+        apply_inter_room_moves(&mut rooms, &moves, 0);
         assert!(rooms[0].1.effects.is_empty());
         assert!(rooms[0].1.keeper_memory.is_empty());
         assert_eq!(rooms[1].1.effects[&ObjId(1)], entries);

@@ -65,6 +65,11 @@ BTreeMap 排序决定，写入与读回两侧同序，因此复算不需要保�
 | `external` | `settle_external` | `IntentBatch::to_json` 的玩家键规范形态（`from_json` 的逆；房间/通知/市场在各自容器分组） | 空对象（外部轮不提交玩家状态） |
 | `advance` | `tick`（每轮一段） | 空对象 | 空对象 |
 
+`advance` 段若由 `tick({random})` 注入，还携带可选的
+`processor_random` 数组，只记录该拍成功结算实际消耗的值（可为空数组）；
+回放逐拍恢复该数组，并校验结算恰好消费完记录值。未带此字段的段沿用
+确定性派生流。
+
 `intents` 与 `players` 对三种来源都是必需的对象字段（空轮记空对象），
 读取器按此形状硬校验。
 

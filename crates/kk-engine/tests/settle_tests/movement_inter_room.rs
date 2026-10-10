@@ -89,7 +89,7 @@ impl TwoRooms {
             moves.append(&mut pending);
             rooms.push((name.to_string(), settled));
         }
-        kk_engine::settle::inter_room::apply_inter_room_moves(&mut rooms, &moves);
+        kk_engine::settle::inter_room::apply_inter_room_moves(&mut rooms, &moves, 0);
         let (players, next, _) = state.into_parts().unwrap();
         self.players = players;
         self.world.commit_tick_rooms(rooms, next, true).unwrap();
@@ -240,7 +240,7 @@ fn inter_room_unregistered_target_keeps_creep() {
     )
     .unwrap();
     let mut rooms = vec![("W1N1".to_string(), settled)];
-    kk_engine::settle::inter_room::apply_inter_room_moves(&mut rooms, &moves);
+    kk_engine::settle::inter_room::apply_inter_room_moves(&mut rooms, &moves, 0);
     assert_eq!(moves.len(), 1, "边缘对象仍登记过渡");
     assert_eq!(moves[0].to_room, "W0N1", "东邻名换算（W1=−2，+1=−1 即 W0）");
     assert!(
@@ -322,7 +322,7 @@ fn inter_room_apply_moves_extension_fields_with_object() {
             y: 1,
         },
     ];
-    kk_engine::settle::inter_room::apply_inter_room_moves(&mut rooms, &moves);
+    kk_engine::settle::inter_room::apply_inter_room_moves(&mut rooms, &moves, 0);
     assert!(!rooms[0].1.objects.contains_key(&id), "源房对象已迁走");
     assert!(rooms[1].1.objects.contains_key(&id), "目标房收录对象");
     assert_eq!(rooms[1].1.objects.get(&id).unwrap().pos(), (49, 10));

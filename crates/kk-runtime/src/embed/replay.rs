@@ -19,6 +19,7 @@ pub struct ReplayRound {
     pub batch: IntentBatch,
     pub input: TickInput,
     pub writebacks: BTreeMap<String, PlayerWriteback>,
+    pub processor_random: Option<Vec<f64>>,
 }
 
 /// 配对规则：选出从检查点（世界时间 `checkpoint_time`）起可回放的段。
@@ -153,6 +154,23 @@ pub fn rebuild_round(segment: &Value) -> anyhow::Result<ReplayRound> {
         .context("段缺少 players 对象")?;
     let mut batch = IntentBatch::default();
     let mut writebacks = BTreeMap::new();
+    let processor_random = match segment.get("processor_random") {
+        None => None,
+        Some(Value::Array(values)) if source == "advance" => Some(
+            values
+                .iter()
+                .map(|value| {
+                    let number = value.as_f64().context("processor_random 元素须为数")?;
+                    anyhow::ensure!(
+                        (0.0..1.0).contains(&number),
+                        "processor_random 值须在 [0,1)"
+                    );
+                    Ok(number)
+                })
+                .collect::<anyhow::Result<Vec<_>>>()?,
+        ),
+        _ => anyhow::bail!("processor_random 只允许在 advance 段中作为数组"),
+    };
     match source {
         "players" => {
             // 写回键集必须与意图句柄集一致（run_players 对每个请求玩家
@@ -180,6 +198,7 @@ pub fn rebuild_round(segment: &Value) -> anyhow::Result<ReplayRound> {
         batch,
         input,
         writebacks,
+        processor_random,
     })
 }
 
