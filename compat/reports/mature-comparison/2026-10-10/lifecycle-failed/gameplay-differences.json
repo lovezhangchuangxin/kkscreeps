@@ -1,0 +1,102 @@
+{
+  "scope": "same six-room development fixture over normal lifetime; not an extra performance scene",
+  "policy": "historical strict-mode rejection, divergences now disclosed under revised user acceptance",
+  "comparison": {
+    "state": {
+      "before": {
+        "equal": true,
+        "first_difference": null,
+        "rooms_with_difference": 0
+      },
+      "after": {
+        "equal": false,
+        "first_difference": "$[0].structures[23].store.energy: 50 != 150",
+        "rooms_with_difference": 6
+      }
+    },
+    "action_counts_equal": false,
+    "actions": {
+      "factory": {
+        "kkscreeps": 360,
+        "xxscreeps": 360,
+        "delta_percent": 0.0
+      },
+      "harvest": {
+        "kkscreeps": 28932,
+        "xxscreeps": 28944,
+        "delta_percent": -0.04145936981757581
+      },
+      "link": {
+        "kkscreeps": 2700,
+        "xxscreeps": 2700,
+        "delta_percent": 0.0
+      },
+      "mineral": {
+        "kkscreeps": 2598,
+        "xxscreeps": 2592,
+        "delta_percent": 0.23148148148148806
+      },
+      "move": {
+        "kkscreeps": 70188,
+        "xxscreeps": 70416,
+        "delta_percent": -0.3237900477164324
+      },
+      "observe": {
+        "kkscreeps": 18000,
+        "xxscreeps": 18000,
+        "delta_percent": 0.0
+      },
+      "pathSearch": {
+        "kkscreeps": 7680,
+        "xxscreeps": 7824,
+        "delta_percent": -1.8404907975460127
+      },
+      "power": {
+        "kkscreeps": 360,
+        "xxscreeps": 360,
+        "delta_percent": 0.0
+      },
+      "reaction": {
+        "kkscreeps": 2880,
+        "xxscreeps": 2880,
+        "delta_percent": 0.0
+      },
+      "repair": {
+        "kkscreeps": 2340,
+        "xxscreeps": 2382,
+        "delta_percent": -1.7632241813602012
+      },
+      "spawn": {
+        "kkscreeps": 168,
+        "xxscreeps": 168,
+        "delta_percent": 0.0
+      },
+      "terminal": {
+        "kkscreeps": 180,
+        "xxscreeps": 180,
+        "delta_percent": 0.0
+      },
+      "tower": {
+        "kkscreeps": 882,
+        "xxscreeps": 882,
+        "delta_percent": 0.0
+      },
+      "transfer": {
+        "kkscreeps": 10314,
+        "xxscreeps": 10332,
+        "delta_percent": -0.17421602787456303
+      },
+      "upgrade": {
+        "kkscreeps": 12582,
+        "xxscreeps": 12726,
+        "delta_percent": -1.1315417256011262
+      },
+      "withdraw": {
+        "kkscreeps": 2838,
+        "xxscreeps": 2832,
+        "delta_percent": 0.21186440677967155
+      }
+    },
+    "equivalent": false
+  }
+}

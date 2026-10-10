@@ -1,0 +1,24 @@
+{
+  "full_gate": {
+    "command": "pnpm run check",
+    "exit_code": 0
+  },
+  "benchmark_tests": {
+    "command": "python3 -m unittest discover -s scripts/benchmark -p '*test*.py'",
+    "tests": 30,
+    "exit_code": 0
+  },
+  "javascript_format": {
+    "command": "pnpm run fmt:js:check",
+    "files": 343,
+    "exit_code": 0
+  },
+  "release_build": {
+    "command": "cargo build --release -p kk-cli",
+    "exit_code": 0
+  },
+  "doctests": "not changed; not run",
+  "compatibility_ratchet": "not rerun; changes limited to benchmark/probe and documentation, no player API or settlement behavior change",
+  "formal_50x6_window": "not run",
+  "scope": "benchmark development completed, target performance not achieved"
+}

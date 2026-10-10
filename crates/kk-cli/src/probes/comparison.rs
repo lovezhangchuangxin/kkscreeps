@@ -14,8 +14,8 @@ pub(crate) fn run(fixture: &str, warmup: u32, ticks: u32, concurrency: usize, re
             .as_array()
             .ok_or_else(|| anyhow::anyhow!("缺少玩家数组"))?;
         anyhow::ensure!(
-            !players.is_empty() && players.len() <= 32,
-            "玩家数须为 1..=32"
+            !players.is_empty() && players.len() <= 50,
+            "玩家数须为 1..=50"
         );
         let ids: std::collections::BTreeSet<_> = players.iter().filter_map(Value::as_str).collect();
         anyhow::ensure!(ids.len() == players.len(), "玩家须为不重复的字符串");
@@ -27,6 +27,8 @@ pub(crate) fn run(fixture: &str, warmup: u32, ticks: u32, concurrency: usize, re
         );
         let mut e = EmbedEngine::new();
         e.set_player_concurrency(concurrency)?;
+        e.set_kkpv_channel(fixture["kkpv"].as_bool().unwrap_or(false));
+        let mature = fixture["profile"] == "mature-rcl8-v1";
         // xxscreeps 的生产 runner 固定 limit=100；对照夹具显式统一预算。
         let cpu_limit = fixture["cpu_limit"]
             .as_f64()
@@ -42,20 +44,24 @@ pub(crate) fn run(fixture: &str, warmup: u32, ticks: u32, concurrency: usize, re
             );
         }
         e.create_shard(&fixture["shard"])?;
-        for object in fixture["objects"]
+        let placements = fixture["objects"]
             .as_array()
             .ok_or_else(|| anyhow::anyhow!("缺少对象数组"))?
-        {
-            e.place_object(
-                object["room"]
-                    .as_str()
-                    .ok_or_else(|| anyhow::anyhow!("缺少 room"))?,
-                object["kind"]
-                    .as_str()
-                    .ok_or_else(|| anyhow::anyhow!("缺少 kind"))?,
-                &object["spec"],
-            )?;
-        }
+            .iter()
+            .map(|object| {
+                Ok((
+                    object["room"]
+                        .as_str()
+                        .ok_or_else(|| anyhow::anyhow!("缺少 room"))?,
+                    object["kind"]
+                        .as_str()
+                        .ok_or_else(|| anyhow::anyhow!("缺少 kind"))?,
+                    &object["spec"],
+                ))
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        // 大世界放置用一次原子候选编辑，避免逐对象克隆完整世界的启动成本。
+        e.place_objects(&placements)?;
         let code = fixture["code"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("缺少 code"))?;
@@ -74,6 +80,9 @@ pub(crate) fn run(fixture: &str, warmup: u32, ticks: u32, concurrency: usize, re
             .as_array()
             .ok_or_else(|| anyhow::anyhow!("缺少房间数组"))?;
         let observe = |engine: &EmbedEngine| -> anyhow::Result<Vec<Value>> {
+            if mature {
+                return super::comparison_mature::observe(engine, rooms);
+            }
             rooms.iter().map(|r| {
                 let name = r["name"].as_str().ok_or_else(|| anyhow::anyhow!("缺少房间名"))?;
                 let structures = engine.find_in_room(name, kk_core::constants::FIND_STRUCTURES);
@@ -136,7 +145,7 @@ pub(crate) fn run(fixture: &str, warmup: u32, ticks: u32, concurrency: usize, re
         phases["phases"]["wall"] = json!({"count":wall.len(),"p50_ms":quantile(0.5),
             "p95_ms":quantile(0.95),"p99_ms":quantile(0.99),"max_ms":wall.last()});
         let after = observe(&e)?;
-        for (a, b) in before.iter().zip(&after) {
+        for (a, b) in before.iter().zip(&after).filter(|_| !mature) {
             anyhow::ensure!(
                 b["progress"].as_i64() > a["progress"].as_i64(),
                 "房间 {} 未升级",
@@ -146,7 +155,8 @@ pub(crate) fn run(fixture: &str, warmup: u32, ticks: u32, concurrency: usize, re
         std::fs::write(
             report,
             serde_json::to_vec_pretty(&json!({
-                "engine":"kkscreeps","players":players.len(),"warmup":warmup,"ticks":ticks,
+                "engine":"kkscreeps","profile":fixture["profile"],"rooms":rooms.len(),
+                "channel":if fixture["kkpv"].as_bool().unwrap_or(false) { "kkpv" } else { "json" },"players":players.len(),"warmup":warmup,"ticks":ticks,
                 "concurrency":e.player_concurrency(),"metadata":metadata(),"process":process,
                 "cpu_budget":{"limit":cpu_limit,"bucket":10000,"tick_limit":500},
                 "phases":phases,"embed_engine_wall":engine_wall,"initial":initial,"before":before,"after":after,

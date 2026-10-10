@@ -134,13 +134,13 @@ python3 scripts/mod-perf-compare.py --before /tmp/kkscreeps-before --modes nativ
 
 ## 本地共同负载对照
 
-[compare.py](../../scripts/benchmark/compare.py) 默认对 1/4/8/32 玩家各运行五次，预热 500 tick、采集 3000 tick。两端读取同一地形、对象和玩家脚本；并发上限为 2，预算统一为 limit=100、bucket=10000、tickLimit=500。工具从玩家 API 校验有效地形和预算，检查每玩家执行 tick 与成功动作计数，并比较全部房间的初始、预热后、采集后关键状态。状态或动作不同的结果不生成成功汇总。
+[compare.py](../../scripts/benchmark/compare.py) 当前默认单组成熟房场景：50 玩家×6 个 RCL8 满功能建筑房，共 300 房；预热 500 tick、采集 3000 tick、五次独立运行、交替两端先后顺序。角色、正常寿命/补员、持续经济/生产、路线控制、库存窗口及工作量校验见[工具说明](../../scripts/benchmark/README.md)。kkscreeps 使用 KKPV，xxscreeps 使用生产 runner、processor、isolated-vm 及场景所需正式包。两端预算统一 limit=100、bucket=10000、tickLimit=500；并发数共同配置。
 
-xxscreeps 适配器使用生产 runner、processor 与 isolated-vm，由自定义协调器推进 tick；每次使用独立临时配置和进程内共享存储。比较范围是玩家执行、世界结算和提交：包括 xxscreeps 共享存储及消息调度成本，未启动 HTTP 后台、外部数据库、磁盘定期保存或客户端推送。每玩家独立房间，尚未覆盖共享房竞争、跨房及复杂 bot，不能视为下面 C 类场景已经验收。
+这是一组明示参数的合成成熟负载，不能把满建筑等同于真实 bot 的行为分布。两端共同 wall 包含玩家执行、结算、提交及错误检查，排除启动、预热、边界查询和 RSS 采样；只比较共同 wall 及当前进程全部线程 CPU/RSS，内部阶段不强行映射。短窗口汇总明确 `formal_window=false`，不作为正式性能达标证据。用户 2026-10-10 修订本批目标为比 xxscreeps 更快且内存更低，2GiB 不作成功硬门槛。默认必须保持同一初始夹具、完整玩家/房间执行与实际活动；后续玩法差异量化披露，允许尚未完成玩法带来的有限差异，不能把 `equivalent=false` 写成逐位兼容通过。严格逐位对照保留为显式排错选项。
 
-两端共同 wall 边界包含执行、结算、提交及错误检查，排除启动、预热、前后状态查询和 RSS 采样。`compare-probe` 的共同 wall 另用外层计时，原有 `EmbedEngine` wall 保存在 `embed_engine_wall`，避免用不同返回边界比较。xxscreeps 的房间处理可与玩家运行重叠，因此其 project/run/settle 不与本项目逐项比较；只报告共同 wall 及当前进程全部线程的 CPU/RSS。
+xxscreeps 由自定义协调器推进生产执行器，使用进程内共享存储，未启动 HTTP 后台、外部数据库、定期写盘或客户端推送。当前单组只验证成熟房引擎闭环，完整服务成本在相同场景加保存与联网后复验。完整三方 A–D 矩阵仍是长期验收要求，不作为用户指定本批单组的前置。
 
-运行方法、校验范围和产物格式见[工具说明](../../scripts/benchmark/README.md)，本机测量结果及官方私服接入状态见[本地对照记录](../research/notes/p2-local-comparison-2026-10-02.md)。
+历史 1/4/8/32 玩家轻量夹具保留 `--profile legacy`；旧版结果见[本地对照记录](../research/notes/p2-local-comparison-2026-10-02.md)，不能用于推断当前成熟房优势。
 
 ## 比较对象与正确性前置
 

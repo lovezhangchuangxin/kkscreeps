@@ -7,7 +7,7 @@
 ## 当前能力
 
 - 已有内存世界、游戏规则结算、V8 玩家沙箱，以及玩家执行、候选提交和失败重试的协调层。
-- `kkscreeps embed` 提供标准输入/输出的逐行 JSON 调用服务；`bot-check` 检查真实 bot 的运行情况；`perf-probe` 采集固定负载下的性能数据，`mod-perf-probe` 对比密集对象的纯结算与 Mod 处理链成本。
+- `kkscreeps embed` 提供标准输入/输出的逐行 JSON 调用服务；`bot-check` 检查真实 bot 的运行情况；`perf-probe` 采集固定负载下的性能数据，`mod-perf-probe` 对比密集对象的纯结算与 Mod 处理链成本。 50 玩家×6 个满功能成熟房的本地 xxscreeps 对照见[基准使用说明](scripts/benchmark/README.md)。
 - `kkscreeps sim run` 加载 JSON 场景、玩家模块及显式 JS Mod 包，推进真实结算并检查已提交状态；支持多玩家、JSON/KKPV 投影、Mod state 断言和内容/计划身份报告，见[本地场景模拟](docs/architecture/local-simulation.md)。
 - `kkscreeps mod services` 在独立后台 VM 验证真实包的 start/request/stop 与有限只读异步探针，见[后台服务](docs/architecture/background-services.md)；耐久 outbox/storage provider 与网络监听仍待后续。
 - `kkscreeps mod inspect` 注册真实 JS 包并输出处理器依赖、冻结/活动链、规则来源和停用影响预览，见[组合诊断](docs/architecture/mod-composition.md)。

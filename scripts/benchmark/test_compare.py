@@ -36,6 +36,23 @@ class ValidationTests(unittest.TestCase):
         self.validate()
         compare.equivalent(self.report, copy.deepcopy(self.report))
 
+    def test_gameplay_difference_is_disclosed_without_rejecting_shared_workload(self):
+        right = copy.deepcopy(self.report)
+        right['after'][0]['progress'] += 1
+        right['completion']['100'] = ['BENCH_DONE:' + json.dumps(dict(ticks=110, spawn=2, harvest=21, upgrade=300))]
+        result = compare.workload_comparison(self.report, right)
+        self.assertFalse(result['equivalent'])
+        self.assertEqual(result['state']['after']['rooms_with_difference'], 1)
+        self.assertAlmostEqual(result['actions']['harvest']['delta_percent'], (20 / 21 - 1) * 100)
+        with self.assertRaisesRegex(ValueError, 'unequal after state'):
+            compare.equivalent(self.report, right)
+
+    def test_relaxed_policy_still_rejects_different_initial_worlds(self):
+        right = copy.deepcopy(self.report)
+        right['initial'][0]['level'] = 5
+        with self.assertRaisesRegex(ValueError, 'fixture must match'):
+            compare.workload_comparison(self.report, right)
+
     def test_missing_percentile(self):
         del self.report['phases']['phases']['wall']['p95_ms']
         with self.assertRaisesRegex(ValueError, 'p95'):
@@ -74,6 +91,21 @@ class ValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'action counts'):
             compare.equivalent(self.report, other)
 
+    def test_percentiles_must_be_ordered(self):
+        self.report['phases']['phases']['wall']['p95_ms'] = 0.5
+        with self.assertRaisesRegex(ValueError, 'unordered'):
+            self.validate()
+
+    def test_boolean_is_not_a_timing_sample(self):
+        self.report['phases']['phases']['wall']['p50_ms'] = True
+        with self.assertRaisesRegex(ValueError, 'invalid wall'):
+            self.validate()
+
+    def test_peak_cannot_be_lower_than_median(self):
+        self.report['process']['rss_bytes_sampled_peak'] = 50
+        with self.assertRaisesRegex(ValueError, 'RSS peak'):
+            self.validate()
+
     def test_timeout_terminates_process(self):
         with tempfile.TemporaryDirectory() as directory:
             pid_path = Path(directory) / 'pid'
@@ -84,6 +116,17 @@ class ValidationTests(unittest.TestCase):
             import os
             with self.assertRaises(ProcessLookupError):
                 os.kill(pid, 0)
+
+
+class DifferenceTests(unittest.TestCase):
+    def test_difference_identifies_a_nested_public_field(self):
+        self.assertEqual(compare.first_difference([{'store': {'energy': 10}}],
+                                                 [{'store': {'energy': 9}}]),
+                         '$[0].store.energy: 10 != 9')
+
+    def test_equal_nested_state_has_no_difference(self):
+        self.assertIsNone(compare.first_difference({'body': ['work', 'move']},
+                                                  {'body': ['work', 'move']}))
 
 
 if __name__ == '__main__':

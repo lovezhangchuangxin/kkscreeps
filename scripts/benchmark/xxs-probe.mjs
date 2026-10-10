@@ -33,6 +33,7 @@ import 'xxscreeps:mods/main';
 initializeGameEnvironment();
 const args = JSON.parse(await fs.readFile('probe-args.json', 'utf8'));
 const fixture = JSON.parse(await fs.readFile(args.fixture, 'utf8'));
+const mature = fixture.profile === 'mature-rcl8-v1' ? await import('./xxs-mature.mjs') : null;
 await using db = await Database.connect();
 await using shard = await Shard.connect(db, 'shard0');
 const payload = Object.fromEntries(
@@ -48,6 +49,9 @@ const payload = Object.fromEntries(
   ]),
 );
 await seedShard(shard, importPayload(payload));
+// kk createShard 的装载热身拍结束于 time=1；共同负载从同一时间开始。
+shard.time = 1;
+await shard.data.set('time', 1);
 for (const [id, name] of Object.entries(User.npcUsers)) await User.create(db, id, name);
 for (const id of fixture.shard.players) {
   await User.create(db, id, 'player' + id);
@@ -60,8 +64,8 @@ for (const id of fixture.shard.players) {
 }
 const world = await shard.loadWorld();
 for (const spec of fixture.shard.rooms) {
-  const room = await shard.loadRoom(spec.name, 0);
-  runOneShot(world, room, 0, '', () => {
+  const room = await shard.loadRoom(spec.name, 1);
+  runOneShot(world, room, 1, '', () => {
     const controller = createRoomObject(
       new StructureController(),
       new RoomPosition(1, 1, room.name),
@@ -69,7 +73,7 @@ for (const spec of fixture.shard.rooms) {
     controller['#user'] = room['#user'] = spec.owner;
     room['#level'] = spec.rcl;
     controller['#progress'] = 0;
-    controller['#downgradeTime'] = C.CONTROLLER_DOWNGRADE[spec.rcl] + 1;
+    controller['#downgradeTime'] = C.CONTROLLER_DOWNGRADE[spec.rcl] + 2;
     room['#insertObject'](controller);
     for (const { kind, spec: o } of fixture.objects.filter((o) => o.room === room.name)) {
       const pos = new RoomPosition(...o.pos, room.name);
@@ -83,19 +87,22 @@ for (const spec of fixture.shard.rooms) {
         object.energy = o.energy;
         object.energyCapacity = o.energyCapacity;
         object['#nextRegenerationTime'] = 0;
-      } else throw new Error('Unsupported fixture object');
+      } else if (mature) object = mature.create(kind, o, pos);
+      else throw new Error('Unsupported fixture object');
+      if (mature) mature.fill(object, o);
       room['#insertObject'](object);
     }
   });
   room['#flushObjects'](null);
   flushUsers(room);
-  await shard.saveRoom(room.name, 0, room);
-  await shard.copyRoomFromPreviousTick(room.name, 1);
+  await shard.saveRoom(room.name, 1, room);
+  await shard.copyRoomFromPreviousTick(room.name, 2);
 }
 async function observe() {
   return Promise.all(
     fixture.shard.rooms.map(async ({ name }) => {
       const room = await shard.loadRoom(name, shard.time);
+      if (mature) return runOneShot(world, room, shard.time, '', () => mature.observe(room));
       return runOneShot(world, room, shard.time, '', () => ({
         room: name,
         progress: room.controller.progress,
@@ -253,7 +260,7 @@ try {
   const used = process.cpuUsage(cpu);
   const processWall = performance.now() - start;
   const after = await observe();
-  for (let i = 0; i < after.length; i++)
+  for (let i = 0; !mature && i < after.length; i++)
     if (after[i].progress <= before[i].progress) throw new Error('No upgrade in ' + after[i].room);
   const quantile = (values, q) =>
     [...values].sort((a, b) => a - b)[Math.round((values.length - 1) * q)];
@@ -262,6 +269,8 @@ try {
     JSON.stringify(
       {
         engine: 'xxscreeps',
+        profile: fixture.profile || null,
+        rooms: fixture.shard.rooms.length,
         players: fixture.shard.players.length,
         warmup: args.warmup,
         ticks: args.ticks,
@@ -276,6 +285,7 @@ try {
           arch: process.arch,
           platform: process.platform,
           sandbox: config.runner.sandbox,
+          player_heap_limit_mib: config.runner.cpu.memoryLimit,
           processor_workers: Math.max(
             1,
             Math.min(config.processor.concurrency, Math.ceil(fixture.shard.players.length / 2)),
