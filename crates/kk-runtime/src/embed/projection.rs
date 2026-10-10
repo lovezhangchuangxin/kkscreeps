@@ -85,8 +85,8 @@ impl EmbedEngine {
             .unwrap_or(0);
         if self.kkpv_channel {
             let audience = kkpv_audience_hash(handle);
-            let (mut envelope, blocks) = source
-                .kkpv_projection_for_viewer(
+            let (mut envelope, bundle) = source
+                .kkpv_bundle_bytes_for_viewer(
                     handle,
                     gcl,
                     self.engine.extensions(),
@@ -99,9 +99,9 @@ impl EmbedEngine {
             if let Some(obj) = envelope.as_object_mut() {
                 obj.insert("market".into(), market_view(&self.engine, handle));
             }
-            let bundle =
-                kk_schema::kkpv::encode_bundle(&blocks, &kk_schema::kkpv::KkpvLimits::default())
-                    .map_err(|e| anyhow::anyhow!("KKPV 块束编码失败：{e}"))?;
+            let blocks = kk_schema::kkpv::bundle_block_slices(&bundle)
+                .map_err(|e| anyhow::anyhow!("KKPV 束分帧失败：{e}"))?
+                .len();
             // 公开束按当前世界重算字节数（不发布、不动库）；块数与私
             // 有束的房间集一致（全注册房间）。
             let public_blocks = source
@@ -133,7 +133,7 @@ impl EmbedEngine {
                 "bundle_bytes": bundle.len(),
                 "public_bundle_bytes": public_bundle.len(),
                 "public_shared": true,
-                "blocks": blocks.len(),
+                "blocks": blocks,
                 "public_retained": retention,
             }))
         } else {

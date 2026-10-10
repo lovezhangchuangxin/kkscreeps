@@ -48,17 +48,17 @@ pub(super) fn is_variable(kind: u8) -> bool {
     matches!(kind, KIND_STR | KIND_ARRAY | KIND_OBJECT)
 }
 
-pub(super) fn kind_of(value: &KkpvValue) -> Option<u8> {
+pub(super) fn kind_of_val(value: &KkpvVal<'_>) -> Option<u8> {
     match value {
-        KkpvValue::Null => None,
-        KkpvValue::Bool(_) => Some(KIND_BOOL),
-        KkpvValue::Int(_) => Some(KIND_INT),
-        KkpvValue::Uint(_) => Some(KIND_UINT),
-        KkpvValue::Float(_) => Some(KIND_FLOAT),
-        KkpvValue::Ref(_) => Some(KIND_REF),
-        KkpvValue::Str(_) => Some(KIND_STR),
-        KkpvValue::Array(_) => Some(KIND_ARRAY),
-        KkpvValue::Object(_) => Some(KIND_OBJECT),
+        KkpvVal::Null => None,
+        KkpvVal::Bool(_) => Some(KIND_BOOL),
+        KkpvVal::Int(_) => Some(KIND_INT),
+        KkpvVal::Uint(_) => Some(KIND_UINT),
+        KkpvVal::Float(_) => Some(KIND_FLOAT),
+        KkpvVal::Ref(_) => Some(KIND_REF),
+        KkpvVal::Str(_) => Some(KIND_STR),
+        KkpvVal::Array(_) => Some(KIND_ARRAY),
+        KkpvVal::Object(_) => Some(KIND_OBJECT),
     }
 }
 
@@ -75,9 +75,10 @@ pub(super) const TAG_OBJECT: u8 = 8;
 
 // —— 编码 —————————————————————————————————————————————————
 
-/// 校验值域并递归编码为嵌套标签形态。
-pub(super) fn encode_nested(
-    value: &KkpvValue,
+/// 嵌套标签编码的唯一实现：owned 输入经 [`KkpvValue::as_val`] 桥接后
+/// 共用本函数，防止两套编码漂移。
+pub(super) fn encode_nested_val(
+    value: &KkpvVal<'_>,
     limits: &KkpvLimits,
     depth: usize,
     out: &mut Vec<u8>,
@@ -86,31 +87,31 @@ pub(super) fn encode_nested(
         return Err(KkpvError::DepthExceeded);
     }
     match value {
-        KkpvValue::Null => out.push(TAG_NULL),
-        KkpvValue::Bool(b) => {
+        KkpvVal::Null => out.push(TAG_NULL),
+        KkpvVal::Bool(b) => {
             out.push(TAG_BOOL);
             out.push(*b as u8);
         }
-        KkpvValue::Int(v) => {
+        KkpvVal::Int(v) => {
             out.push(TAG_INT);
             out.extend_from_slice(&v.to_le_bytes());
         }
-        KkpvValue::Uint(v) => {
+        KkpvVal::Uint(v) => {
             out.push(TAG_UINT);
             out.extend_from_slice(&v.to_le_bytes());
         }
-        KkpvValue::Float(v) => {
+        KkpvVal::Float(v) => {
             if !v.is_finite() {
                 return Err(KkpvError::NonFiniteFloat);
             }
             out.push(TAG_FLOAT);
             out.extend_from_slice(&v.to_le_bytes());
         }
-        KkpvValue::Ref(v) => {
+        KkpvVal::Ref(v) => {
             out.push(TAG_REF);
             out.extend_from_slice(&v.to_le_bytes());
         }
-        KkpvValue::Str(s) => {
+        KkpvVal::Str(s) => {
             if s.len() > limits.max_string_bytes {
                 return Err(KkpvError::LimitExceeded("max_string_bytes"));
             }
@@ -120,7 +121,7 @@ pub(super) fn encode_nested(
             out.extend_from_slice(&length.to_le_bytes());
             out.extend_from_slice(s.as_bytes());
         }
-        KkpvValue::Array(items) => {
+        KkpvVal::Array(items) => {
             if items.len() > limits.max_array_len {
                 return Err(KkpvError::LimitExceeded("max_array_len"));
             }
@@ -129,10 +130,10 @@ pub(super) fn encode_nested(
                 .map_err(|_| KkpvError::LimitExceeded("max_array_len"))?;
             out.extend_from_slice(&length.to_le_bytes());
             for item in items {
-                encode_nested(item, limits, depth + 1, out)?;
+                encode_nested_val(item, limits, depth + 1, out)?;
             }
         }
-        KkpvValue::Object(entries) => {
+        KkpvVal::Object(entries) => {
             if entries.len() > limits.max_object_entries {
                 return Err(KkpvError::LimitExceeded("max_object_entries"));
             }
@@ -145,10 +146,10 @@ pub(super) fn encode_nested(
                 if key.len() > limits.max_string_bytes {
                     return Err(KkpvError::LimitExceeded("max_string_bytes"));
                 }
-                if !seen.insert(key.as_str()) {
+                if !seen.insert(*key) {
                     return Err(KkpvError::DuplicateField {
                         type_key: "嵌套记录".into(),
-                        field: key.clone(),
+                        field: (*key).into(),
                     });
                 }
             }
@@ -161,7 +162,7 @@ pub(super) fn encode_nested(
                     .map_err(|_| KkpvError::LimitExceeded("max_string_bytes"))?;
                 out.extend_from_slice(&key_len.to_le_bytes());
                 out.extend_from_slice(key.as_bytes());
-                encode_nested(value, limits, depth + 1, out)?;
+                encode_nested_val(value, limits, depth + 1, out)?;
             }
         }
     }

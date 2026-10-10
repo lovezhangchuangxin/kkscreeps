@@ -82,6 +82,70 @@ pub enum KkpvValue {
     Object(Vec<(String, KkpvValue)>),
 }
 
+impl KkpvValue {
+    /// 借用形态视图：嵌套容器按需建薄包装，字符串与键不复制。
+    /// 供 owned 输入走 [`crate::kkpv::encode_ref`] 单一编码核心。
+    pub fn as_val(&self) -> KkpvVal<'_> {
+        match self {
+            Self::Null => KkpvVal::Null,
+            Self::Bool(b) => KkpvVal::Bool(*b),
+            Self::Int(v) => KkpvVal::Int(*v),
+            Self::Uint(v) => KkpvVal::Uint(*v),
+            Self::Float(v) => KkpvVal::Float(*v),
+            Self::Ref(v) => KkpvVal::Ref(*v),
+            Self::Str(s) => KkpvVal::Str(s),
+            Self::Array(items) => KkpvVal::Array(items.iter().map(Self::as_val).collect()),
+            Self::Object(entries) => KkpvVal::Object(
+                entries
+                    .iter()
+                    .map(|(k, v)| (k.as_str(), v.as_val()))
+                    .collect(),
+            ),
+        }
+    }
+}
+
+/// 块内值的借用形态：编码热路径用它消除 owned `KkpvValue` 树的
+/// 逐字段字符串分配与释放。值域、列类型推断与嵌套编码和 owned 形态
+/// 同源（[`KkpvValue::as_val`] 桥接，单一编码核心保证两种入口产出
+/// 逐字节一致）。嵌套容器仍是小 `Vec`，但键与字符串值全部借用。
+#[derive(Clone, Debug, PartialEq)]
+pub enum KkpvVal<'a> {
+    Null,
+    Bool(bool),
+    Int(i64),
+    Uint(u64),
+    Float(f64),
+    Ref(u64),
+    Str(&'a str),
+    Array(Vec<KkpvVal<'a>>),
+    /// 记录的键值对；编码保持条目顺序并拒绝重复键。
+    Object(Vec<(&'a str, KkpvVal<'a>)>),
+}
+
+/// 块内一个对象的借用编码形态：字段键与字符串值借用自权威对象或
+/// 上游已解析的记录，`type_key` 以 `Cow` 承载极少数运行时拼装的
+/// 桶键（如 `builtin:{structureType}`）。
+#[derive(Clone, Debug)]
+pub struct KkpvRow<'a> {
+    pub id: u64,
+    pub type_key: std::borrow::Cow<'a, str>,
+    pub fields: Vec<(&'a str, KkpvVal<'a>)>,
+}
+
+/// 一个块的借用编码形态；语义与 [`KkpvBlockInput`] 逐字段一致。
+#[derive(Clone, Debug)]
+pub struct KkpvBlockRef<'a> {
+    pub private: bool,
+    pub tick: u64,
+    pub generation: u64,
+    pub plan_hash: [u8; 32],
+    pub audience_hash: [u8; 32],
+    pub room_name: &'a str,
+    pub terrain: Option<&'a [u8]>,
+    pub rows: Vec<KkpvRow<'a>>,
+}
+
 /// 编码与解码共用的显式限额。超限时编码拒绝产出、解码拒绝建立视图，
 /// 不存在静默截断。
 #[derive(Clone, Debug, PartialEq)]
@@ -297,7 +361,7 @@ mod merge;
 mod view;
 mod wire;
 
-pub use encode::{encode, encode_bundle, validate_bundle};
+pub use encode::{encode, encode_bundle, encode_ref, validate_bundle};
 /// 头部 audience_hash 字段的字节偏移（32 字节宽）。见 [`patch_block_audience`]。
 pub const AUDIENCE_HASH_OFFSET: usize = OFF_AUDIENCE_HASH;
 /// 把块的 audience_hash 改写为给定值。与以目标 audience 直接编码的产物
@@ -315,6 +379,44 @@ pub fn patch_block_audience(block: &mut [u8], audience: &[u8; 32]) -> Result<(),
     Ok(())
 }
 pub use merge::{MergedView, merge};
+/// 按束框架（`u32` 块数 + 逐块 `u32` 长度 + 顺序拼接）切分块切片。
+/// 只走分帧边界，不逐块解码；消费端对切片自行 `KkpvView::decode`。
+///
+/// # Errors
+/// 分帧不符（头部短、长度目录越界、块边界不齐）时返回错误。
+pub fn bundle_block_slices(data: &[u8]) -> Result<Vec<&[u8]>, KkpvError> {
+    if data.len() < 4 {
+        return Err(KkpvError::Malformed("束短于框架头部".into()));
+    }
+    let count = read_u32_at(data, 0) as usize;
+    let lens_end = 4usize
+        .checked_add(
+            count
+                .checked_mul(4)
+                .ok_or(KkpvError::Malformed("束长度目录溢出".into()))?,
+        )
+        .ok_or(KkpvError::Malformed("束长度目录溢出".into()))?;
+    if data.len() < lens_end {
+        return Err(KkpvError::Malformed("束短于长度目录".into()));
+    }
+    let mut cur = lens_end;
+    let mut slices = Vec::with_capacity(count);
+    for index in 0..count {
+        let len = read_u32_at(data, 4 + index * 4) as usize;
+        let end = cur
+            .checked_add(len)
+            .ok_or(KkpvError::Malformed("块长度溢出".into()))?;
+        if end > data.len() {
+            return Err(KkpvError::Malformed("块越界".into()));
+        }
+        slices.push(&data[cur..end]);
+        cur = end;
+    }
+    if cur != data.len() {
+        return Err(KkpvError::Malformed("束长度与块目录不符".into()));
+    }
+    Ok(slices)
+}
 pub use view::KkpvView;
 use wire::*;
 

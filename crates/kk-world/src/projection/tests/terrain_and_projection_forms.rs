@@ -365,8 +365,8 @@ fn mod_objects_excluded_from_all_player_planes() {
             "FIND {find} 命中了 Mod 对象"
         );
     }
-    let blocks = world
-        .kkpv_room_blocks_for_viewer(
+    let bundle = world
+        .kkpv_fresh_bundle_bytes_for_viewer(
             "p1",
             &kk_mod_api::extension::ExtensionCatalog::default(),
             None,
@@ -374,8 +374,12 @@ fn mod_objects_excluded_from_all_player_planes() {
             [0; 32],
         )
         .unwrap();
+    let blocks = kk_schema::kkpv::bundle_block_slices(&bundle).unwrap();
     assert_eq!(blocks.len(), 1);
-    assert!(blocks[0].objects.is_empty(), "KKPV 私有块不含 Mod 对象");
+    let view =
+        kk_schema::kkpv::KkpvView::decode(blocks[0], &kk_schema::kkpv::KkpvLimits::default())
+            .unwrap();
+    assert_eq!(view.object_count(), 0, "KKPV 私有块不含 Mod 对象");
     // 查询快照读面唯一保留。
     let snap = world.object_snapshot_by_id(id).unwrap();
     assert_eq!(snap["kind"], "mod");
@@ -639,28 +643,24 @@ fn owner_collection_in_invisible_room_matches_across_channels() {
         .expect("JSON 通道对不可见房的归属者导出 OwnerCollection 对象");
     assert_eq!(record["gold"], 11);
 
-    let blocks = world
-        .kkpv_room_blocks_for_viewer("p9", &catalog, Some(&surface), [5; 32], [6; 32])
+    let bundle = world
+        .kkpv_fresh_bundle_bytes_for_viewer("p9", &catalog, Some(&surface), [5; 32], [6; 32])
         .unwrap();
-    let block = blocks
-        .iter()
-        .find(|b| b.room_name == "W2N2")
+    let view = kk_schema::kkpv::bundle_block_slices(&bundle)
+        .unwrap()
+        .into_iter()
+        .map(|bytes| {
+            kk_schema::kkpv::KkpvView::decode(bytes, &kk_schema::kkpv::KkpvLimits::default())
+                .unwrap()
+        })
+        .find(|v| v.room_name() == "W2N2")
         .expect("不可见房也有归属者的私有块");
-    let kkpv_object = block
-        .objects
-        .iter()
-        .find(|o| o.type_key == "extmod:vault")
-        .expect("KKPV 通道同样导出（门序与 JSON 一致）");
-    let bytes = kk_schema::kkpv::encode(block, &kk_schema::kkpv::KkpvLimits::default()).unwrap();
-    let view =
-        kk_schema::kkpv::KkpvView::decode(&bytes, &kk_schema::kkpv::KkpvLimits::default()).unwrap();
     let index = (0..view.object_count())
         .find(|i| view.object_type(*i) == "extmod:vault")
-        .unwrap();
+        .expect("KKPV 通道同样导出（门序与 JSON 一致）");
     let decoded = crate::kkpv::record_json_from_view(&view, index).unwrap();
     // mod 记录的 pos 是 mod_record_json 的显式字段，两通道逐键一致。
     assert_eq!(decoded.as_object().unwrap(), record.as_object().unwrap());
-    let _ = kkpv_object;
 }
 
 #[test]
@@ -693,20 +693,16 @@ fn mod_records_match_across_json_and_kkpv_channels() {
             .find(|o| o["modType"] == "extmod:counter")
             .cloned()
             .unwrap();
-    let blocks = world
-        .kkpv_room_blocks_for_viewer("p1", &catalog, Some(&surface), [1; 32], [2; 32])
+    let bundle = world
+        .kkpv_fresh_bundle_bytes_for_viewer("p1", &catalog, Some(&surface), [1; 32], [2; 32])
         .unwrap();
+    let bytes = &kk_schema::kkpv::bundle_block_slices(&bundle).unwrap()[0];
+    let view = kk_schema::kkpv::KkpvView::decode(bytes, &kk_schema::kkpv::KkpvLimits::default())
+        .expect("块解码成功");
     assert!(
-        blocks[0]
-            .objects
-            .iter()
-            .any(|o| o.type_key == "extmod:counter"),
+        (0..view.object_count()).any(|i| view.object_type(i) == "extmod:counter"),
         "KKPV 块含 Mod 对象（桶键为类型键）"
     );
-    let bytes = kk_schema::kkpv::encode(&blocks[0], &kk_schema::kkpv::KkpvLimits::default())
-        .expect("块编码成功");
-    let view = kk_schema::kkpv::KkpvView::decode(&bytes, &kk_schema::kkpv::KkpvLimits::default())
-        .expect("块解码成功");
     let mod_index = (0..view.object_count())
         .find(|i| view.object_type(*i) == "extmod:counter")
         .expect("视图中有 counter 类型对象");

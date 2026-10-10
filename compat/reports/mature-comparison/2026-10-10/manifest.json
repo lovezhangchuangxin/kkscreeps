@@ -1,98 +1,116 @@
 {
-  "status": "benchmark_implemented_and_short_windows_validated",
-  "formal_acceptance": false,
-  "performance_target_achieved": false,
-  "policy": "same initial fixture, verified player/room activity, gameplay differences disclosed; 2GiB is reference only",
-  "samples": [
-    {
-      "path": "50x6-original/analysis.json",
-      "players": 50,
-      "rooms": 300,
-      "warmup": 30,
-      "ticks": 100,
-      "runs": 1,
-      "equivalent": false,
-      "actions_equal": true,
-      "note": "Originally rejected in strict mode, reanalyzed under user revised policy; lexical terminal pairing causes resource differences"
-    },
-    {
-      "path": "50x6-adjacent/summary.json",
-      "players": 50,
-      "rooms": 300,
-      "warmup": 5,
-      "ticks": 50,
-      "runs": 1,
-      "equivalent": true,
-      "actions_equal": true,
-      "note": "Final adjacent-terminal fixture; all compared states and action counts equal"
-    },
-    {
-      "path": "50x6-after-opt-abc/summary.json",
-      "players": 50,
-      "rooms": 300,
-      "warmup": 5,
-      "ticks": 50,
-      "runs": 1,
-      "equivalent": true,
-      "actions_equal": true,
-      "note": "After performance batch A/B/C (visibility index, settle literal gates + single-parse classification, KKPV shared room blocks + typed direct constructor + JS eager fixed-width decode) on same machine/window as baseline; kk/xxs P50 1504.9/409.3ms (ratio 23.4x -> 3.68x), CPU 3993/2525 core-ms, RSS peak 3083/3833MiB"
-    }
-  ],
-  "limits": [
-    "macOS desktop, release, Node v24.11.0, concurrency 4",
-    "short windows; not steady-state or five-run formal acceptance",
-    "engine benchmark, excludes disk/HTTP/client",
-    "synthetic mature roles and Memory parameters; not arbitrary real-bot distribution"
-  ],
-  "next": "optimize dominant world projection, then rerun same 50x6 workload with longer repeated windows",
-  "files_sha256": {
-    "50x6-adjacent/fixture-50.json.gz": "71e0ae6bec783ff7f6fd0e38f79d264e9fe8cfcf3dbeb4e2684c91877be017dc",
-    "50x6-adjacent/kkscreeps-50-1.json.gz": "4bb0a25622ce0a6ad90efb66310d8b191d7fa830f410bc7118636c1e934658e7",
-    "50x6-adjacent/kkscreeps-50-1.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
-    "50x6-adjacent/provenance.json.gz": "f75bb5bfc4216f1a1456843936cb4b8e15aa6738a13f199dab2dc1d8c4a41eab",
-    "50x6-adjacent/summary.json": "ee513a9daefb77cacd73499e852caccfa143719b745a731f69680a2fe25a3e0b",
-    "50x6-adjacent/xxscreeps-50-1.json.gz": "6f14765b9a389081a0e5b5324892f8bd3f8dbb6e28827a58c395de7f989cb2b3",
-    "50x6-adjacent/xxscreeps-50-1.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
-    "50x6-original/analysis.json": "47168272a7667923618086acd8af6f9c10a8a6324321659deaa06fdaf5332588",
-    "50x6-original/failure.json.gz": "3a26f0960e848c22db7028d57e29aeb4d1e53e781010bfc002317fcb8310d7a2",
-    "50x6-original/fixture-50.json.gz": "fc989d40962a3add2e92771ebceaff1ae53bbc5f65dc35b08111218ac3e3fd88",
-    "50x6-original/kkscreeps-50-1.json.gz": "b85b60658cba2b119edefcf43905b628c856401ee1811d14902f57ef09ebd571",
-    "50x6-original/kkscreeps-50-1.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
-    "50x6-original/provenance.json.gz": "25c7c68d90942c1b4d48d493ec264a3b5a5292ad2dbf77f76859f6edc12c598a",
-    "50x6-original/xxscreeps-50-1.json.gz": "c07ee22fcc3bcde690bc50420daa6b724ab8f571e42af9c495bed9bf98fdf336",
-    "50x6-original/xxscreeps-50-1.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
-    "first-divergence/fixture-1.json.gz": "e336fdec6f3c663fffbfb71f684aac60ef144159625e4c5d4ba1b49558a21535",
-    "first-divergence/kkscreeps-1-1.json.gz": "e6fcd04572b90ea1550b0f273e72437d397b15775942ad5c042fd5c630c6595a",
-    "first-divergence/kkscreeps-1-1.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
-    "first-divergence/provenance.json.gz": "49b2275416cb051859f4a2ff20b3711dcd1cc397b2c9e45eea2f0bf904d275b7",
-    "first-divergence/xxscreeps-1-1.json.gz": "aa9d89c199fde9a197d5c238c4138c224dba34270f39dbc17b2258364cea42c8",
-    "first-divergence/xxscreeps-1-1.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
-    "full-check.log.gz": "4d4349a651dc557e415a9b5f8e0502884d9751bb1a3e760f4e976889488c4019",
-    "lifecycle-failed/fixture-1.json.gz": "3e1f5fe3e46d76539de7c4def4e05d338f9245480d32802642d6cf18ef9bcc94",
-    "lifecycle-failed/gameplay-differences.json": "60c1c2e79451c3655d46f768407d98ca4d599164a259d9cdef490c969e40ab1c",
-    "lifecycle-failed/kkscreeps-1-1.json.gz": "b059ea3c9b2db9dd7cf864e2547dd5a7d0e9b4fc434c376659a6d1d2d5d71c96",
-    "lifecycle-failed/kkscreeps-1-1.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
-    "lifecycle-failed/provenance.json.gz": "8fd7bf5dcf7873280bcfbe3d793d8f56cadef263711c48cbfb8b8c0b134e96dd",
-    "lifecycle-failed/xxscreeps-1-1.json.gz": "30fadc35822ed00c908cb2e75186542e8fadbe4b0c1c84bf46b8ff187d79dfe2",
-    "lifecycle-failed/xxscreeps-1-1.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
-    "validation.json": "62bfbf5227d943dbf38fc61869a577e8441be52bb80d674eb957414c701b6db8"
+ "status": "benchmark_implemented_and_short_windows_validated",
+ "formal_acceptance": false,
+ "performance_target_achieved": false,
+ "policy": "same initial fixture, verified player/room activity, gameplay differences disclosed; 2GiB is reference only",
+ "samples": [
+  {
+   "path": "50x6-original/analysis.json",
+   "players": 50,
+   "rooms": 300,
+   "warmup": 30,
+   "ticks": 100,
+   "runs": 1,
+   "equivalent": false,
+   "actions_equal": true,
+   "note": "Originally rejected in strict mode, reanalyzed under user revised policy; lexical terminal pairing causes resource differences"
   },
-  "historical_strict_diagnostics": [
-    {
-      "name": "lifecycle-failed",
-      "warmup": 500,
-      "ticks": 3000,
-      "players": 1,
-      "rooms": 6,
-      "reason": "initial/before states equal; after unequal; no performance comparison allowed"
-    },
-    {
-      "name": "first-divergence",
-      "warmup": 10,
-      "ticks": 505,
-      "players": 1,
-      "rooms": 6,
-      "reason": "Game.time=504 read: road(25,24) hits 5000 vs 4900; repair target/route diverge"
-    }
-  ]
+  {
+   "path": "50x6-adjacent/summary.json",
+   "players": 50,
+   "rooms": 300,
+   "warmup": 5,
+   "ticks": 50,
+   "runs": 1,
+   "equivalent": true,
+   "actions_equal": true,
+   "note": "Final adjacent-terminal fixture; all compared states and action counts equal"
+  },
+  {
+   "path": "50x6-after-opt-abc/summary.json",
+   "players": 50,
+   "rooms": 300,
+   "warmup": 5,
+   "ticks": 50,
+   "runs": 1,
+   "equivalent": true,
+   "actions_equal": true,
+   "note": "After performance batch A/B/C (visibility index, settle literal gates + single-parse classification, KKPV shared room blocks + typed direct constructor + JS eager fixed-width decode) on same machine/window as baseline; kk/xxs P50 1504.9/409.3ms (ratio 23.4x -> 3.68x), CPU 3993/2525 core-ms, RSS peak 3083/3833MiB"
+  },
+  {
+   "path": "50x6-after-typed-encoder/summary.json",
+   "players": 50,
+   "rooms": 300,
+   "warmup": 5,
+   "ticks": 50,
+   "runs": 1,
+   "equivalent": true,
+   "actions_equal": true,
+   "note": "Typed direct-write KKPV encoder slice (borrowed KkpvVal/KkpvRow single encode core, per-room encode_room_block; second owned constructor deleted) plus concurrency calibration 4/6/8/10 (higher dispatch window is a negative trade; kk stays at 4 with measured parallelism 3.20x vs xxs 6.34x per user fairness rule) on same fixture/window; kk/xxs P50 1017.6/320.7ms (ratio 3.68x -> 3.17x), CPU 3255/2034 core-ms (1.60x), RSS peak 3076/3592MiB (0.86x)"
+  }
+ ],
+ "limits": [
+  "macOS desktop, release, Node v24.11.0, concurrency 4",
+  "short windows; not steady-state or five-run formal acceptance",
+  "engine benchmark, excludes disk/HTTP/client",
+  "synthetic mature roles and Memory parameters; not arbitrary real-bot distribution"
+ ],
+ "next": "optimize dominant world projection, then rerun same 50x6 workload with longer repeated windows",
+ "files_sha256": {
+  "50x6-adjacent/fixture-50.json.gz": "71e0ae6bec783ff7f6fd0e38f79d264e9fe8cfcf3dbeb4e2684c91877be017dc",
+  "50x6-adjacent/kkscreeps-50-1.json.gz": "4bb0a25622ce0a6ad90efb66310d8b191d7fa830f410bc7118636c1e934658e7",
+  "50x6-adjacent/kkscreeps-50-1.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "50x6-adjacent/provenance.json.gz": "f75bb5bfc4216f1a1456843936cb4b8e15aa6738a13f199dab2dc1d8c4a41eab",
+  "50x6-adjacent/summary.json": "ee513a9daefb77cacd73499e852caccfa143719b745a731f69680a2fe25a3e0b",
+  "50x6-adjacent/xxscreeps-50-1.json.gz": "6f14765b9a389081a0e5b5324892f8bd3f8dbb6e28827a58c395de7f989cb2b3",
+  "50x6-adjacent/xxscreeps-50-1.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "50x6-original/analysis.json": "47168272a7667923618086acd8af6f9c10a8a6324321659deaa06fdaf5332588",
+  "50x6-original/failure.json.gz": "3a26f0960e848c22db7028d57e29aeb4d1e53e781010bfc002317fcb8310d7a2",
+  "50x6-original/fixture-50.json.gz": "fc989d40962a3add2e92771ebceaff1ae53bbc5f65dc35b08111218ac3e3fd88",
+  "50x6-original/kkscreeps-50-1.json.gz": "b85b60658cba2b119edefcf43905b628c856401ee1811d14902f57ef09ebd571",
+  "50x6-original/kkscreeps-50-1.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "50x6-original/provenance.json.gz": "25c7c68d90942c1b4d48d493ec264a3b5a5292ad2dbf77f76859f6edc12c598a",
+  "50x6-original/xxscreeps-50-1.json.gz": "c07ee22fcc3bcde690bc50420daa6b724ab8f571e42af9c495bed9bf98fdf336",
+  "50x6-original/xxscreeps-50-1.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "first-divergence/fixture-1.json.gz": "e336fdec6f3c663fffbfb71f684aac60ef144159625e4c5d4ba1b49558a21535",
+  "first-divergence/kkscreeps-1-1.json.gz": "e6fcd04572b90ea1550b0f273e72437d397b15775942ad5c042fd5c630c6595a",
+  "first-divergence/kkscreeps-1-1.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "first-divergence/provenance.json.gz": "49b2275416cb051859f4a2ff20b3711dcd1cc397b2c9e45eea2f0bf904d275b7",
+  "first-divergence/xxscreeps-1-1.json.gz": "aa9d89c199fde9a197d5c238c4138c224dba34270f39dbc17b2258364cea42c8",
+  "first-divergence/xxscreeps-1-1.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "full-check.log.gz": "4d4349a651dc557e415a9b5f8e0502884d9751bb1a3e760f4e976889488c4019",
+  "lifecycle-failed/fixture-1.json.gz": "3e1f5fe3e46d76539de7c4def4e05d338f9245480d32802642d6cf18ef9bcc94",
+  "lifecycle-failed/gameplay-differences.json": "60c1c2e79451c3655d46f768407d98ca4d599164a259d9cdef490c969e40ab1c",
+  "lifecycle-failed/kkscreeps-1-1.json.gz": "b059ea3c9b2db9dd7cf864e2547dd5a7d0e9b4fc434c376659a6d1d2d5d71c96",
+  "lifecycle-failed/kkscreeps-1-1.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "lifecycle-failed/provenance.json.gz": "8fd7bf5dcf7873280bcfbe3d793d8f56cadef263711c48cbfb8b8c0b134e96dd",
+  "lifecycle-failed/xxscreeps-1-1.json.gz": "30fadc35822ed00c908cb2e75186542e8fadbe4b0c1c84bf46b8ff187d79dfe2",
+  "lifecycle-failed/xxscreeps-1-1.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "validation.json": "62bfbf5227d943dbf38fc61869a577e8441be52bb80d674eb957414c701b6db8",
+  "50x6-after-typed-encoder/fixture-50.json.gz": "b1d0b5df03e9eaa907c8bada2109532f57f928266f88fbc4f539d06198b6cf99",
+  "50x6-after-typed-encoder/kkscreeps-50-1.json.gz": "02e6747b5919d9b457b4bf47456a7bb3c31d4726865601c8199cdbd2b04052a8",
+  "50x6-after-typed-encoder/kkscreeps-50-1.log.gz": "6a56e1b61f7a79ce2a6f88149f8e32481db0bc0d0922edb86df3d82b7049f415",
+  "50x6-after-typed-encoder/provenance.json.gz": "593351fff11a172ee912c29af1889e1bc29829ded7748386de9470f409a87c7d",
+  "50x6-after-typed-encoder/xxscreeps-50-1.json.gz": "da893d6ce54398fccec4548184628b07ade60c003ba202b7c68a7e49742c705e",
+  "50x6-after-typed-encoder/xxscreeps-50-1.log.gz": "d3e31094925831118860249311a9d786a77171603d767a98d2415036ad3df7d9",
+  "50x6-after-typed-encoder/summary.json": "7b83e07ad2c8484cb93e61a03b4303103aef7b7f9e06bcc5a97a370ca0d9a865"
+ },
+ "historical_strict_diagnostics": [
+  {
+   "name": "lifecycle-failed",
+   "warmup": 500,
+   "ticks": 3000,
+   "players": 1,
+   "rooms": 6,
+   "reason": "initial/before states equal; after unequal; no performance comparison allowed"
+  },
+  {
+   "name": "first-divergence",
+   "warmup": 10,
+   "ticks": 505,
+   "players": 1,
+   "rooms": 6,
+   "reason": "Game.time=504 read: road(25,24) hits 5000 vs 4900; repair target/route diverge"
+  }
+ ]
 }

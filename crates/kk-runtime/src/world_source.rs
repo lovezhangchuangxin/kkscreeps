@@ -45,20 +45,6 @@ pub trait WorldSource {
     ) -> Value;
 
     /// 为查看者生成 KKPV 投影：不含对象数组与地形的世界信封与逐房间
-    /// 私有对象块输入。未实现二进制投影的源返回 None；启用 KKPV 通道的
-    /// 调用方据此失败而不是静默回落（回落会掩盖接线缺陷）。
-    fn kkpv_projection_for_viewer(
-        &self,
-        _viewer: &str,
-        _gcl_points: i64,
-        _catalog: &kk_mod_api::extension::ExtensionCatalog,
-        _surface: Option<&kk_mod_api::player_surface::PlayerSurface>,
-        _plan_hash: [u8; 32],
-        _audience_hash: [u8; 32],
-    ) -> Option<Result<(Value, Vec<kk_schema::kkpv::KkpvBlockInput>), String>> {
-        None
-    }
-
     /// 为查看者装配完整的 KKPV 私有束字节（信封 + 与 encode_bundle 同形
     /// 的束框架）。默认实现返回 None，语义与
     /// [`WorldSource::kkpv_projection_for_viewer`] 一致：启用 KKPV 通道的
@@ -102,33 +88,6 @@ impl WorldSource for kk_world::World {
     ) -> Value {
         kk_world::World::world_json_for_viewer_with_extensions(
             self, viewer, gcl_points, catalog, surface,
-        )
-    }
-
-    fn kkpv_projection_for_viewer(
-        &self,
-        viewer: &str,
-        gcl_points: i64,
-        catalog: &kk_mod_api::extension::ExtensionCatalog,
-        surface: Option<&kk_mod_api::player_surface::PlayerSurface>,
-        plan_hash: [u8; 32],
-        audience_hash: [u8; 32],
-    ) -> Option<Result<(Value, Vec<kk_schema::kkpv::KkpvBlockInput>), String>> {
-        Some(
-            kk_world::World::kkpv_room_blocks_for_viewer(
-                self,
-                viewer,
-                catalog,
-                surface,
-                plan_hash,
-                audience_hash,
-            )
-            .map(|blocks| {
-                (
-                    kk_world::World::kkpv_envelope_for_viewer(self, viewer, gcl_points),
-                    blocks,
-                )
-            }),
         )
     }
 

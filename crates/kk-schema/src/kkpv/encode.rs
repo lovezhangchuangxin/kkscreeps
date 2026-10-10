@@ -1,78 +1,124 @@
 //! 编码单块与块束，并校验束的版本一致性。
+//!
+//! 编码核心只有一套：[`encode_ref`] 直接消费借用行（字段键与字符串值
+//! 借用自权威对象，热路径不构建 owned `KkpvObject` 树）；[`encode`]
+//! 把 owned 输入桥接为借用形态后走同一核心，两种入口产出逐字节一致。
+use std::borrow::Cow;
+
 use super::*;
 
-/// 将输入编码为完整的 KKPV 块。对象按 ID 升序、类型桶与字段按键
-/// 排序后写入；嵌套记录保持条目顺序（玩家可见的键序不因编码重排），
-/// 相同输入得到相同字节。
+/// 将 owned 输入编码为完整的 KKPV 块：桥接为 [`KkpvBlockRef`] 后走
+/// [`encode_ref`] 单一核心（布局、校验与错误形态同源）。
 ///
 /// # Errors
 /// 值域或限额违规、对象 ID 或字段键重复、同键值编码不一致时返回错误，
 /// 不产出部分数据。
 pub fn encode(input: &KkpvBlockInput, limits: &KkpvLimits) -> Result<Vec<u8>, KkpvError> {
+    let rows = input
+        .objects
+        .iter()
+        .map(|object| KkpvRow {
+            id: object.id,
+            type_key: Cow::Borrowed(object.type_key.as_str()),
+            fields: object
+                .fields
+                .iter()
+                .map(|(key, value)| (key.as_str(), value.as_val()))
+                .collect(),
+        })
+        .collect();
+    let block = KkpvBlockRef {
+        private: input.private,
+        tick: input.tick,
+        generation: input.generation,
+        plan_hash: input.plan_hash,
+        audience_hash: input.audience_hash,
+        room_name: input.room_name.as_str(),
+        terrain: input.terrain.as_deref(),
+        rows,
+    };
+    encode_ref(&block, limits)
+}
+
+struct FieldPlan<'o> {
+    key: &'o str,
+    key_desc: (u32, u32),
+    kind: u8,
+    column: Vec<Option<&'o KkpvVal<'o>>>,
+}
+struct BucketPlan<'o> {
+    rows: u32,
+    fields: Vec<FieldPlan<'o>>,
+}
+
+/// 将借用行编码为完整的 KKPV 块。对象按 ID 升序、类型桶与字段按键
+/// 排序后写入；嵌套记录保持条目顺序（玩家可见的键序不因编码重排），
+/// 相同输入得到相同字节。与 [`encode`] 的产物逐字节一致。
+///
+/// 相比逐字段 `find_map` 重扫（每对象 O(字段数²) 字符串比较），字段
+/// 先并入秩映射再行主填充矩阵，每对象 O(字段数·log 字段数)。
+///
+/// # Errors
+/// 值域或限额违规、对象 ID 或字段键重复、同键值编码不一致时返回错误，
+/// 不产出部分数据。
+pub fn encode_ref(input: &KkpvBlockRef<'_>, limits: &KkpvLimits) -> Result<Vec<u8>, KkpvError> {
     if input.room_name.is_empty() {
         return Err(KkpvError::RoomNameMissing);
     }
     if input.room_name.len() > limits.max_string_bytes {
         return Err(KkpvError::LimitExceeded("max_string_bytes"));
     }
-    if input.objects.len() > limits.max_objects {
+    if input.rows.len() > limits.max_objects {
         return Err(KkpvError::LimitExceeded("max_objects"));
     }
-    let terrain = input.terrain.as_deref();
+    let terrain = input.terrain;
     if terrain.is_some_and(|t| t.len() > limits.max_terrain_bytes) {
         return Err(KkpvError::LimitExceeded("max_terrain_bytes"));
     }
 
-    // 借用引用排序而非克隆对象向量：编码不修改输入，逐房全量深克隆在
-    // 多房束下是可观的无效分配。
-    let mut objects: Vec<&KkpvObject> = input.objects.iter().collect();
-    objects.sort_by_key(|o| o.id);
-    for (a, b) in objects.iter().zip(objects.iter().skip(1)) {
-        if a.id == b.id {
-            return Err(KkpvError::DuplicateObjectId(a.id));
+    // 目录按 ID 升序；桶内行序沿用该次序。
+    let mut order: Vec<usize> = (0..input.rows.len()).collect();
+    order.sort_by_key(|&i| input.rows[i].id);
+    for pair in order.iter().zip(order.iter().skip(1)) {
+        if input.rows[*pair.0].id == input.rows[*pair.1].id {
+            return Err(KkpvError::DuplicateObjectId(input.rows[*pair.0].id));
         }
     }
 
     // 类型分桶；BTreeMap 同时给出类型键的确定顺序与句柄分配。
-    let mut buckets: std::collections::BTreeMap<&str, Vec<&KkpvObject>> =
+    let mut buckets: std::collections::BTreeMap<&str, Vec<usize>> =
         std::collections::BTreeMap::new();
-    for object in &objects {
+    for &index in &order {
         buckets
-            .entry(object.type_key.as_str())
+            .entry(input.rows[index].type_key.as_ref())
             .or_default()
-            .push(object);
+            .push(index);
     }
     if buckets.len() > limits.max_types {
         return Err(KkpvError::LimitExceeded("max_types"));
     }
 
-    struct FieldPlan<'o> {
-        key_desc: (u32, u32),
-        kind: u8,
-        column: Vec<Option<&'o KkpvValue>>,
-    }
-    struct BucketPlan<'o> {
-        rows: u32,
-        fields: Vec<FieldPlan<'o>>,
-    }
     let mut arena = ArenaBuilder { bytes: Vec::new() };
-    let room_desc = arena.push_str(&input.room_name)?;
+    let room_desc = arena.push_str(input.room_name)?;
     let mut type_descs = Vec::with_capacity(buckets.len());
     let mut plans = Vec::with_capacity(buckets.len());
-    for (type_key, objects) in &buckets {
-        if objects.len() > u32::MAX as usize {
+    for (type_key, members) in &buckets {
+        if members.len() > u32::MAX as usize {
             return Err(KkpvError::LimitExceeded("max_objects"));
         }
         if type_key.len() > limits.max_string_bytes {
             return Err(KkpvError::LimitExceeded("max_string_bytes"));
         }
         type_descs.push(arena.push_str(type_key)?);
-        // 字段目录是全桶键并集；重复只指同一对象内出现两次同名键。
-        let mut field_order: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
-        for object in objects {
-            let mut seen = std::collections::BTreeSet::new();
-            for (key, _) in &object.fields {
-                if key == "id" {
+        // 字段目录是全桶键并集（BTreeSet 保键序）；重复只指同一对象内
+        // 出现两次同名键。秩映射一次建立，随后行主序填充列，避免逐字段
+        // find_map 重扫的 O(字段数²) 字符串比较。
+        let mut key_set: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+        let mut seen: Vec<&str> = Vec::new();
+        for &index in members {
+            seen.clear();
+            for (key, _) in &input.rows[index].fields {
+                if *key == "id" {
                     return Err(KkpvError::DuplicateField {
                         type_key: (*type_key).into(),
                         field: "id".into(),
@@ -81,61 +127,70 @@ pub fn encode(input: &KkpvBlockInput, limits: &KkpvLimits) -> Result<Vec<u8>, Kk
                 if key.len() > limits.max_string_bytes {
                     return Err(KkpvError::LimitExceeded("max_string_bytes"));
                 }
-                if !seen.insert(key.as_str()) {
+                if seen.contains(key) {
                     return Err(KkpvError::DuplicateField {
                         type_key: (*type_key).into(),
-                        field: key.clone(),
+                        field: (*key).into(),
                     });
                 }
-                field_order.insert(key.as_str());
+                seen.push(key);
+                key_set.insert(key);
             }
         }
-        if field_order.len() > limits.max_fields_per_type {
+        if key_set.len() > limits.max_fields_per_type {
             return Err(KkpvError::LimitExceeded("max_fields_per_type"));
         }
-        let mut fields = Vec::with_capacity(field_order.len());
-        for key in field_order {
+        let keys: Vec<&str> = key_set.iter().copied().collect();
+        let rank_of: std::collections::HashMap<&str, u32> = keys
+            .iter()
+            .enumerate()
+            .map(|(rank, key)| (*key, rank as u32))
+            .collect();
+        let mut columns: Vec<Vec<Option<&KkpvVal<'_>>>> =
+            keys.iter().map(|_| vec![None; members.len()]).collect();
+        for (row, &index) in members.iter().enumerate() {
+            for (key, value) in &input.rows[index].fields {
+                columns[rank_of[key] as usize][row] = Some(value);
+            }
+        }
+        let mut fields = Vec::with_capacity(keys.len());
+        for (key, column) in keys.iter().zip(columns) {
             let key_desc = arena.push_str(key)?;
+            fields.push(FieldPlan {
+                key,
+                key_desc,
+                kind: KIND_BOOL,
+                column,
+            });
+        }
+        // 列类型按键序逐列推断，与逐字段构建版的错误报告顺序一致。
+        for field in &mut fields {
             let mut kind: Option<u8> = None;
-            let mut column = Vec::with_capacity(objects.len());
-            for object in objects {
-                let value = object
-                    .fields
-                    .iter()
-                    .find_map(|(k, v)| (k == key).then_some(v));
-                let Some(value) = value else {
-                    column.push(None);
-                    continue;
-                };
-                if let Some(value_kind) = kind_of(value) {
+            for value in field.column.iter().flatten() {
+                if let Some(value_kind) = kind_of_val(value) {
                     match kind {
                         None => kind = Some(value_kind),
                         Some(existing) if existing != value_kind => {
                             return Err(KkpvError::KindMismatch {
                                 type_key: (*type_key).into(),
-                                field: key.to_string(),
+                                field: field.key.to_string(),
                             });
                         }
                         _ => {}
                     }
                 }
-                column.push(Some(value));
             }
             // 全 null 字段没有可推断的列类型；bool 宽度最小，位图已表达全部信息。
-            let kind = kind.unwrap_or(KIND_BOOL);
-            fields.push(FieldPlan {
-                key_desc,
-                kind,
-                column,
-            });
+            field.kind = kind.unwrap_or(KIND_BOOL);
         }
         plans.push(BucketPlan {
-            rows: objects.len() as u32,
+            rows: members.len() as u32,
             fields,
         });
     }
 
     // 变长载荷在结构段之前进入 arena；描述符按桶/字段/行的确定顺序写入。
+    // 直接追加进 arena，消除逐载荷的临时缓冲拷贝。
     let mut variable_cells: Vec<Vec<Vec<(u32, u32)>>> = Vec::with_capacity(plans.len());
     for plan in &plans {
         let mut per_field = Vec::with_capacity(plan.fields.len());
@@ -144,11 +199,16 @@ pub fn encode(input: &KkpvBlockInput, limits: &KkpvLimits) -> Result<Vec<u8>, Kk
             if is_variable(field.kind) {
                 for value in &field.column {
                     match value {
-                        None | Some(KkpvValue::Null) => cells.push((0u32, 0u32)),
+                        None | Some(KkpvVal::Null) => cells.push((0u32, 0u32)),
                         Some(value) => {
-                            let mut payload = Vec::new();
-                            encode_nested(value, limits, 0, &mut payload)?;
-                            cells.push(arena.push_bytes(&payload)?);
+                            let start = arena.bytes.len();
+                            encode_nested_val(value, limits, 0, &mut arena.bytes)?;
+                            let end = arena.bytes.len();
+                            let fits = |v: usize| {
+                                u32::try_from(v)
+                                    .map_err(|_| KkpvError::LimitExceeded("max_arena_bytes"))
+                            };
+                            cells.push((fits(start)?, fits(end - start)?));
                         }
                     }
                 }
@@ -161,7 +221,7 @@ pub fn encode(input: &KkpvBlockInput, limits: &KkpvLimits) -> Result<Vec<u8>, Kk
         return Err(KkpvError::LimitExceeded("max_arena_bytes"));
     }
 
-    let directory_len = objects.len() * DIRECTORY_ENTRY;
+    let directory_len = order.len() * DIRECTORY_ENTRY;
     let mut bucket_bytes = Vec::new();
     for (i, (plan, per_field)) in plans.iter().zip(&variable_cells).enumerate() {
         let type_desc = type_descs[i];
@@ -188,7 +248,7 @@ pub fn encode(input: &KkpvBlockInput, limits: &KkpvLimits) -> Result<Vec<u8>, Kk
         for field in &plan.fields {
             let mut bitmap = vec![0u8; bitmap_len];
             for (row, value) in field.column.iter().enumerate() {
-                if matches!(value, Some(KkpvValue::Null)) {
+                if matches!(value, Some(KkpvVal::Null)) {
                     bitmap[row / 8] |= 1 << (row % 8);
                 }
             }
@@ -198,7 +258,7 @@ pub fn encode(input: &KkpvBlockInput, limits: &KkpvLimits) -> Result<Vec<u8>, Kk
             let width = column_width(field.kind);
             for (row, value) in field.column.iter().enumerate() {
                 match value {
-                    None | Some(KkpvValue::Null) => {
+                    None | Some(KkpvVal::Null) => {
                         bucket_bytes.extend(std::iter::repeat_n(0u8, width));
                     }
                     Some(value) => {
@@ -208,20 +268,20 @@ pub fn encode(input: &KkpvBlockInput, limits: &KkpvLimits) -> Result<Vec<u8>, Kk
                             bucket_bytes.extend_from_slice(&cell.1.to_le_bytes());
                         } else {
                             match value {
-                                KkpvValue::Bool(b) => bucket_bytes.push(*b as u8),
-                                KkpvValue::Int(v) => {
+                                KkpvVal::Bool(b) => bucket_bytes.push(*b as u8),
+                                KkpvVal::Int(v) => {
                                     bucket_bytes.extend_from_slice(&v.to_le_bytes());
                                 }
-                                KkpvValue::Uint(v) => {
+                                KkpvVal::Uint(v) => {
                                     bucket_bytes.extend_from_slice(&v.to_le_bytes());
                                 }
-                                KkpvValue::Float(v) => {
+                                KkpvVal::Float(v) => {
                                     if !v.is_finite() {
                                         return Err(KkpvError::NonFiniteFloat);
                                     }
                                     bucket_bytes.extend_from_slice(&v.to_le_bytes());
                                 }
-                                KkpvValue::Ref(v) => {
+                                KkpvVal::Ref(v) => {
                                     bucket_bytes.extend_from_slice(&v.to_le_bytes());
                                 }
                                 _ => unreachable!("定宽列的值类型已由 kind 校验"),
@@ -268,8 +328,7 @@ pub fn encode(input: &KkpvBlockInput, limits: &KkpvLimits) -> Result<Vec<u8>, Kk
     let (room_off, room_len) = room_desc;
     out[OFF_ROOM_NAME..OFF_ROOM_NAME + 4].copy_from_slice(&room_off.to_le_bytes());
     out[OFF_ROOM_NAME + 4..OFF_ROOM_NAME + 8].copy_from_slice(&room_len.to_le_bytes());
-    out[OFF_OBJECT_COUNT..OFF_OBJECT_COUNT + 4]
-        .copy_from_slice(&fits(objects.len())?.to_le_bytes());
+    out[OFF_OBJECT_COUNT..OFF_OBJECT_COUNT + 4].copy_from_slice(&fits(order.len())?.to_le_bytes());
     out[OFF_TYPE_COUNT..OFF_TYPE_COUNT + 4].copy_from_slice(&fits(plans.len())?.to_le_bytes());
     let (terrain_o, terrain_l) = seg_pair(terrain_off, terrain_len)?;
     out[OFF_TERRAIN..OFF_TERRAIN + 4].copy_from_slice(&terrain_o.to_le_bytes());
@@ -293,9 +352,10 @@ pub fn encode(input: &KkpvBlockInput, limits: &KkpvLimits) -> Result<Vec<u8>, Kk
         .enumerate()
         .map(|(rank, key)| (*key, (rank as u32, 0)))
         .collect();
-    for (i, object) in objects.iter().enumerate() {
+    for (i, &index) in order.iter().enumerate() {
+        let object = &input.rows[index];
         let counter = row_counters
-            .get_mut(object.type_key.as_str())
+            .get_mut(object.type_key.as_ref())
             .expect("对象必属已建桶");
         let at = directory_off + i * DIRECTORY_ENTRY;
         out[at..at + 8].copy_from_slice(&object.id.to_le_bytes());

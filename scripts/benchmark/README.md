@@ -77,4 +77,6 @@ node --check scripts/benchmark/xxs-probe.mjs
 
 2026-10-10 优化批追注：视野/observer 共享索引、结算字面量门与单次分类、KKPV 房间块共享装配与类型化直造、JS 定宽列急切解码已落地（见[接手台账](../../docs/plans/mod-next-batches.md)）；同机同窗复测归档于 [50x6-after-opt-abc](../../compat/reports/mature-comparison/2026-10-10/50x6-after-opt-abc/summary.json)，kk/xxs 同窗比率 P50 23.4×→3.68×、CPU 5.4×→1.58×、RSS 峰值低约 20%，动作与状态等价保持。上段"kk project P50 5552.90ms"为优化前归档口径，保留不追改；本批未跑五轮正式长窗。
 
+2026-10-10 类型化直写编码器批追注：KKPV 编码改为借用值单一核心（`KkpvVal`/`encode_ref`，owned 入口委托），世界侧单房直写并删除第二套构造器；同机同窗复测归档于 [50x6-after-typed-encoder](../../compat/reports/mature-comparison/2026-10-10/50x6-after-typed-encoder/summary.json)，kk/xxs 比率 P50 3.68×→3.17×、CPU 1.60×、RSS 峰值 0.86×（低 14%），动作与状态等价保持。同日并发标定（kk 单端 4/6/8/10）：并发 8 仅换约 2% wall 多烧 25% CPU、并发 10 负收益，正式对照维持并发 4。**公平门（用户 2026-10-10）：kk 实测平均并行度（CPU/wall）不得超过 xxs 实测（本窗 3.20× vs 6.34×），且 CPU core-ms/tick 不劣化。**
+
 工具回归分别位于 `scripts/tests/` 和本目录。完整 `pnpm run check` 同时执行两组 Python 测试，以及门禁和文档链接检查器的 Node 回归测试。

@@ -29,6 +29,23 @@ A/B/C 已有默认 50×6 短窗和部分 Mod/双通道回归证据，不能据�
 
 【教训】KKPV 信封不可裁剪不可见无状态房：玩家面把缺失条目当作界外房（closed）而非 normal——`Game.map.getRoomStatus` 的界外语义与注册 normal 房必须可区分（mod_chain portals 测试锁定）。任何"信封瘦身"须先改玩家面消费端语义，不能只砍生产端。
 
+【实测】2026-10-10 类型化直写编码器片（同夹具同窗 conc 4、release、与上表口径一致）：`project` P50 548.28→334.40ms（-39%）、wall P50 1176.15→1018.41ms（-13.4%）、CPU 3237.91→3285.22 core-ms/tick（+1.5%，噪声内）、RSS 峰值 2729→2620MiB（-109MiB）。实现：`KkpvVal<'a>`/`KkpvRow<'a>`/`KkpvBlockRef<'a>` 借用值模型 + `encode_ref` 单一编码核心（owned 入口经 `KkpvValue::as_val` 桥接委托，字节同源）；世界侧 `encode_room_block` 单房直写（Generic/Mod 解析保活后借用），删除 `kkpv_object_of`/`record_to_kkpv` 的第二套构造器；字段秩映射 + 行主序填列取代逐字段 find_map 的 O(字段数²) 重扫；变长载荷直接追加 arena。字节等价锁：`encode_ref_matches_owned_entry`（合成全值域块）、共享装配 vs 全 fresh 逐房编码、mod_chain 491 双通道。JSON 参考通道未动；未改玩家 API 行为，兼容性棘轮未重跑。
+
+【实测】2026-10-10 并发标定（kk 单端、同夹具 5+50 短窗、release）：
+
+| 并发 | wall P50 (ms) | CPU (core-ms/tick) | 平均并行度 (CPU/wall) | run P50 (ms) |
+|---:|---:|---:|---:|---:|
+| 4 | 1176.15 | 3237.91 | 2.75× | 382.46 |
+| 6 | 1198.00 | 3906.12 | 3.26× | 357.23 |
+| 8 | 1150.96 | 4036.05 | 3.51× | 309.18 |
+| 10 | 1229.00 | 4293.07 | 3.49× | 343.96 |
+
+并发 8 只换约 2% wall 却多烧 25% CPU，并发 10 直接负收益；瓶颈是串行 project 相，加宽派发窗口只能削 run 尾（382→309ms）。xxs 名义 4 实测平均并行度约 6.5×，kk 并发 4 时 2.75×——用户 2026-10-10 定的公平规则（kk 用核不得超过 xxs 实测）当前满足且余量大；但即使纯收益角度提高并发也不值得。E 片（只读投影流水线）的纯调度收益上限即 run 尾约 300ms，排序在串行削减与 V8 侧复用之后。**正式对照新增公平门：kk 实测平均并行度 ≤ xxs 实测平均并行度，且 CPU core-ms/tick 不劣化。**
+
+【实测】类型化编码器后的新采样归因（主线程 7284 样本/约 7.3s 窗）：`kkpv_bundle_for_viewer` 子树 1741（24%）——其中 `encode_room_block` 约 1100（共享块每拍重建：generation 每拍前进，且本夹具 300 房全有 creep 活动、逐房增量缓存在此场景无节省）、信封 350、`visibility_index` 348（每代际重建一次，可接受）；settle 子树 1809（25%）——其中 room_loop/settle_room 308、tick_with_writebacks 非 room_loop 部约 1107（候选准备/working 格重建/全局相）、写回约 394；等待 V8 工作者 3035（42%）即 run 重叠窗。公开地形束重编码+校验（约 800KB）与意图逐房交叉积均不在热点前列——B.6 残留 1（terrain_epoch 缓存）与意图按房分桶按证据降级为"已注册、待新证据"，不再列为下一片。
+
+【推断】剩余 wall 约 1018ms 的下一步排序：run 约 425ms（V8 执行墙钟，GC 约三分之一）是当前最大单相，V8 侧 wrapper/Game 树复用是下一块大石（约束：Memory 全量 parse/stringify 是官方语义，只优化不改变外部行为）；其次是非 room_loop 的 settle 部分与共享块重建（全活跃房场景的固有成本）。束装配 memcpy 约 75MB/tick ≈ 8ms/tick（10GB/s 量级），不值得为此改传输协议。
+
 【设计】E 片入门形态（配合总体架构的有序/并行约束）：Mod JS 钩子（begin/end_settlement、realm/namespace 状态）与跨房/账户/ID/RNG 归并留在有序全局侧，纯引擎房间候选并行；房间级"意图到齐即可结算"所需的 intentRooms 可由视野索引 room_owners 反查派生（A 片索引的第二个消费者）。验收以默认/Mod 串行参考等价为准。
 
 ## 目标与已有证据

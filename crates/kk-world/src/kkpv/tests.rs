@@ -528,16 +528,22 @@ fn compare_worlds(
     let plan_hash = [7u8; 32];
     let audience = [9u8; 32];
     let reference = world.world_json_for_viewer_with_extensions(viewer, 1000, catalog, None);
-    let blocks = world
-        .kkpv_room_blocks_for_viewer(viewer, catalog, None, plan_hash, audience)
-        .expect("块输入构造成功");
+    let bundle = world
+        .kkpv_fresh_bundle_bytes_for_viewer(viewer, catalog, None, plan_hash, audience)
+        .expect("逐查看者参考束构造成功");
+    let blocks = kk_schema::kkpv::bundle_block_slices(&bundle).expect("束分帧成功");
     let mut total_block_bytes = 0usize;
     let reference_rooms: Vec<&String> = reference["rooms"]
         .as_object()
         .expect("rooms 是对象")
         .keys()
         .collect();
-    let block_rooms: Vec<&String> = blocks.iter().map(|b| &b.room_name).collect();
+    let views: Vec<KkpvView> = blocks
+        .iter()
+        .map(|bytes| KkpvView::decode(bytes, &kk_schema::kkpv::KkpvLimits::default()))
+        .collect::<Result<_, _>>()
+        .expect("块解码成功");
+    let block_rooms: Vec<&str> = views.iter().map(|v| v.room_name()).collect();
     assert_eq!(reference_rooms, block_rooms, "{viewer}: 每注册房间一块");
     let mut objects_by_room: std::collections::BTreeMap<&str, Vec<&Value>> =
         std::collections::BTreeMap::new();
@@ -547,12 +553,8 @@ fn compare_worlds(
             .or_default()
             .push(object);
     }
-    for block in &blocks {
-        let bytes = kk_schema::kkpv::encode(block, &kk_schema::kkpv::KkpvLimits::default())
-            .expect("块编码成功");
+    for (bytes, view) in blocks.iter().zip(&views) {
         total_block_bytes += bytes.len();
-        let view =
-            KkpvView::decode(&bytes, &kk_schema::kkpv::KkpvLimits::default()).expect("块解码成功");
         assert!(view.is_private(), "{viewer}: 桥产出私有块");
         assert_eq!(view.tick(), world.time);
         assert_eq!(view.generation(), world.generation());
@@ -571,7 +573,7 @@ fn compare_worlds(
             let index = view
                 .object_index_by_id(oid.0)
                 .unwrap_or_else(|| panic!("{viewer}/{room}: 块缺对象 {id}"));
-            let materialized = record_json_from_view(&view, index).expect("物化成功");
+            let materialized = record_json_from_view(view, index).expect("物化成功");
             values_equal(object, &materialized, &format!("{viewer}/{room}/{id}"));
             assert_eq!(
                 materialized["id"],
@@ -786,12 +788,11 @@ fn generic_native_ext_key_is_overwritten_by_catalog() {
         json!({"test:charge": 55, "test:ratio": 1.5}),
         "JSON 参考的原生 ext 被目录 ext 覆盖"
     );
-    let blocks = world
-        .kkpv_room_blocks_for_viewer("p1", &catalog_fixture(), None, [0; 32], [0; 32])
+    let bundle = world
+        .kkpv_fresh_bundle_bytes_for_viewer("p1", &catalog_fixture(), None, [0; 32], [0; 32])
         .expect("ext 键冲突按覆盖语义合并，不是错误");
-    let bytes =
-        kk_schema::kkpv::encode(&blocks[0], &kk_schema::kkpv::KkpvLimits::default()).expect("编码");
-    let view = KkpvView::decode(&bytes, &kk_schema::kkpv::KkpvLimits::default()).expect("解码");
+    let bytes = &kk_schema::kkpv::bundle_block_slices(&bundle).expect("分帧")[0];
+    let view = KkpvView::decode(bytes, &kk_schema::kkpv::KkpvLimits::default()).expect("解码");
     let index = view
         .object_index_by_id(2)
         .expect("link 在块内（第二个插入对象 id=2）");
@@ -815,17 +816,18 @@ fn world_block_merges_with_public_overlay() {
     )
     .expect("冻结");
     let catalog = kk_mod_api::extension::ExtensionCatalog::from_plan(&plan).expect("目录");
-    let mut blocks = world
-        .kkpv_room_blocks_for_viewer("p1", &catalog, None, [3u8; 32], [4u8; 32])
+    let bundle = world
+        .kkpv_fresh_bundle_bytes_for_viewer("p1", &catalog, None, [3u8; 32], [4u8; 32])
         .expect("块");
-    let private_input = blocks.remove(0);
-    let private_bytes =
-        kk_schema::kkpv::encode(&private_input, &kk_schema::kkpv::KkpvLimits::default())
-            .expect("编码");
+    let private_bytes = kk_schema::kkpv::bundle_block_slices(&bundle).expect("分帧")[0].to_vec();
+    let private_room = KkpvView::decode(&private_bytes, &kk_schema::kkpv::KkpvLimits::default())
+        .expect("解码")
+        .room_name()
+        .to_string();
     let public_input = world
         .kkpv_public_terrain_blocks([3u8; 32], [4u8; 32])
         .into_iter()
-        .find(|b| b.room_name == private_input.room_name)
+        .find(|b| b.room_name == private_room)
         .expect("公开地形块覆盖同一房间");
     let public_bytes =
         kk_schema::kkpv::encode(&public_input, &kk_schema::kkpv::KkpvLimits::default())
@@ -845,7 +847,7 @@ fn world_block_merges_with_public_overlay() {
 #[test]
 fn shared_bundle_assembly_matches_per_viewer_encoding() {
     // 共享装配路径（可共享房复用块字节 + 回退房逐查看者编码）必须与
-    // kkpv_room_blocks_for_viewer + encode_bundle 的逐查看者编码逐字节
+    // 逐查看者全 fresh 直写编码（kkpv_fresh_bundle_bytes_for_viewer）逐字节
     // 一致：覆盖可见/不可见查看者、他人旗回退、归属工地空块回退与
     // 扩展字段回退（rich_world 的 W1N1 带扩展数据时不共享）。
     let mut world = rich_world();
@@ -888,10 +890,9 @@ fn shared_bundle_assembly_matches_per_viewer_encoding() {
         let (_, assembled) = world
             .kkpv_bundle_for_viewer(user, 42, &catalog, None, [7; 32], audience(user))
             .unwrap_or_else(|e| panic!("查看者 {user} 装配失败: {e}"));
-        let blocks = world
-            .kkpv_room_blocks_for_viewer(user, &catalog, None, [7; 32], audience(user))
+        let reference = world
+            .kkpv_fresh_bundle_bytes_for_viewer(user, &catalog, None, [7; 32], audience(user))
             .unwrap();
-        let reference = encode_bundle(&blocks, &KkpvLimits::default()).unwrap();
         assert_eq!(
             assembled, reference,
             "查看者 {user} 的共享装配束必须与逐查看者编码逐字节一致"

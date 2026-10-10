@@ -10,12 +10,12 @@ pub(crate) fn store_json(store: &kk_schema::room::Store) -> Value {
 }
 
 /// 显式资源名优先；否则码值 1、2 对应 power、G，其余值对应 energy。
-pub(crate) fn energy_resource_name(o: &kk_schema::room::EnergyObj) -> String {
+pub(crate) fn energy_resource_name(o: &kk_schema::room::EnergyObj) -> std::borrow::Cow<'_, str> {
     match (&o.resource, o.resource_type) {
-        (Some(name), _) => name.clone(),
-        (None, 1) => "power".into(),
-        (None, 2) => kk_core::constants::RESOURCE_GHODIUM.into(),
-        (None, _) => "energy".into(),
+        (Some(name), _) => std::borrow::Cow::Borrowed(name.as_str()),
+        (None, 1) => std::borrow::Cow::Borrowed("power"),
+        (None, 2) => std::borrow::Cow::Borrowed(kk_core::constants::RESOURCE_GHODIUM),
+        (None, _) => std::borrow::Cow::Borrowed("energy"),
     }
 }
 
@@ -215,7 +215,7 @@ pub(crate) fn object_json(
         RoomObject::Energy(o) => {
             let mut v = json!({
                 "type": "resource",
-                "resourceType": energy_resource_name(o),
+                "resourceType": energy_resource_name(o).to_string(),
                 "id": id_str, "room": room, "x": o.x, "y": o.y,
                 "amount": o.amount,
             });

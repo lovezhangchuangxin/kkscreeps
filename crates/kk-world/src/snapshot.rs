@@ -286,7 +286,7 @@ fn snapshot_json(
         RoomObject::Energy(o) => json!({
             "kind": "resource", "id": id_str,
             "pos": snap_pos(room, o.x, o.y),
-            "resourceType": crate::projection::energy_resource_name(o),
+            "resourceType": crate::projection::energy_resource_name(o).to_string(),
             "amount": o.amount,
         }),
         // 衰减时间限制为非负值；vanilla snapshotTombstone、snapshotRuin 使用裸减法。

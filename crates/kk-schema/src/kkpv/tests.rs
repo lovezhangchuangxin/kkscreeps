@@ -888,3 +888,69 @@ fn merge_rejects_identity_and_conflicts() {
         KkpvError::MergeFlags { .. }
     ));
 }
+
+/// owned 入口（`encode`）与借用入口（`encode_ref`）必须逐字节一致：
+/// 两条路径共用同一编码核心，本测试在混合值域（定宽/变长/嵌套/缺失/
+/// null/全 null 列/多类型桶/乱序输入）上锁定不漂移。
+#[test]
+fn encode_ref_matches_owned_entry() {
+    use std::borrow::Cow;
+    let objects = vec![
+        obj(
+            9,
+            "t:b",
+            &[
+                ("only_b", KkpvValue::Bool(false)),
+                ("maybe", KkpvValue::Null),
+            ],
+        ),
+        obj(
+            2,
+            "t:a",
+            &[
+                ("i", KkpvValue::Int(-3)),
+                ("s", KkpvValue::Str("文本".into())),
+                (
+                    "rec",
+                    KkpvValue::Object(vec![(
+                        "成员".into(),
+                        KkpvValue::Array(vec![KkpvValue::Ref(7), KkpvValue::Null]),
+                    )]),
+                ),
+            ],
+        ),
+        obj(
+            5,
+            "t:a",
+            &[("i", KkpvValue::Int(9)), ("f", KkpvValue::Uint(1))],
+        ),
+        // 桶内唯一行且字段全 null：列类型回退 bool。
+        obj(11, "t:c", &[("all_null", KkpvValue::Null)]),
+    ];
+    let input = input(objects);
+    let owned = enc(&input);
+    let block = KkpvBlockRef {
+        private: input.private,
+        tick: input.tick,
+        generation: input.generation,
+        plan_hash: input.plan_hash,
+        audience_hash: input.audience_hash,
+        room_name: input.room_name.as_str(),
+        terrain: None,
+        rows: input
+            .objects
+            .iter()
+            .map(|object| KkpvRow {
+                id: object.id,
+                type_key: Cow::Borrowed(object.type_key.as_str()),
+                fields: object
+                    .fields
+                    .iter()
+                    .map(|(key, value)| (key.as_str(), value.as_val()))
+                    .collect(),
+            })
+            .collect(),
+    };
+    let direct = encode_ref(&block, &KkpvLimits::default()).expect("借用入口编码成功");
+    assert_eq!(owned, direct, "owned 与借用入口必须产出相同字节");
+}

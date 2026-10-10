@@ -13,8 +13,8 @@
 //! 字符串——不猜测任意键的引用语义。
 
 use kk_schema::kkpv::{
-    KkpvBlockInput, KkpvLimits, KkpvObject, KkpvValue, KkpvView, encode, encode_bundle,
-    patch_block_audience,
+    KkpvBlockInput, KkpvBlockRef, KkpvLimits, KkpvObject, KkpvRow, KkpvVal, KkpvValue, KkpvView,
+    encode_bundle, encode_ref, patch_block_audience,
 };
 use kk_schema::room::RoomObject;
 use serde_json::Value;
@@ -26,7 +26,7 @@ use crate::projection::{ext_entries_json, object_exported_for, object_json};
 use crate::world::{ObjId, World};
 
 mod objects;
-use objects::kkpv_object_of;
+use objects::{RoomBlockMeta, encode_room_block, type_key_cow};
 
 /// 同代际同计划下可跨查看者共享的房间私有块字节。块头 audience 置零，
 /// 装配时按查看者改写（[`kk_schema::kkpv::patch_block_audience`]），
@@ -64,9 +64,13 @@ impl World {
     /// 空 user 与空目录——可共享房内 user 只作用于旗/Mod/ext 裁切，
     /// 这些对象类型已被共享条件排除，输出与任意真实查看者一致。
     fn build_shared_room_blocks(&self, plan_hash: [u8; 32]) -> BTreeMap<String, SharedRoomBlock> {
-        let limits = KkpvLimits::default();
-        let zero_audience = [0u8; 32];
         let empty_catalog = kk_mod_api::extension::ExtensionCatalog::default();
+        let meta = RoomBlockMeta {
+            tick: self.time,
+            generation: self.generation(),
+            plan_hash,
+            audience_hash: [0u8; 32],
+        };
         let mut map = BTreeMap::new();
         for (name, state) in &self.rooms {
             let (mut has_owned_flag, mut has_mod, mut has_owned_site) = (false, false, false);
@@ -82,61 +86,41 @@ impl World {
                 continue;
             }
             let controller = state.controller();
-            let mut objects = Vec::new();
-            let mut ok = true;
-            for (id, object) in &state.objects {
-                match kkpv_object_of(
-                    name,
-                    state,
-                    controller,
-                    *id,
-                    object,
-                    "",
-                    true,
-                    &empty_catalog,
-                    None,
-                    self.time,
-                ) {
-                    Ok(Some(object)) => objects.push(object),
-                    Ok(None) => {}
-                    Err(_) => {
-                        // 共享构建失败不缓存半成品：该房回退逐查看者路径，
-                        // 由真实调用方报出原始错误。
-                        ok = false;
-                        break;
-                    }
-                }
-            }
-            if !ok {
-                continue;
-            }
-            let full_input = KkpvBlockInput {
-                private: true,
-                tick: self.time,
-                generation: self.generation(),
-                plan_hash,
-                audience_hash: zero_audience,
-                room_name: name.clone(),
-                terrain: None,
-                objects,
-            };
-            let Ok(full) = encode(&full_input, &limits) else {
+            // 共享构建失败不缓存半成品：该房回退逐查看者路径，由真实
+            // 调用方报出原始错误。
+            let Ok(full) = encode_room_block(
+                name,
+                state,
+                controller,
+                self.time,
+                meta,
+                "",
+                true,
+                None,
+                &empty_catalog,
+                None,
+            ) else {
                 continue;
             };
+            // 不可见查看者的空块：无归属工地即可共享（空 user 下导出门
+            // 排除全部对象，产物是零行块）；失败同样回退逐查看者路径。
             let empty = if has_owned_site {
                 None
             } else {
-                let empty_input = KkpvBlockInput {
-                    private: true,
-                    tick: self.time,
-                    generation: self.generation(),
-                    plan_hash,
-                    audience_hash: zero_audience,
-                    room_name: name.clone(),
-                    terrain: None,
-                    objects: Vec::new(),
-                };
-                encode(&empty_input, &limits).ok().map(Arc::new)
+                encode_room_block(
+                    name,
+                    state,
+                    controller,
+                    self.time,
+                    meta,
+                    "",
+                    false,
+                    None,
+                    &empty_catalog,
+                    None,
+                )
+                .ok()
+                .map(Arc::new)
             };
             map.insert(
                 name.clone(),
@@ -198,41 +182,31 @@ impl World {
             let source = match use_shared {
                 Some(source) => source,
                 None => {
-                    // 不可共享（或空块不可共享）：逐查看者编码，输出与
-                    // kkpv_room_blocks_for_viewer 同源。
-                    let controller = state.controller();
-                    let mut objects = Vec::new();
-                    if room_visible {
-                        for (id, object) in &state.objects {
-                            if let Some(object) = kkpv_object_of(
-                                name, state, controller, *id, object, user, true, catalog, surface,
-                                self.time,
-                            )? {
-                                objects.push(object);
-                            }
-                        }
-                    } else if let Some(candidates) = index.invisible_room_candidates(name, user) {
-                        for id in candidates {
-                            let object = &state.objects[&id];
-                            if let Some(object) = kkpv_object_of(
-                                name, state, controller, id, object, user, false, catalog, surface,
-                                self.time,
-                            )? {
-                                objects.push(object);
-                            }
-                        }
-                    }
-                    let input = KkpvBlockInput {
-                        private: true,
-                        tick: self.time,
-                        generation: self.generation(),
-                        plan_hash,
-                        audience_hash,
-                        room_name: name.clone(),
-                        terrain: None,
-                        objects,
+                    // 不可共享（或空块不可共享）：逐查看者直写编码，输出与
+                    // 逐查看者全量构造同源。
+                    let candidates = if room_visible {
+                        None
+                    } else {
+                        index.invisible_room_candidates(name, user)
                     };
-                    Source::Fresh(encode(&input, &limits).map_err(|e| e.to_string())?)
+                    let candidates = candidates.as_deref();
+                    Source::Fresh(encode_room_block(
+                        name,
+                        state,
+                        state.controller(),
+                        self.time,
+                        RoomBlockMeta {
+                            tick: self.time,
+                            generation: self.generation(),
+                            plan_hash,
+                            audience_hash,
+                        },
+                        user,
+                        room_visible,
+                        candidates,
+                        catalog,
+                        surface,
+                    )?)
                 }
             };
             sources.push(source);
@@ -276,65 +250,65 @@ impl World {
         Ok((envelope, out))
     }
 
-    /// 为查看者生成每注册房间一个 KKPV 块输入。`plan_hash` 与
-    /// `audience_hash` 由宿主提供：前者来自冻结计划指纹，后者是宿主
-    /// 定义的查看者摘要，本函数不计算两者。
+    /// 测试参考：不经共享块缓存，逐房以真实查看者直写编码后按束框架
+    /// 拼接（与 [`encode_bundle`] 分帧一致）。生产装配走
+    /// [`World::kkpv_bundle_for_viewer`]，共享房复用缓存字节——两者
+    /// 的逐字节对照由 `shared_bundle_assembly_matches_per_viewer_encoding`
+    /// 锁定。
     ///
     /// # Errors
-    /// 对象记录中出现无法映射为 KKPV 值形态的数据时返回错误；
-    /// 正常 `object_json` 输出与已过写入门的扩展值不会触发。
-    pub fn kkpv_room_blocks_for_viewer(
+    /// 对象记录无法映射为 KKPV 值形态或编码超限时返回错误。
+    #[cfg(test)]
+    pub(crate) fn kkpv_fresh_bundle_bytes_for_viewer(
         &self,
         user: &str,
         catalog: &kk_mod_api::extension::ExtensionCatalog,
         surface: Option<&kk_mod_api::player_surface::PlayerSurface>,
         plan_hash: [u8; 32],
         audience_hash: [u8; 32],
-    ) -> Result<Vec<KkpvBlockInput>, String> {
-        let mut blocks = Vec::with_capacity(self.rooms.len());
-        // 观察限时视野与 JSON 通道同源（world_json_impl）：标记房并入可见集。
-        // 代际共享索引取代逐玩家全服扫描；observer 判定已在构建时完成。
+    ) -> Result<Vec<u8>, String> {
         let index = self.visibility_index();
         let observed = index.observed_rooms_of(user);
+        let meta = RoomBlockMeta {
+            tick: self.time,
+            generation: self.generation(),
+            plan_hash,
+            audience_hash,
+        };
+        let mut blocks = Vec::with_capacity(self.rooms.len());
         for (name, state) in &self.rooms {
             let room_visible = index.room_visible_to(name, user)
                 || observed.is_some_and(|observed| observed.contains(name));
-            let controller = state.controller();
-            let mut objects = Vec::new();
-            if room_visible {
-                for (id, object) in &state.objects {
-                    if let Some(kkpv_object) = kkpv_object_of(
-                        name, state, controller, *id, object, user, true, catalog, surface,
-                        self.time,
-                    )? {
-                        objects.push(kkpv_object);
-                    }
-                }
-            } else if let Some(candidates) = index.invisible_room_candidates(name, user) {
-                // 不可见房只枚举己方旗/工地与 Mod 对象（索引按 ID 升序给出，
-                // 与全对象枚举的相对顺序一致），不再遍历该房全部对象。
-                for id in candidates {
-                    let object = &state.objects[&id];
-                    if let Some(kkpv_object) = kkpv_object_of(
-                        name, state, controller, id, object, user, false, catalog, surface,
-                        self.time,
-                    )? {
-                        objects.push(kkpv_object);
-                    }
-                }
-            }
-            blocks.push(KkpvBlockInput {
-                private: true,
-                tick: self.time,
-                generation: self.generation(),
-                plan_hash,
-                audience_hash,
-                room_name: name.clone(),
-                terrain: None,
-                objects,
-            });
+            let candidates = if room_visible {
+                None
+            } else {
+                index.invisible_room_candidates(name, user)
+            };
+            let candidates = candidates.as_deref();
+            blocks.push(encode_room_block(
+                name,
+                state,
+                state.controller(),
+                self.time,
+                meta,
+                user,
+                room_visible,
+                candidates,
+                catalog,
+                surface,
+            )?);
         }
-        Ok(blocks)
+        let total = 4 + blocks.len() * 4 + blocks.iter().map(Vec::len).sum::<usize>();
+        let fits = |v: usize| u32::try_from(v).map_err(|_| "束长度超出 u32 框架".to_string());
+        let mut out = Vec::with_capacity(total);
+        out.extend_from_slice(&fits(blocks.len())?.to_le_bytes());
+        for block in &blocks {
+            out.extend_from_slice(&fits(block.len())?.to_le_bytes());
+        }
+        for block in blocks {
+            out.extend_from_slice(&block);
+        }
+        Ok(out)
     }
 
     /// 为全部注册房间生成公开地形块：内容与查看者无关（同一代际下全部
@@ -588,72 +562,7 @@ pub fn kkpv_envelope_from_world_json(world: &Value) -> Value {
 /// `builtin:{目标结构类型}`——同一对象的两键不同，按桶键反查目录的
 /// 消费者在接线时须以 structureType 为准。
 fn type_key_of(record: &Value) -> String {
-    let kind = record
-        .get("type")
-        .and_then(Value::as_str)
-        .unwrap_or("generic");
-    match kind {
-        // Mod 记录的桶键是类型键本身（namespace:name 形，非 builtin 桶）。
-        "mod" => record
-            .get("modType")
-            .and_then(Value::as_str)
-            .unwrap_or("builtin:mod")
-            .to_string(),
-        _ => match (kind, record.get("structureType").and_then(Value::as_str)) {
-            ("structure", Some(st)) | ("spawn", Some(st)) => format!("builtin:{st}"),
-            _ => format!("builtin:{kind}"),
-        },
-    }
-}
-
-/// 把 `object_json` 记录转为块对象。`id` 由目录承担，字段中跳过；
-/// 墓碑 `creepId` 与废墟 `structure.id` 转为 `Ref` 编码。
-fn record_to_kkpv(id: ObjId, source: &RoomObject, record: &Value) -> Result<KkpvObject, String> {
-    let type_key = type_key_of(record);
-    let fields_src = record.as_object().ok_or("对象记录必须是 JSON 对象")?;
-    let mut fields = Vec::with_capacity(fields_src.len());
-    for (key, value) in fields_src {
-        if key == "id" {
-            continue;
-        }
-        let converted = match (source, key.as_str()) {
-            (RoomObject::Tombstone(_), "creepId") => match value {
-                Value::Null => KkpvValue::Null,
-                Value::String(s) => match ObjId::parse(s) {
-                    Some(id) => KkpvValue::Ref(id.0),
-                    None => KkpvValue::Str(s.clone()),
-                },
-                other => value_to_kkpv(other)?,
-            },
-            (RoomObject::Ruin(_), "structure") => ruin_structure_value(value)?,
-            _ => value_to_kkpv(value)?,
-        };
-        fields.push((key.clone(), converted));
-    }
-    Ok(KkpvObject {
-        id: id.0,
-        type_key,
-        fields,
-    })
-}
-
-/// 废墟内嵌 structure 记录：其 `id` 成员是 `object_json` 从 u64 生成的
-/// 引用字符串，转回 `Ref`；其余成员按普通值转换。
-fn ruin_structure_value(value: &Value) -> Result<KkpvValue, String> {
-    let map = value.as_object().ok_or("废墟 structure 须为对象")?;
-    let mut entries = Vec::with_capacity(map.len());
-    for (key, member) in map {
-        let converted = if key == "id"
-            && let Value::String(s) = member
-            && let Some(id) = ObjId::parse(s)
-        {
-            KkpvValue::Ref(id.0)
-        } else {
-            value_to_kkpv(member)?
-        };
-        entries.push((key.clone(), converted));
-    }
-    Ok(KkpvValue::Object(entries))
+    type_key_cow(record).into_owned()
 }
 
 fn value_to_kkpv(value: &Value) -> Result<KkpvValue, String> {

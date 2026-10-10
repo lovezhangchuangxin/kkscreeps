@@ -1,70 +1,194 @@
-//! 单对象 → KKPV 块对象的转换：Generic 走 JSON 参考路径，类型化对象
-//! 直接构造（跳过 serde_json 中间树）。字段集与嵌套键序和
-//! `object_json` + `record_to_kkpv` 的产物逐字段等价，由
-//! `shared_bundle_assembly_matches_per_viewer_encoding` 等测试锁定。
+//! 单对象 → KKPV 借用行的转换与单房直写编码：Generic/Mod 走解析
+//! 保活 + 借用参考记录，类型化对象直接构造（跳过 serde_json 与 owned
+//! `KkpvObject` 两层中间树）。字段集与嵌套键序和 `object_json` +
+//! `record_to_kkpv` 时代的产物逐字段等价，由
+//! `shared_bundle_assembly_matches_per_viewer_encoding` 与双通道等价
+//! 测试锁定。
+
+use std::borrow::Cow;
 
 use super::*;
 
+/// 单房私有块的编码身份：块头 tick/generation 与宿主摘要。`private`
+/// 恒真——公开地形块走 [`World::kkpv_public_terrain_blocks`] 另一条路。
+#[derive(Clone, Copy)]
+pub(super) struct RoomBlockMeta {
+    pub(super) tick: u64,
+    pub(super) generation: u64,
+    pub(super) plan_hash: [u8; 32],
+    pub(super) audience_hash: [u8; 32],
+}
+
 /// 类型化对象的 structureType 名（object_json 记录同源）；非结构与
-/// Generic 返回 None——后者由调用方从参考记录读取。
-pub(super) fn typed_structure_name(object: &RoomObject) -> Option<String> {
+/// Generic/Mod 返回 None——后者由调用方从参考记录读取。
+pub(super) fn typed_structure_name(object: &RoomObject) -> Option<&str> {
     match object {
-        RoomObject::Spawn(_) => Some("spawn".into()),
-        RoomObject::Source(_) => Some("source".into()),
-        RoomObject::Controller(_) => Some("controller".into()),
-        RoomObject::Extension(_) => Some("extension".into()),
-        RoomObject::ConstructedWall(_) => Some("constructedWall".into()),
-        RoomObject::Road(_) => Some("road".into()),
-        RoomObject::Storage(_) => Some("storage".into()),
-        RoomObject::Mineral(_) => Some("mineral".into()),
-        RoomObject::Extractor(_) => Some("extractor".into()),
-        RoomObject::ConstructionSite(o) => Some(o.structure_type.clone()),
+        RoomObject::Spawn(_) => Some("spawn"),
+        RoomObject::Source(_) => Some("source"),
+        RoomObject::Controller(_) => Some("controller"),
+        RoomObject::Extension(_) => Some("extension"),
+        RoomObject::ConstructedWall(_) => Some("constructedWall"),
+        RoomObject::Road(_) => Some("road"),
+        RoomObject::Storage(_) => Some("storage"),
+        RoomObject::Mineral(_) => Some("mineral"),
+        RoomObject::Extractor(_) => Some("extractor"),
+        RoomObject::ConstructionSite(o) => Some(o.structure_type.as_str()),
         _ => None,
     }
 }
 
-/// 类型化对象的直接 KKPV 构造：跳过 `object_json` 的 serde_json Value
-/// 中间树，字段集、键序（嵌套内）、数值形态（整数一律 Int，与
-/// value_to_kkpv 的 as_i64 优先序一致）和 pos/effects 尾部与
-/// `object_json` + `record_to_kkpv` 的产物逐字段等价——由
-/// `shared_bundle_assembly_matches_per_viewer_encoding` 等测试锁定。
-/// Generic 不走本路径：data 本身就是 JSON，解析不可省。
-pub(super) fn object_kkpv(
-    room: &str,
+/// 结构类型桶键 `builtin:{structureType}`：结构类型集由官方常量冻结，
+/// 静态映射避免逐对象格式化分配；未知类型（Mod 自定义目标结构）回退
+/// 运行时拼装，产物字符串等价。
+fn builtin_structure_key(structure_type: &str) -> Cow<'static, str> {
+    let key = match structure_type {
+        "spawn" => "builtin:spawn",
+        "extension" => "builtin:extension",
+        "road" => "builtin:road",
+        "constructedWall" => "builtin:constructedWall",
+        "rampart" => "builtin:rampart",
+        "keeperLair" => "builtin:keeperLair",
+        "portal" => "builtin:portal",
+        "controller" => "builtin:controller",
+        "link" => "builtin:link",
+        "storage" => "builtin:storage",
+        "tower" => "builtin:tower",
+        "observer" => "builtin:observer",
+        "powerBank" => "builtin:powerBank",
+        "powerSpawn" => "builtin:powerSpawn",
+        "extractor" => "builtin:extractor",
+        "lab" => "builtin:lab",
+        "terminal" => "builtin:terminal",
+        "container" => "builtin:container",
+        "nuker" => "builtin:nuker",
+        "factory" => "builtin:factory",
+        "invaderCore" => "builtin:invaderCore",
+        "source" => "builtin:source",
+        "mineral" => "builtin:mineral",
+        _ => return Cow::Owned(format!("builtin:{structure_type}")),
+    };
+    Cow::Borrowed(key)
+}
+
+/// 参考记录的 KKPV 桶键（与旧 `type_key_of` 等价）：结构/出生点用
+/// `builtin:{structureType}`，Mod 记录用类型键本身，其余 `builtin:{type}`。
+pub(super) fn type_key_cow(record: &Value) -> Cow<'_, str> {
+    let kind = record
+        .get("type")
+        .and_then(Value::as_str)
+        .unwrap_or("generic");
+    match kind {
+        // Mod 记录的桶键是类型键本身（namespace:name 形，非 builtin 桶）。
+        "mod" => Cow::Borrowed(
+            record
+                .get("modType")
+                .and_then(Value::as_str)
+                .unwrap_or("builtin:mod"),
+        ),
+        "structure" | "spawn" => match record.get("structureType").and_then(Value::as_str) {
+            Some(st) => builtin_structure_key(st),
+            None => Cow::Owned(format!("builtin:{kind}")),
+        },
+        "creep" => Cow::Borrowed("builtin:creep"),
+        "constructionSite" => Cow::Borrowed("builtin:constructionSite"),
+        "resource" => Cow::Borrowed("builtin:resource"),
+        "flag" => Cow::Borrowed("builtin:flag"),
+        "tombstone" => Cow::Borrowed("builtin:tombstone"),
+        "ruin" => Cow::Borrowed("builtin:ruin"),
+        other => Cow::Owned(format!("builtin:{other}")),
+    }
+}
+
+/// `object_json` 记录值的借用 KKPV 转换：数值 as_i64 优先（与
+/// `value_to_kkpv` 同序），字符串与对象键零拷贝借用。
+fn json_val(value: &Value) -> Result<KkpvVal<'_>, String> {
+    Ok(match value {
+        Value::Null => KkpvVal::Null,
+        Value::Bool(b) => KkpvVal::Bool(*b),
+        Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                KkpvVal::Int(i)
+            } else if let Some(u) = n.as_u64() {
+                KkpvVal::Uint(u)
+            } else if let Some(f) = n.as_f64() {
+                // JSON 数值不会是非有限浮点；此处仅为穷尽性防御。
+                KkpvVal::Float(f)
+            } else {
+                return Err(format!("无法编码的数值 {n}"));
+            }
+        }
+        Value::String(s) => KkpvVal::Str(s),
+        Value::Array(items) => items
+            .iter()
+            .map(json_val)
+            .collect::<Result<Vec<_>, _>>()
+            .map(KkpvVal::Array)?,
+        Value::Object(map) => map
+            .iter()
+            .map(|(k, v)| json_val(v).map(|v| (k.as_str(), v)))
+            .collect::<Result<Vec<_>, _>>()
+            .map(KkpvVal::Object)?,
+    })
+}
+
+/// 解析参考记录 → 借用行：`id` 由目录承担跳过；目录 ext 存在时原生
+/// `ext` 键按覆盖语义丢弃，由调用方追加目录版本。
+fn json_row(id: ObjId, record: &Value, ext_replaced: bool) -> Result<KkpvRow<'_>, String> {
+    let fields_src = record.as_object().ok_or("对象记录必须是 JSON 对象")?;
+    let mut fields = Vec::with_capacity(fields_src.len());
+    for (key, value) in fields_src {
+        if key == "id" || (ext_replaced && key == "ext") {
+            continue;
+        }
+        fields.push((key.as_str(), json_val(value)?));
+    }
+    Ok(KkpvRow {
+        id: id.0,
+        type_key: type_key_cow(record),
+        fields,
+    })
+}
+
+/// 类型化对象的借用行构造：跳过 `object_json` 的 serde_json Value 与
+/// owned `KkpvObject` 两层中间树，字段集、键序（嵌套内）、数值形态
+/// （整数一律 Int，与 as_i64 优先序一致）和 pos/effects 尾部与 JSON
+/// 参考通道逐字段等价。Generic/Mod 不走本路径：data 本身就是 JSON，
+/// 解析不可省，由调用方保活参考记录后走 [`json_row`]。
+#[allow(clippy::too_many_arguments)]
+fn object_row<'a>(
+    room: &'a str,
     id: ObjId,
-    object: &RoomObject,
+    object: &'a RoomObject,
     time: u64,
-    terrain: &kk_core::Terrain,
+    terrain: &'a kk_core::Terrain,
     controller: Option<&kk_schema::room::ControllerObj>,
-    effects: Option<&Vec<crate::EffectEntry>>,
-) -> KkpvObject {
+    effects: Option<&'a Vec<crate::EffectEntry>>,
+) -> KkpvRow<'a> {
     use kk_core::constants as c;
     use kk_schema::room::{
         BodyPart, ConstructionSiteObj, ControllerObj, CreepObj, EnergyObj, ExtensionObj, FlagObj,
         MineralObj, RoadObj, RoomObject as RO, RuinObj, SourceObj, SpawnObj, StorageObj,
         TombstoneObj,
     };
-    let mut fields: Vec<(String, KkpvValue)> = Vec::new();
-    let mut kv = |key: &str, value: KkpvValue| fields.push((key.to_string(), value));
-    let int = |v: i64| KkpvValue::Int(v);
-    let strv = |v: &str| KkpvValue::Str(v.to_string());
+    let mut fields: Vec<(&'a str, KkpvVal<'a>)> = Vec::new();
+    let mut kv = |key: &'static str, value: KkpvVal<'a>| fields.push((key, value));
+    let int = |v: i64| KkpvVal::Int(v);
+    let strv = |v: &'a str| KkpvVal::Str(v);
     // store 键序与 store_json/store_with_extra_json 的插入序一致：
     // 正量 energy、正量 G、energy（含 0，覆盖或追加）、正量额外资源。
-    let store_kkpv = |store: &kk_schema::room::Store, extra: &[kk_schema::room::ResourceStack]| {
-        let mut entries: Vec<(String, KkpvValue)> = Vec::new();
+    let store_val = |store: &'a kk_schema::room::Store,
+                     extra: &'a [kk_schema::room::ResourceStack]| {
+        let mut entries: Vec<(&'a str, KkpvVal<'a>)> = Vec::new();
         if store.energy > 0 {
-            entries.push(("energy".into(), int(store.energy as i64)));
+            entries.push(("energy", int(store.energy as i64)));
         }
         if store.ghodium > 0 {
-            entries.push((
-                kk_core::constants::RESOURCE_GHODIUM.into(),
-                int(store.ghodium as i64),
-            ));
+            entries.push((c::RESOURCE_GHODIUM, int(store.ghodium as i64)));
         }
-        if let Some(entry) = entries.iter_mut().find(|(key, _)| key == "energy") {
+        if let Some(entry) = entries.iter_mut().find(|(key, _)| *key == "energy") {
             entry.1 = int(store.energy as i64);
         } else {
-            entries.push(("energy".into(), int(store.energy as i64)));
+            entries.push(("energy", int(store.energy as i64)));
         }
         for stack in extra {
             if stack.amount == 0 {
@@ -72,41 +196,46 @@ pub(super) fn object_kkpv(
             }
             if let Some(entry) = entries
                 .iter_mut()
-                .find(|(key, _)| key.as_str() == stack.resource.as_str())
+                .find(|(key, _)| *key == stack.resource.as_str())
             {
                 entry.1 = int(stack.amount as i64);
             } else {
-                entries.push((stack.resource.clone(), int(stack.amount as i64)));
+                entries.push((stack.resource.as_str(), int(stack.amount as i64)));
             }
         }
-        KkpvValue::Object(entries)
+        KkpvVal::Object(entries)
     };
-    let part_kkpv = |p: &BodyPart| {
+    let part_val = |p: &'a BodyPart| {
         let kind = crate::types::BodyKind::from_code(p.kind).map(crate::types::BodyKind::name);
         let mut entries = Vec::new();
         if let Some(kind) = kind {
-            entries.push(("type".to_string(), strv(kind)));
+            entries.push(("type", strv(kind)));
         }
-        entries.push(("hits".to_string(), int(p.hits as i64)));
+        entries.push(("hits", int(p.hits as i64)));
         if let Some(boost) = &p.boost {
-            entries.push(("boost".to_string(), strv(boost)));
+            entries.push(("boost", strv(boost)));
         }
-        KkpvValue::Object(entries)
+        KkpvVal::Object(entries)
     };
-    let type_key = match object {
-        RO::Creep(_) => "builtin:creep",
-        RO::Spawn(_) => "builtin:spawn",
-        RO::ConstructionSite(_) => "builtin:constructionSite",
-        RO::Energy(_) => "builtin:resource",
-        RO::Flag(_) => "builtin:flag",
-        RO::Tombstone(_) => "builtin:tombstone",
-        RO::Ruin(_) => "builtin:ruin",
-        RO::Source(_) => "builtin:source",
-        RO::Mineral(_) => "builtin:mineral",
-        // 其余 typed 变体都是 type=structure；桶键由 structureType 决定。
-        _ => "",
-    }
-    .to_string();
+    let type_key: Cow<'a, str> = match object {
+        RO::Creep(_) => Cow::Borrowed("builtin:creep"),
+        RO::Spawn(_) => Cow::Borrowed("builtin:spawn"),
+        RO::ConstructionSite(o) => builtin_structure_key(&o.structure_type),
+        RO::Energy(_) => Cow::Borrowed("builtin:resource"),
+        RO::Flag(_) => Cow::Borrowed("builtin:flag"),
+        RO::Tombstone(_) => Cow::Borrowed("builtin:tombstone"),
+        RO::Ruin(_) => Cow::Borrowed("builtin:ruin"),
+        RO::Source(_) => Cow::Borrowed("builtin:source"),
+        RO::Mineral(_) => Cow::Borrowed("builtin:mineral"),
+        // 其余 typed 变体都是 structure 记录，桶键由 structureType 决定。
+        RO::Controller(_) => Cow::Borrowed("builtin:controller"),
+        RO::Extension(_) => Cow::Borrowed("builtin:extension"),
+        RO::ConstructedWall(_) => Cow::Borrowed("builtin:constructedWall"),
+        RO::Road(_) => Cow::Borrowed("builtin:road"),
+        RO::Storage(_) => Cow::Borrowed("builtin:storage"),
+        RO::Extractor(_) => Cow::Borrowed("builtin:extractor"),
+        RO::Generic(_) | RO::Mod(_) => unreachable!("object_row 只处理类型化对象"),
+    };
 
     match object {
         RO::Creep(o) => {
@@ -132,29 +261,26 @@ pub(super) fn object_kkpv(
             kv("y", int(*y as i64));
             kv("name", strv(name));
             kv("owner", strv(owner));
-            kv(
-                "body",
-                KkpvValue::Array(body.iter().map(part_kkpv).collect()),
-            );
+            kv("body", KkpvVal::Array(body.iter().map(part_val).collect()));
             kv("fatigue", int(o.fatigue as i64));
             kv("ageTime", int(*age_time as i64));
             kv("hits", int(*hits as i64));
             kv("hitsMax", int(body.len() as i64 * 100));
-            kv("store", store_kkpv(store, store_extra));
+            kv("store", store_val(store, store_extra));
             kv(
                 "storeCapacity",
                 int(crate::snapshot::creep_store_capacity_raw(body)),
             );
-            kv("spawning", KkpvValue::Bool(*spawning));
+            kv("spawning", KkpvVal::Bool(*spawning));
             if *age_time != 0 {
                 kv("ticksToLive", int(age_time.saturating_sub(time) as i64));
             }
             if let Some(message) = say_message {
                 kv("say", strv(message));
-                kv("sayPublic", KkpvValue::Bool(say_public.unwrap_or(false)));
+                kv("sayPublic", KkpvVal::Bool(say_public.unwrap_or(false)));
             }
             if let Some(flag) = notify_when_attacked {
-                kv("notifyWhenAttacked", KkpvValue::Bool(*flag));
+                kv("notifyWhenAttacked", KkpvVal::Bool(*flag));
             }
         }
         RO::Source(o) => {
@@ -177,7 +303,7 @@ pub(super) fn object_kkpv(
                 "ticksToRegeneration",
                 match next_regeneration_time {
                     Some(t) if *t != 0 => int(t.saturating_sub(time) as i64),
-                    _ => KkpvValue::Null,
+                    _ => KkpvVal::Null,
                 },
             );
         }
@@ -216,29 +342,29 @@ pub(super) fn object_kkpv(
                 "downgradeTime",
                 downgrade_time
                     .map(|t| int(t as i64))
-                    .unwrap_or(KkpvValue::Null),
+                    .unwrap_or(KkpvVal::Null),
             );
-            kv("isPowerEnabled", KkpvValue::Bool(*is_power_enabled));
+            kv("isPowerEnabled", KkpvVal::Bool(*is_power_enabled));
             kv(
                 "upgradeBlocked",
                 upgrade_blocked
                     .map(|t| int(t as i64))
-                    .unwrap_or(KkpvValue::Null),
+                    .unwrap_or(KkpvVal::Null),
             );
             kv(
                 "safeModeCooldown",
                 safe_mode_cooldown
                     .map(|t| int(t as i64))
-                    .unwrap_or(KkpvValue::Null),
+                    .unwrap_or(KkpvVal::Null),
             );
             kv(
                 "reservation",
                 match reservation {
-                    Some(r) => KkpvValue::Object(vec![
-                        ("user".to_string(), strv(&r.user)),
-                        ("endTime".to_string(), int(r.end_time as i64)),
+                    Some(r) => KkpvVal::Object(vec![
+                        ("user", strv(&r.user)),
+                        ("endTime", int(r.end_time as i64)),
                     ]),
-                    None => KkpvValue::Null,
+                    None => KkpvVal::Null,
                 },
             );
             kv(
@@ -246,21 +372,21 @@ pub(super) fn object_kkpv(
                 match sign {
                     Some(sv) => {
                         let mut entries = vec![
-                            ("user".to_string(), strv(&sv.user)),
-                            ("text".to_string(), strv(&sv.text)),
-                            ("time".to_string(), int(sv.time as i64)),
+                            ("user", strv(&sv.user)),
+                            ("text", strv(&sv.text)),
+                            ("time", int(sv.time as i64)),
                         ];
                         if let Some(datetime) = sv.datetime {
-                            entries.push(("datetime".to_string(), int(datetime as i64)));
+                            entries.push(("datetime", int(datetime as i64)));
                         }
-                        KkpvValue::Object(entries)
+                        KkpvVal::Object(entries)
                     }
-                    None => KkpvValue::Null,
+                    None => KkpvVal::Null,
                 },
             );
             match (owner, owner_cleared) {
                 (Some(owner), _) => kv("owner", strv(owner)),
-                (None, true) => kv("owner", KkpvValue::Null),
+                (None, true) => kv("owner", KkpvVal::Null),
                 (None, false) => {}
             }
         }
@@ -284,40 +410,40 @@ pub(super) fn object_kkpv(
             kv("y", int(*y as i64));
             kv("name", strv(name));
             kv("owner", strv(owner));
-            kv("store", store_kkpv(store, &[]));
+            kv("store", store_val(store, &[]));
             kv("energy", int(store.energy as i64));
             kv("energyCapacity", int(c::SPAWN_ENERGY_CAPACITY));
             kv(
                 "storeCapacityResource",
-                KkpvValue::Object(vec![("energy".to_string(), int(c::SPAWN_ENERGY_CAPACITY))]),
+                KkpvVal::Object(vec![("energy", int(c::SPAWN_ENERGY_CAPACITY))]),
             );
-            kv("off", KkpvValue::Bool(*off));
+            kv("off", KkpvVal::Bool(*off));
             kv("hits", int(*hits as i64));
             kv("hitsMax", int(c::SPAWN_HITS));
             kv(
                 "spawning",
                 match spawning {
-                    None => KkpvValue::Null,
+                    None => KkpvVal::Null,
                     Some(job) => {
                         let mut entries = vec![
-                            ("name".to_string(), strv(&job.name)),
-                            ("needTime".to_string(), int(job.need_time as i64)),
-                            ("spawnTime".to_string(), int(job.spawn_time as i64)),
+                            ("name", strv(&job.name)),
+                            ("needTime", int(job.need_time as i64)),
+                            ("spawnTime", int(job.spawn_time as i64)),
                         ];
                         if !job.directions.is_empty() {
                             entries.push((
-                                "directions".to_string(),
-                                KkpvValue::Array(
+                                "directions",
+                                KkpvVal::Array(
                                     job.directions.iter().map(|d| int(*d as i64)).collect(),
                                 ),
                             ));
                         }
-                        KkpvValue::Object(entries)
+                        KkpvVal::Object(entries)
                     }
                 },
             );
             if let Some(flag) = notify_when_attacked {
-                kv("notifyWhenAttacked", KkpvValue::Bool(*flag));
+                kv("notifyWhenAttacked", KkpvVal::Bool(*flag));
             }
         }
         RO::Extension(o) => {
@@ -338,20 +464,20 @@ pub(super) fn object_kkpv(
             kv("x", int(*x as i64));
             kv("y", int(*y as i64));
             kv("owner", strv(owner));
-            kv("store", store_kkpv(store, &[]));
+            kv("store", store_val(store, &[]));
             kv("energy", int(store.energy as i64));
             kv(
                 "storeCapacityResource",
-                KkpvValue::Object(vec![(
-                    "energy".to_string(),
+                KkpvVal::Object(vec![(
+                    "energy",
                     int(crate::types::extension_energy_capacity(rcl)),
                 )]),
             );
-            kv("off", KkpvValue::Bool(*off));
+            kv("off", KkpvVal::Bool(*off));
             kv("hits", int(*hits as i64));
             kv("hitsMax", int(c::EXTENSION_HITS));
             if let Some(flag) = notify_when_attacked {
-                kv("notifyWhenAttacked", KkpvValue::Bool(*flag));
+                kv("notifyWhenAttacked", KkpvVal::Bool(*flag));
             }
         }
         RO::ConstructedWall(o) => {
@@ -363,7 +489,7 @@ pub(super) fn object_kkpv(
             kv("hits", int(o.hits as i64));
             kv("hitsMax", int(c::WALL_HITS_MAX));
             if let Some(flag) = &o.notify_when_attacked {
-                kv("notifyWhenAttacked", KkpvValue::Bool(*flag));
+                kv("notifyWhenAttacked", KkpvVal::Bool(*flag));
             }
         }
         RO::Road(o) => {
@@ -387,7 +513,7 @@ pub(super) fn object_kkpv(
             );
             kv("nextDecayTime", int(*next_decay_time as i64));
             if let Some(flag) = notify_when_attacked {
-                kv("notifyWhenAttacked", KkpvValue::Bool(*flag));
+                kv("notifyWhenAttacked", KkpvVal::Bool(*flag));
             }
         }
         RO::Storage(o) => {
@@ -408,12 +534,12 @@ pub(super) fn object_kkpv(
             kv("x", int(*x as i64));
             kv("y", int(*y as i64));
             kv("owner", strv(owner));
-            kv("store", store_kkpv(store, store_extra));
+            kv("store", store_val(store, store_extra));
             kv("storeCapacity", int(*store_capacity));
             kv("hits", int(*hits as i64));
             kv("hitsMax", int(c::STORAGE_HITS));
             if let Some(flag) = notify_when_attacked {
-                kv("notifyWhenAttacked", KkpvValue::Bool(*flag));
+                kv("notifyWhenAttacked", KkpvVal::Bool(*flag));
             }
         }
         RO::ConstructionSite(o) => {
@@ -443,9 +569,16 @@ pub(super) fn object_kkpv(
         }
         RO::Energy(o) => {
             let EnergyObj { x, y, amount, .. } = o;
-            let resource_name = crate::projection::energy_resource_name(o);
+            // 与 energy_resource_name 同源的借用形态：o 借用自 'a，
+            // 行内静态/字段引用皆满足行存活期。
+            let resource_name: &str = match (&o.resource, o.resource_type) {
+                (Some(name), _) => name.as_str(),
+                (None, 1) => "power",
+                (None, 2) => c::RESOURCE_GHODIUM,
+                (None, _) => "energy",
+            };
             kv("type", strv("resource"));
-            kv("resourceType", KkpvValue::Str(resource_name.to_string()));
+            kv("resourceType", strv(resource_name));
             kv("room", strv(room));
             kv("x", int(*x as i64));
             kv("y", int(*y as i64));
@@ -500,16 +633,16 @@ pub(super) fn object_kkpv(
             kv("ticksToDecay", int(decay_time.saturating_sub(time) as i64));
             kv(
                 "creepId",
-                creep_id.map(KkpvValue::Ref).unwrap_or(KkpvValue::Null),
+                creep_id.map(KkpvVal::Ref).unwrap_or(KkpvVal::Null),
             );
             kv(
                 "creepName",
-                creep_name.as_deref().map(strv).unwrap_or(KkpvValue::Null),
+                creep_name.as_deref().map(strv).unwrap_or(KkpvVal::Null),
             );
             kv("creepTicksToLive", int(*creep_ticks_to_live as i64));
             kv(
                 "creepBody",
-                KkpvValue::Array(
+                KkpvVal::Array(
                     creep_body
                         .iter()
                         .filter_map(|code| {
@@ -520,7 +653,7 @@ pub(super) fn object_kkpv(
                         .collect(),
                 ),
             );
-            kv("store", store_kkpv(store, store_extra));
+            kv("store", store_val(store, store_extra));
             if let Some(saying) = creep_saying {
                 kv("creepSaying", strv(saying));
             }
@@ -543,25 +676,25 @@ pub(super) fn object_kkpv(
                 ..
             } = o;
             let mut structure = vec![
-                ("id".to_string(), KkpvValue::Ref(*structure_id)),
-                ("type".to_string(), strv(structure_type)),
-                ("hits".to_string(), int(0)),
+                ("id", KkpvVal::Ref(*structure_id)),
+                ("type", strv(structure_type)),
+                ("hits", int(0)),
             ];
             if let Some(hits_max) = structure_hits_max {
-                structure.push(("hitsMax".to_string(), int(*hits_max as i64)));
+                structure.push(("hitsMax", int(*hits_max as i64)));
             }
             if let Some(owner) = owner {
-                structure.push(("user".to_string(), strv(owner)));
+                structure.push(("user", strv(owner)));
             }
             kv("type", strv("ruin"));
             kv("room", strv(room));
             kv("x", int(*x as i64));
             kv("y", int(*y as i64));
-            kv("structure", KkpvValue::Object(structure));
+            kv("structure", KkpvVal::Object(structure));
             kv("destroyTime", int(*destroy_time as i64));
             kv("decayTime", int(*decay_time as i64));
             kv("ticksToDecay", int(decay_time.saturating_sub(time) as i64));
-            kv("store", store_kkpv(store, store_extra));
+            kv("store", store_val(store, store_extra));
             if let Some(owner) = owner {
                 kv("user", strv(owner));
             }
@@ -588,7 +721,7 @@ pub(super) fn object_kkpv(
                 "ticksToRegeneration",
                 match next_regeneration_time {
                     Some(t) if *t != 0 => int(t.saturating_sub(time) as i64),
-                    _ => KkpvValue::Null,
+                    _ => KkpvVal::Null,
                 },
             );
         }
@@ -605,175 +738,203 @@ pub(super) fn object_kkpv(
                 kv("owner", strv(owner));
             }
             if let Some(flag) = &o.notify_when_attacked {
-                kv("notifyWhenAttacked", KkpvValue::Bool(*flag));
+                kv("notifyWhenAttacked", KkpvVal::Bool(*flag));
             }
         }
-        // Generic/Mod 不进入本函数：调用方在 KKPV 投影里分流。
-        RO::Generic(_) | RO::Mod(_) => unreachable!("object_kkpv 只处理类型化对象"),
+        // Generic/Mod 不进入本函数：调用方在编码入口分流。
+        RO::Generic(_) | RO::Mod(_) => unreachable!("object_row 只处理类型化对象"),
     };
     // 与 object_json 的公共尾部同形：pos 供使用原始 JSON 的调用方读取。
     kv(
         "pos",
-        KkpvValue::Object(vec![
-            ("x".to_string(), KkpvValue::Int(object.pos().0 as i64)),
-            ("y".to_string(), KkpvValue::Int(object.pos().1 as i64)),
-            ("roomName".to_string(), strv(room)),
+        KkpvVal::Object(vec![
+            ("x", KkpvVal::Int(object.pos().0 as i64)),
+            ("y", KkpvVal::Int(object.pos().1 as i64)),
+            ("roomName", strv(room)),
         ]),
     );
     if let Some(entries) = effects {
         kv(
             "effects",
-            KkpvValue::Array(
+            KkpvVal::Array(
                 entries
                     .iter()
                     .map(|e| {
                         let mut entry = Vec::new();
                         if let Some(effect) = e.effect {
-                            entry.push(("effect".to_string(), int(effect)));
+                            entry.push(("effect", int(effect)));
                         }
-                        entry.push(("power".to_string(), int(e.power)));
-                        entry.push(("level".to_string(), int(e.level)));
-                        entry.push(("endTime".to_string(), int(e.end_time as i64)));
+                        entry.push(("power", int(e.power)));
+                        entry.push(("level", int(e.level)));
+                        entry.push(("endTime", int(e.end_time as i64)));
                         entry.push((
-                            "ticksRemaining".to_string(),
+                            "ticksRemaining",
                             int(e.end_time.saturating_sub(time) as i64),
                         ));
-                        KkpvValue::Object(entry)
+                        KkpvVal::Object(entry)
                     })
                     .collect(),
             ),
         );
     }
-    let type_key = match type_key.as_str() {
-        "" => format!(
-            "builtin:{}",
-            // 其余 typed 变体都是 structure 记录，桶键由 structureType 决定。
-            match fields
-                .iter()
-                .find(|(key, _)| key == "structureType")
-                .and_then(|(_, value)| match value {
-                    KkpvValue::Str(s) => Some(s.as_str()),
-                    _ => None,
-                }) {
-                Some(st) => st.to_string(),
-                None => "structure".to_string(),
-            }
-        ),
-        key => key.to_string(),
-    };
-    KkpvObject {
+    KkpvRow {
         id: id.0,
         type_key,
         fields,
     }
 }
 
-/// 单对象的 KKPV 块对象投影：Mod 裁切、导出门、记录构造与 ext 裁切的
-/// 完整路径；可见房全对象枚举与不可见房候选枚举共用，行为与逐房全量
-/// 枚举版一致。
+/// 单房私有块直写编码：可见性门、导出门、记录构造与 ext 裁切的完整
+/// 路径（与旧 `kkpv_object_of` 逐对象同序同义），行借用权威对象与
+/// 参考记录后直接走 `encode_ref`，不构建 owned `KkpvObject` 树。
+/// `candidates` 为 None 表示可见房全对象枚举；Some 表示不可见房的
+/// 候选对象（索引给出，ID 升序），与全量枚举的相对顺序一致。
 ///
 /// # Errors
-/// 对象记录无法映射为 KKPV 值形态时返回错误（与全量枚举版同源）。
+/// 对象记录无法映射为 KKPV 值形态或编码超限时返回错误。
 #[allow(clippy::too_many_arguments)]
-pub(super) fn kkpv_object_of(
+pub(super) fn encode_room_block(
     room: &str,
     state: &crate::world::RoomState,
     controller: Option<&kk_schema::room::ControllerObj>,
-    id: ObjId,
-    object: &RoomObject,
+    time: u64,
+    meta: RoomBlockMeta,
     user: &str,
     room_visible: bool,
+    candidates: Option<&[ObjId]>,
     catalog: &kk_mod_api::extension::ExtensionCatalog,
     surface: Option<&kk_mod_api::player_surface::PlayerSurface>,
-    time: u64,
-) -> Result<Option<KkpvObject>, String> {
-    // Mod 分支先于内建导出门（与 world_json_impl 同序）：
-    // mod_record_json 自带完整的对象级/字段级门——OwnerCollection
-    // 的归属者集合语义不受房间视野门，若先过 object_exported_for
-    // 会在不可见房被丢弃，造成与 JSON 通道的可见性分叉。
-    if let RoomObject::Mod(mod_object) = object {
-        if let Some(surface) = surface
-            && let Some(record) = crate::projection::mod_record_json(
-                room,
-                id,
-                mod_object,
-                surface,
-                Some(user),
-                room_visible,
-            )
-        {
-            return Ok(Some(record_to_kkpv(id, object, &record)?));
-        }
-        return Ok(None);
+) -> Result<Vec<u8>, String> {
+    // 第一遍：门与解析。Generic/Mod 的参考记录先解析保活（行借用其
+    // 内容，owned 数据在本函数存活期内不释放）；ext 对同序预计算。
+    enum Slot {
+        Typed,
+        Parsed(usize),
     }
-    if !object_exported_for(Some(user), room_visible, object) {
-        return Ok(None);
-    }
-    let (mut kkpv_object, record) = match object {
-        // Generic 保持 Value 参考路径：data 本身就是 JSON，解析不可省；
-        // 类型化对象直接构造，跳过 serde_json 中间树。
-        RoomObject::Generic(_) => {
-            let record = object_json(
-                room,
-                id,
-                object,
-                time,
-                &state.terrain,
-                controller,
-                state.effects.get(&id),
-            )
-            .expect("Mod 对象已在 kkpv_object_of 上文分流");
-            (record_to_kkpv(id, object, &record)?, Some(record))
+    let mut ids: Vec<ObjId> = Vec::new();
+    let mut slots: Vec<Slot> = Vec::new();
+    let mut parsed: Vec<Value> = Vec::new();
+    let mut exts: Vec<Option<serde_json::Map<String, Value>>> = Vec::new();
+    let mut collect = |id: ObjId, object: &RoomObject| {
+        // Mod 分支先于内建导出门（与 world_json_impl 同序）：
+        // mod_record_json 自带完整的对象级/字段级门——OwnerCollection
+        // 的归属者集合语义不受房间视野门，若先过 object_exported_for
+        // 会在不可见房被丢弃，造成与 JSON 通道的可见性分叉。
+        if let RoomObject::Mod(mod_object) = object {
+            if let Some(surface) = surface
+                && let Some(record) = crate::projection::mod_record_json(
+                    room,
+                    id,
+                    mod_object,
+                    surface,
+                    Some(user),
+                    room_visible,
+                )
+            {
+                parsed.push(record);
+                ids.push(id);
+                slots.push(Slot::Parsed(parsed.len() - 1));
+                exts.push(None);
+            }
+            return;
         }
-        _ => (
-            object_kkpv(
-                room,
-                id,
-                object,
-                time,
-                &state.terrain,
-                controller,
-                state.effects.get(&id),
-            ),
-            None,
-        ),
-    };
-    // 扩展目录只按 structureType 登记；非结构类型无 ext 键，
-    // 与 JSON 投影的裁切入口一致。
-    // ext 目录按 structureType 登记：Generic 从参考记录读取，类型化对象
-    // 的结构名从权威枚举派生（与 object_json 输出同源）。
-    let structure_type = record
-        .as_ref()
-        .and_then(|record| {
-            record
-                .get("structureType")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-        })
+        if !object_exported_for(Some(user), room_visible, object) {
+            return;
+        }
+        // Generic 保持 Value 参考路径：data 本身就是 JSON，解析不可省。
+        let slot = match object {
+            RoomObject::Generic(_) => {
+                let record = object_json(
+                    room,
+                    id,
+                    object,
+                    time,
+                    &state.terrain,
+                    controller,
+                    state.effects.get(&id),
+                )
+                .expect("Mod 对象已在 encode_room_block 上文分流");
+                parsed.push(record);
+                Slot::Parsed(parsed.len() - 1)
+            }
+            _ => Slot::Typed,
+        };
+        // ext 目录按 structureType 登记：Generic 从本对象的参考记录读取
+        // （parsed 尾部即刚推入者），类型化对象的结构名从权威枚举派生
+        // （与 object_json 输出同源）。
+        let structure_type = match &slot {
+            Slot::Parsed(_) => parsed
+                .last()
+                .and_then(|record| record.get("structureType").and_then(Value::as_str)),
+            Slot::Typed => None,
+        }
         .or_else(|| typed_structure_name(object));
-    if let Some(type_key) = structure_type
-        .as_deref()
-        .and_then(|st| catalog.type_for_structure(st))
-        && let Some(ext) = ext_entries_json(
-            catalog,
-            type_key,
-            &state.extensions,
-            id,
-            crate::domain::object_owner(object).as_deref(),
-            user,
-        )
-    {
-        // ext 以嵌套记录进入块字段，键与值和 JSON 投影的 ext 键一致；
-        // Generic 原生数据自带 ext 键时按参考的覆盖语义替换。
-        let mut entries = Vec::with_capacity(ext.len());
-        for (key, value) in ext {
-            let converted = value_to_kkpv(&value).map_err(|e| format!("ext {key}: {e}"))?;
-            entries.push((key, converted));
+        let ext = structure_type
+            .and_then(|st| catalog.type_for_structure(st))
+            .and_then(|type_key| {
+                ext_entries_json(
+                    catalog,
+                    type_key,
+                    &state.extensions,
+                    id,
+                    crate::domain::object_owner(object).as_deref(),
+                    user,
+                )
+            });
+        ids.push(id);
+        slots.push(slot);
+        exts.push(ext);
+    };
+    match candidates {
+        None => {
+            for (id, object) in &state.objects {
+                collect(*id, object);
+            }
         }
-        kkpv_object.fields.retain(|(key, _)| key != "ext");
-        kkpv_object
-            .fields
-            .push(("ext".to_string(), KkpvValue::Object(entries)));
+        Some(candidates) => {
+            for id in candidates {
+                collect(*id, &state.objects[id]);
+            }
+        }
     }
-    Ok(Some(kkpv_object))
+    // 第二遍：建行（借用第一遍的保活数据）并直写编码。
+    let mut rows: Vec<KkpvRow<'_>> = Vec::with_capacity(ids.len());
+    for (i, (id, slot)) in ids.iter().zip(&slots).enumerate() {
+        let object = &state.objects[id];
+        let ext = exts[i].as_ref();
+        let ext_replaced = ext.is_some();
+        let mut row = match slot {
+            Slot::Typed => object_row(
+                room,
+                *id,
+                object,
+                time,
+                &state.terrain,
+                controller,
+                state.effects.get(id),
+            ),
+            Slot::Parsed(p) => json_row(*id, &parsed[*p], ext_replaced)?,
+        };
+        if let Some(ext) = ext {
+            // ext 以嵌套记录进入块字段，键与值和 JSON 投影的 ext 键一致。
+            let mut entries = Vec::with_capacity(ext.len());
+            for (key, value) in ext {
+                let converted = json_val(value).map_err(|e| format!("ext {key}: {e}"))?;
+                entries.push((key.as_str(), converted));
+            }
+            row.fields.push(("ext", KkpvVal::Object(entries)));
+        }
+        rows.push(row);
+    }
+    let block = KkpvBlockRef {
+        private: true,
+        tick: meta.tick,
+        generation: meta.generation,
+        plan_hash: meta.plan_hash,
+        audience_hash: meta.audience_hash,
+        room_name: room,
+        terrain: None,
+        rows,
+    };
+    encode_ref(&block, &KkpvLimits::default()).map_err(|e| e.to_string())
 }
