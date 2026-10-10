@@ -101,7 +101,11 @@ impl EmbedEngine {
                         input_log::PlayerLogEntry {
                             cpu_bucket: bucket,
                             cpu_billed_ms: result.cpu_billed_ms,
-                            raw_memory: result.raw_memory.as_deref(),
+                            // v2：Memory 只入摘要；值本身随检查点持久化。
+                            raw_memory_sha256: result
+                                .raw_memory
+                                .as_deref()
+                                .map(|text| input_log::sha256_hex(text.as_bytes())),
                             ism_local: result.ism_local.as_deref(),
                             segments_out: result.segments_out.as_ref(),
                         },

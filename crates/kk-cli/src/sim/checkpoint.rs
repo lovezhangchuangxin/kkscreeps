@@ -117,20 +117,27 @@ pub(super) fn list_checkpoint_ticks(dir: &Path) -> anyhow::Result<Vec<u64>> {
 /// 次新并计数；配对失败（历史哈希/缺口/接缝/未覆盖游标）是日志与检查
 /// 点的历史关系问题而非文件损坏——硬错误不降级。撕裂日志在读取处失败并
 /// 携带 valid_segments 供人工截断，不自动改写文件。
+///
+/// v2 恢复语义：选定检查点后**截断**其游标之后的废弃分支，丢失拍由续
+/// 跑**重执行**补齐（官方恢复模型——候选提交原子性保证无半拍状态；重
+/// 执行与重放在世界推进上等价，且世界/Memory 恢复到同一时间点，不再出
+/// 现“世界到日志尾、Memory 停在检查点”的不一致对）。
 pub(super) struct Recovery {
     pub value: Value,
     pub file: PathBuf,
     pub checkpoint_time: u64,
     /// 保存时的日志游标（旧文件可能没有）。
     pub log_cursor: Option<LogCursor>,
-    /// 恢复后需重放的日志段（零段=合法终态：保存后即崩的形态）。
-    pub replay_segments: Vec<Value>,
-    pub header: Value,
+    /// 恢复后需重执行的丢失拍数（=检查点游标后被截断的废弃分支段数；
+    /// 零=合法终态：保存后即崩的形态）。
+    pub reexecute_ticks: u64,
     pub skipped_broken: usize,
 }
 
 pub(super) fn recover_latest(dir: &Path, log: &Path) -> anyhow::Result<Recovery> {
-    let data = kk_runtime::embed::read_input_log(log).map_err(|error| {
+    // v2：日志校验流式化——先零保留扫描一次保住「日志不可读优先中止」
+    // 的错误优先级，再随命中的检查点做游标后缀扫描（只驻留可回放段）。
+    kk_runtime::embed::scan_input_log(log, kk_runtime::embed::Retain::None).map_err(|error| {
         // 撕裂尾是可人工修复的形态（按前缀段数截断后重试）；其他读取
         // 错误（不存在/权限等）附截断提示会误导，只透出原始错误。
         if format!("{error}").contains("撕裂") {
@@ -175,14 +182,31 @@ pub(super) fn recover_latest(dir: &Path, log: &Path) -> anyhow::Result<Recovery>
         let cursor = log_cursor
             .as_ref()
             .context("目录恢复需要带哈希的 log_cursor；旧检查点不可自动配对")?;
-        let replay_segments = data.segments_after_cursor(time, cursor)?.to_vec();
+        // 配对时间用检查点自己的世界时间（不从游标反推），使
+        // 「cursor.last_tick + 1 == 检查点时间」保持真实交叉校验：
+        // 段 tick 是结算前世界时间、提交后世界 +1（auto_checkpoint
+        // save_if_due 采样注释），正常保存流程两者恒差一，错配即历史
+        // 关系问题，硬错误。v2 截断+重执行不消费后缀做结算，接缝
+        // tick 连续性只剩这道机器门；后缀首段 tick 必须恰等于检查点
+        // 时间（=重执行首拍）。
+        let data = kk_runtime::embed::scan_input_log(
+            log,
+            kk_runtime::embed::Retain::FromCursor {
+                cursor: cursor.clone(),
+                time,
+            },
+        )?;
+        let reexecute_ticks = data.segments.len() as u64;
+        // 截断废弃分支：续写段号/时间线从游标继续，verify-replay 的配对
+        // 保持在单一线性历史上。truncate 内部的整链复验是公共 API 的
+        // 自卫（第三遍扫描），恢复调用链内属冗余但代价只有顺序读。
+        kk_runtime::embed::truncate_after_cursor(log, cursor)?;
         return Ok(Recovery {
             value,
             file,
             checkpoint_time: time,
             log_cursor,
-            replay_segments,
-            header: data.header.clone(),
+            reexecute_ticks,
             skipped_broken: skipped,
         });
     }

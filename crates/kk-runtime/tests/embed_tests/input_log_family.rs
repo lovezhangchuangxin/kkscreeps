@@ -2,7 +2,9 @@
 //! 记段语义、篡改矩阵（逐变体命中具体错误）、续接与生命周期门。
 use super::*;
 
-use kk_runtime::embed::{InputLogError, read_input_log};
+use kk_runtime::embed::{
+    InputLogError, Retain, ScanError, read_input_log, scan_input_log, truncate_after_cursor,
+};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -142,9 +144,20 @@ pub(super) fn three_sources_round_trip_impl() -> anyhow::Result<()> {
         "回放直接消费的新桶整桶"
     );
     assert!(writeback["cpu_billed_ms"].is_number(), "实测计费佐证");
+    // v2：Memory 只随段携带摘要——与终态检查点的提交值对账（推进轮不
+    // 改 Memory，值自玩家轮后保持不变）。
+    let committed = engine.checkpoint(Value::Null)?["engine"]["players"]["p1"]["raw_memory"]
+        .as_str()
+        .expect("检查点玩家 Memory 在位")
+        .to_string();
     assert!(
-        writeback["raw_memory"].as_str().unwrap().contains("g25a"),
-        "RawMemory 写回候选"
+        committed.contains("g25a"),
+        "RawMemory 写回候选：{committed}"
+    );
+    assert_eq!(
+        writeback["raw_memory_sha256"],
+        json!(sha256_hex(committed.as_bytes())),
+        "段内摘要与终态提交值一致"
     );
     assert_eq!(writeback["segments"]["active"], json!([3]), "段写回候选");
 
@@ -369,7 +382,8 @@ pub(super) fn torn_tail_byte_forms_impl() -> anyhow::Result<()> {
     let case = Case::new("torn-bytes");
     let (mut engine, log) = new_engine(&case, "input.jsonl")?;
     engine.enable_input_log(&log, json!({"备注": "中文"}))?;
-    let code = "Memory.note = '撕裂试验'; true";
+    // v2：Memory 只入摘要（ASCII），多字节字符经意图载荷进段。
+    let code = "Game.creeps.c1.say('撕裂试验'); true";
     engine.run_players(&BTreeMap::from([("p1".to_string(), code.to_string())]))?;
     engine.tick(1)?;
     drop(engine);
@@ -379,13 +393,13 @@ pub(super) fn torn_tail_byte_forms_impl() -> anyhow::Result<()> {
     assert_eq!(lines.len(), 3, "头段 + 玩家段 + 推进段");
 
     // 尾块切进多字节字符：截掉推进段与玩家段后半，切口落在玩家段
-    // raw_memory 的多字节字符内部（未换行结尾的尾块）。
+    // intents 载荷的多字节字符内部（未换行结尾的尾块）。
     let player_line = lines[1];
     let player_start = text.len() - lines[2].len() - 1 - player_line.len();
     let multibyte_at = player_line
         .bytes()
         .position(|b| b >= 0x80)
-        .expect("玩家段 raw_memory 含中文");
+        .expect("玩家段 intents 含中文");
     let cut_inside = player_start + multibyte_at + 1;
     let path = case.path("utf8-torn.jsonl");
     std::fs::write(&path, &bytes[..cut_inside])?;
@@ -416,6 +430,23 @@ pub(super) fn torn_tail_byte_forms_impl() -> anyhow::Result<()> {
         rejected.to_string().contains("缺换行"),
         "append 会把新段拼进旧行，必须拒绝续接：{rejected:#}"
     );
+
+    // 末行撕裂签名后跟空白块：末行口径取最后一个非空行（与 v1 整读版
+    // 同形），尾随空白不把撕裂行升级成中段损坏。切掉行尾 20 字节落在
+    // sha256/花括号的 ASCII 区，构造解析失败签名且不切进多字节字符。
+    let torn_line = &lines[2][..lines[2].len() - 20];
+    let path = case.path("torn-blank.jsonl");
+    std::fs::write(&path, format!("{}\n{torn_line}\n\n", lines[0]))?;
+    match read_input_log(&path) {
+        Err(InputLogError::TornTail { valid_segments: 0 }) => {}
+        other => panic!("撕裂行后的空白行不应改变末行判定：{other:?}"),
+    }
+    let path = case.path("torn-blank-tail.jsonl");
+    std::fs::write(&path, format!("{}\n{torn_line}\n  ", lines[0]))?;
+    match read_input_log(&path) {
+        Err(InputLogError::TornTail { valid_segments: 0 }) => {}
+        other => panic!("撕裂行后的无换行空白不应改变末行判定：{other:?}"),
+    }
     Ok(())
 }
 
@@ -457,6 +488,311 @@ pub(super) fn resume_and_lifecycle_impl() -> anyhow::Result<()> {
     // 段号跨日志文件延续；世界 tick 属于新分片自己的时间线——与检查
     // 点配对恢复世界连续性是 G25.b 的规则，此处不伪造。
     assert_eq!(data.segments[3]["tick"], 1, "续接段记录新分片自己的 tick");
+    Ok(())
+}
+
+/// v2 流式扫描：零保留只校验与对账；按 tick/按游标的后缀选择与整读版
+/// 等值；配对失败（未覆盖/哈希不符/头段游标）与旧后缀选择同形。
+pub(super) fn streaming_scan_impl() -> anyhow::Result<()> {
+    let case = Case::new("scan");
+    let (mut engine, log) = new_engine(&case, "input.jsonl")?;
+    engine.enable_input_log(&log, json!({}))?;
+    let code = "Memory.n = (Memory.n || 0) + 1; true";
+    engine.run_players(&BTreeMap::from([("p1".to_string(), code.to_string())]))?;
+    engine.tick(2)?;
+    let cursor = engine.input_log_cursor().unwrap();
+    engine.run_players(&BTreeMap::from([("p1".to_string(), code.to_string())]))?;
+    engine.tick(1)?;
+    drop(engine);
+
+    let full = read_input_log(&log)?;
+    assert_eq!(full.segments.len(), 5, "玩家+推进+推进+玩家+推进");
+
+    // 零保留：数据段不驻留（链只含头段项），校验与统计仍覆盖全部行。
+    let stats_only = scan_input_log(&log, Retain::None)?;
+    assert!(stats_only.segments.is_empty());
+    assert_eq!(stats_only.chain.len(), 1, "零保留只驻留头段链项");
+    assert_eq!(stats_only.chain[0].0, 0);
+    assert_eq!(stats_only.stats.segments, 5);
+    assert_eq!(stats_only.stats.first_tick, Some(1));
+    assert_eq!(stats_only.stats.last_tick, Some(5));
+    assert_eq!(stats_only.final_seq, 5);
+    assert_eq!(stats_only.final_hash, full.chain.last().unwrap().1);
+
+    // 按 tick 的后缀与整读版 segments_from_checkpoint 等值。
+    let from_tick = scan_input_log(&log, Retain::FromTick(4))?;
+    assert_eq!(
+        from_tick.segments,
+        kk_runtime::embed::segments_from_checkpoint(4, &full.segments)?,
+        "FromTick 后缀与整读版配对等值"
+    );
+
+    // 按游标的后缀与整读版 segments_after_cursor 等值；段内摘要保留。
+    let from_cursor = scan_input_log(
+        &log,
+        Retain::FromCursor {
+            cursor: cursor.clone(),
+            time: 4,
+        },
+    )?;
+    assert_eq!(
+        from_cursor.segments,
+        full.segments_after_cursor(4, &cursor)?,
+        "FromCursor 后缀与整读版配对等值"
+    );
+    assert!(
+        from_cursor.segments[0]["players"]["p1"]["raw_memory_sha256"]
+            .as_str()
+            .is_some_and(|digest| digest.len() == 64),
+        "玩家段保留 Memory 摘要"
+    );
+
+    // 未覆盖：时间/游标超出日志末尾。
+    assert!(scan_input_log(&log, Retain::FromTick(6)).is_err());
+    let beyond = kk_runtime::embed::LogCursor {
+        last_seq: 9,
+        last_tick: 9,
+        sha256: "0".repeat(64),
+    };
+    assert!(
+        scan_input_log(
+            &log,
+            Retain::FromCursor {
+                cursor: beyond,
+                time: 10
+            }
+        )
+        .is_err()
+    );
+
+    // 游标历史哈希不符：配对失败。
+    let mut wrong_hash = cursor.clone();
+    wrong_hash.sha256 = "1".repeat(64);
+    assert!(
+        scan_input_log(
+            &log,
+            Retain::FromCursor {
+                cursor: wrong_hash,
+                time: 4
+            }
+        )
+        .is_err(),
+        "游标哈希不符应拒绝"
+    );
+
+    // 头段不是可提交段：游标指向 seq 0 直接拒绝。
+    let header_cursor = kk_runtime::embed::LogCursor {
+        last_seq: 0,
+        last_tick: 0,
+        sha256: full.chain[0].1.clone(),
+    };
+    assert!(
+        scan_input_log(
+            &log,
+            Retain::FromCursor {
+                cursor: header_cursor,
+                time: 1
+            }
+        )
+        .is_err(),
+        "游标不得指向头段"
+    );
+
+    // —— 配对错误族经流式路径钉形：整链重封 + 手工 tick 异常 ——
+    // 重封保持段身份/链衔接自洽，只改 tick，使错误确定归因配对检查。
+    let text = std::fs::read_to_string(&log)?;
+    let header_line = text.lines().next().unwrap().to_string();
+    let header_sha = full.chain[0].1.clone();
+    let build = |ticks: &[u64]| -> String {
+        let mut prev = json!(header_sha);
+        let mut out = header_line.clone();
+        for (mut record, tick) in full
+            .segments
+            .iter()
+            .map(|s| s.as_object().unwrap().clone())
+            .zip(ticks)
+        {
+            record.insert("tick".into(), json!(tick));
+            record.insert("prev_hash".into(), prev);
+            let sealed = seal_line(record);
+            prev = json!(
+                serde_json::from_str::<Value>(&sealed).unwrap()["sha256"]
+                    .as_str()
+                    .unwrap()
+                    .to_string()
+            );
+            out.push('\n');
+            out.push_str(&sealed);
+        }
+        out.push('\n');
+        out
+    };
+    // 从重建文本取指定段身份（第 0 行是头段，行号即 seq）。
+    let cursor_at = |text: &str, seq: usize, tick: u64| -> kk_runtime::embed::LogCursor {
+        let sha256 = text
+            .lines()
+            .nth(seq)
+            .and_then(|line| serde_json::from_str::<Value>(line).ok())
+            .and_then(|value| value["sha256"].as_str().map(str::to_string))
+            .expect("重建日志行可解析");
+        kk_runtime::embed::LogCursor {
+            last_seq: seq as u64,
+            last_tick: tick,
+            sha256,
+        }
+    };
+    let write_case = |name: &str, text: &str| -> PathBuf {
+        let path = case.path(name);
+        std::fs::write(&path, text).unwrap();
+        path
+    };
+
+    // 控制组：重封不改 tick，流式配对通过（异常须归因 tick 而非重封本身）。
+    let control = build(&[1, 2, 3, 4, 5]);
+    let path = write_case("rechain-control.jsonl", &control);
+    scan_input_log(
+        &path,
+        Retain::FromCursor {
+            cursor: cursor_at(&control, 3, 3),
+            time: 4,
+        },
+    )?;
+    scan_input_log(&path, Retain::FromTick(4))?;
+
+    // 游标段之后跳拍：后缀 tick 缺口。
+    let gapped = build(&[1, 2, 3, 5, 6]);
+    let path = write_case("rechain-gap.jsonl", &gapped);
+    match scan_input_log(
+        &path,
+        Retain::FromCursor {
+            cursor: cursor_at(&gapped, 3, 3),
+            time: 4,
+        },
+    ) {
+        Err(ScanError::Pairing(reason)) => {
+            assert!(reason.contains("配对缺口或 tick 回退"), "{reason}");
+        }
+        other => panic!("游标后缀跳拍应报配对缺口：{other:?}"),
+    }
+
+    // 首个可回放段晚于检查点时间：起点配对缺口。
+    let jumped = build(&[1, 2, 4, 4, 5]);
+    let path = write_case("rechain-jump.jsonl", &jumped);
+    match scan_input_log(&path, Retain::FromTick(3)) {
+        Err(ScanError::Pairing(reason)) => {
+            assert!(reason.contains("首个可回放段"), "{reason}");
+        }
+        other => panic!("起点跳拍应报配对缺口：{other:?}"),
+    }
+
+    // 选区内同 tick 重复：tick 回退。
+    let regressed = build(&[1, 2, 3, 3, 4]);
+    let path = write_case("rechain-regress.jsonl", &regressed);
+    match scan_input_log(&path, Retain::FromTick(2)) {
+        Err(ScanError::Pairing(reason)) => {
+            assert!(reason.contains("tick 回退"), "{reason}");
+        }
+        other => panic!("选区内回退应报 tick 回退：{other:?}"),
+    }
+    Ok(())
+}
+
+/// truncate_after_cursor 直测：分支放弃的字节形态、游标即尾无操作、
+/// 超尾/身份不符拒绝、陈旧临时文件的可读错误与重试、含空行日志的段号
+/// 正确性，以及截断后续写全链校验。
+pub(super) fn truncate_after_cursor_impl() -> anyhow::Result<()> {
+    let case = Case::new("truncate");
+    let (mut engine, log) = new_engine(&case, "input.jsonl")?;
+    engine.enable_input_log(&log, json!({}))?;
+    let code = "Memory.n = (Memory.n || 0) + 1; true";
+    engine.run_players(&BTreeMap::from([("p1".to_string(), code.to_string())]))?;
+    engine.tick(3)?;
+    let mid_cursor = engine.input_log_cursor().unwrap();
+    engine.tick(1)?;
+    let tail_cursor = engine.input_log_cursor().unwrap();
+    drop(engine);
+
+    let original = std::fs::read_to_string(&log)?;
+    let lines: Vec<&str> = original.lines().collect();
+    assert_eq!(lines.len(), 6, "头段 + 玩家段 + 四个推进段");
+
+    // 游标即日志尾：无操作，字节不变。
+    truncate_after_cursor(&log, &tail_cursor)?;
+    assert_eq!(std::fs::read_to_string(&log)?, original, "尾游标不改动文件");
+
+    // 超出日志末段：拒绝。
+    let beyond = kk_runtime::embed::LogCursor {
+        last_seq: 9,
+        last_tick: 9,
+        sha256: "0".repeat(64),
+    };
+    let rejected = truncate_after_cursor(&log, &beyond).unwrap_err();
+    assert!(
+        rejected.to_string().contains("超出日志末段"),
+        "超尾游标应拒绝：{rejected:#}"
+    );
+
+    // 游标身份不符（sha 属段 4、seq 写 3）：复制自证拒绝，日志不动。
+    let mismatched = kk_runtime::embed::LogCursor {
+        last_seq: 3,
+        last_tick: 3,
+        sha256: mid_cursor.sha256.clone(),
+    };
+    let rejected = truncate_after_cursor(&log, &mismatched).unwrap_err();
+    assert!(
+        rejected.to_string().contains("身份不匹配"),
+        "身份不符应拒绝：{rejected:#}"
+    );
+    assert_eq!(std::fs::read_to_string(&log)?, original, "拒绝时不动日志");
+
+    // 中途游标：保留头段+游标段，丢弃废弃分支，末行带换行。
+    truncate_after_cursor(&log, &mid_cursor)?;
+    let truncated = std::fs::read_to_string(&log)?;
+    assert_eq!(truncated, format!("{}\n", lines[..5].join("\n")));
+    let data = read_input_log(&log)?;
+    assert_eq!(data.segments.len(), 4, "保留四个数据段");
+    assert_eq!(data.chain.last().unwrap().1, mid_cursor.sha256);
+    assert_eq!(data.stats.last_tick, Some(mid_cursor.last_tick));
+
+    // 截断后续写：新分片挂载已截断日志，段号/链从游标延续。
+    let (mut engine2, _) = new_engine(&case, "unused.jsonl")?;
+    engine2.enable_input_log(&log, json!({}))?;
+    engine2.tick(1)?;
+    engine2.teardown();
+    let data = read_input_log(&log)?;
+    assert_eq!(data.segments.len(), 5, "续写一段");
+    assert_eq!(data.segments[4]["seq"], 5, "段号从游标+1 延续");
+
+    // 陈旧截断临时文件（崩溃窗口遗留的孤儿）：预扫描通过后先摘除，
+    // 截断一次成功——恢复路径不付出带误导性错误的失败尝试。
+    let mut stale = log.clone().into_os_string();
+    stale.push(".truncate-tmp");
+    let stale = std::path::PathBuf::from(stale);
+    std::fs::write(&stale, b"stale")?;
+    truncate_after_cursor(&log, &mid_cursor)?;
+    assert!(!stale.exists(), "孤儿临时文件被预清理摘除");
+    let data = scan_input_log(&log, Retain::None)?;
+    assert_eq!(data.final_seq, 4, "清理后截断照常生效");
+
+    // 含空行日志（五段全量，截到段 4 走复制路径）：空白行原样保留在
+    // 截断前缀中、不计段；段号不受影响。
+    let blank_log = case.path("blank.jsonl");
+    let blank_text = format!("{}\n", lines.join("\n\n"));
+    std::fs::write(&blank_log, &blank_text)?;
+    let cursor = kk_runtime::embed::LogCursor {
+        last_seq: 4,
+        last_tick: 4,
+        sha256: mid_cursor.sha256.clone(),
+    };
+    truncate_after_cursor(&blank_log, &cursor)?;
+    let truncated = std::fs::read_to_string(&blank_log)?;
+    assert!(
+        truncated.ends_with('\n') && truncated.matches("\n\n").count() >= 4,
+        "前缀空白行原样保留且末行带换行：{truncated:?}"
+    );
+    let data = scan_input_log(&blank_log, Retain::None)?;
+    assert_eq!(data.stats.segments, 4, "空行不改变段计数");
+    assert_eq!(data.final_seq, 4);
     Ok(())
 }
 

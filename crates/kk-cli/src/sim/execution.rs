@@ -165,8 +165,9 @@ pub(super) fn execute(options: &Options) -> anyhow::Result<Value> {
     // 续跑按检查点显式推进轮数与**实际生效的切换**选择恢复用包集合：被
     // 拒绝的切换不改变身份，越过边界（player_ticks >= after_tick）不一
     // 定携带切换后身份。载荷只读一次，resume 复用同一 Value。
-    // 目录形态=「最新可用」恢复（G26.a）：选出的检查点与需要重放的日志
-    // 段一起暂存，resume 后、日志挂载前逐段重放到日志尾。
+    // 目录形态=「最新可用」恢复（G26.a）：选出的检查点恢复世界，日志在
+    // 其游标处截断（废弃分支放弃），游标之后的丢失拍并入本轮**重执行**
+    // ——重执行轮与普通轮同路径记段，不消费废弃分支做结算重放。
     let mut recovery: Option<checkpoint::Recovery> = None;
     let loaded_value = match &options.load_checkpoint {
         Some(path) if path.is_dir() => {
@@ -238,6 +239,8 @@ pub(super) fn execute(options: &Options) -> anyhow::Result<Value> {
         );
     }
     let mut codes = BTreeMap::new();
+    // 目录恢复的丢失拍（v2 语义见下方恢复块注释）：重执行并入本轮执行数。
+    let reexecute_ticks = recovery.as_ref().map_or(0, |found| found.reexecute_ticks);
     let mut stats = BTreeMap::new();
     for bot in &scene.bots {
         if options.load_checkpoint.is_none() {
@@ -261,11 +264,10 @@ pub(super) fn execute(options: &Options) -> anyhow::Result<Value> {
         aliases = saved_aliases;
         engine.set_player_concurrency(options.concurrency)?;
         engine.set_kkpv_channel(options.kkpv);
-        // 目录恢复：把所选检查点之后的日志段重放到日志尾（零段=合法
-        // 终态）。此后运行从已恢复的最新状态继续，新轮次照常记日志。
-        if let Some(found) = &recovery {
-            engine.replay_input_rounds(&found.header, &found.replay_segments)?;
-        }
+        // 目录恢复（v2）：检查点回滚与游标处截断已由 recover_latest 完成；
+        // 废弃分支覆盖的丢失拍并入本轮**重执行**（官方恢复模型——候选提交
+        // 原子性保证无半拍状态；重执行与重放在世界推进上等价，且世界与
+        // Memory 恢复到同一时间点）。此后新轮次照常记日志并续接段号。
         initial
     } else {
         observe(&engine, &scene, &aliases, &mod_names)
@@ -298,7 +300,9 @@ pub(super) fn execute(options: &Options) -> anyhow::Result<Value> {
     let mut attempted = 0;
     let mut switches: Vec<Value> = Vec::new();
     let mut auto = auto_checkpoint::Stats::default();
-    for _ in 0..options.ticks {
+    // 目录恢复的丢失拍并入执行数：重执行段与新段同样入日志/检查点节奏。
+    let total_rounds = u64::from(options.ticks) + reexecute_ticks;
+    for _ in 0..total_rounds {
         let tick = engine.get_game_time();
         attempted += 1;
         let runs = match engine.run_players(&codes) {
@@ -404,8 +408,9 @@ pub(super) fn execute(options: &Options) -> anyhow::Result<Value> {
         );
     }
     let committed = engine.get_game_time() - start_time;
+    // 目录恢复的丢失拍以重执行补齐：提交数须等于「请求 + 重执行」。
     let success = failure.is_none()
-        && committed == u64::from(options.ticks)
+        && committed == u64::from(options.ticks) + reexecute_ticks
         && assertions.iter().all(|a| a["passed"] == true);
     let status = if failure
         .as_ref()

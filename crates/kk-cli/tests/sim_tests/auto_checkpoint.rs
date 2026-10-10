@@ -1,6 +1,6 @@
 //! G26.a `--checkpoint-every` 周期保存与目录恢复的端到端验收：多份落盘
-//! 与报告字段、恢复重放到尾与直跑等值、坏份降级、零段合法终态、撕裂
-//! 日志拒绝、互斥守卫与保留策略。
+//! 与报告字段、恢复重执行补齐与直跑等值、坏份降级、零重执行合法终态、
+//! 撕裂日志拒绝、互斥守卫与保留策略。
 use super::*;
 
 fn scenario() -> Value {
@@ -155,9 +155,9 @@ fn periodic_checkpoints_land_with_report_fields_and_keep() -> anyhow::Result<()>
 }
 
 /// 目录恢复+续跑与直跑等值（减 CPU 桶）；--verify-replay 组合通过；
-/// 日志尾恰与最新份衔接时零段待重放=合法终态。
+/// 日志尾恰与最新份衔接时重执行段数最小（保存后即崩的形态）。
 #[test]
-fn directory_recovery_replays_log_and_matches_straight_run() -> anyhow::Result<()> {
+fn directory_recovery_reexecutes_log_and_matches_straight_run() -> anyhow::Result<()> {
     let reference = Case::new("ref");
     let ref_report = reference.0.join("r.json");
     let (_, reference) = run(reference.command(&ref_report, 7).arg("--kkpv"), &ref_report)?;
@@ -177,9 +177,9 @@ fn directory_recovery_replays_log_and_matches_straight_run() -> anyhow::Result<(
         &report1,
     )?;
 
-    // 模拟崩溃：目录有 tick 2/4/6 三份，日志段到 tick 5——最新份 6 的
-    // 世界时间恰为日志末段+1（保存后即崩的形态，零段待重放），续跑
-    // 1 轮后应与直跑 7 轮等值。
+    // 模拟崩溃：目录有 tick 2/4/6 三份，日志段到 tick 6——最新份 6 的
+    // 游标停在段 5（保存点=段写入后、世界 +1 前），其后恰剩一段废弃
+    // 分支需重执行，续跑 1 轮后应与直跑 7 轮等值。
     let report2 = case.0.join("r2.json");
     let (_, report2) = run(
         case.command(&report2, 1)
@@ -204,7 +204,7 @@ fn directory_recovery_replays_log_and_matches_straight_run() -> anyhow::Result<(
         "零段边界：检查点时间锚世界时间（保存节奏不随热身平移）"
     );
     assert_eq!(
-        recovery["replayed_segments"], 1,
+        recovery["reexecuted_ticks"], 1,
         "保存后恰剩末轮一段（日志随热身平移、保存锚世界时间）"
     );
     assert_eq!(recovery["skipped_broken"], 0);
@@ -217,7 +217,131 @@ fn directory_recovery_replays_log_and_matches_straight_run() -> anyhow::Result<(
     assert_eq!(
         without_cpu(&report2["final"]),
         without_cpu(&reference["final"]),
-        "目录恢复续跑终态须与直跑逐位相等（减 CPU 桶）"
+        "目录恢复（重执行补齐）续跑终态须与直跑逐位相等（减 CPU 桶）"
+    );
+    Ok(())
+}
+
+/// 保存后即崩（游标即日志尾）：重执行零拍是合法终态，恢复运行只跑请
+/// 求轮数、日志不截断只续写；终态与直跑等值。
+#[test]
+fn recovery_with_cursor_at_log_tail_reexecutes_nothing() -> anyhow::Result<()> {
+    let reference = Case::new("ref-zero");
+    let ref_report = reference.0.join("r.json");
+    let (_, reference) = run(&mut reference.command(&ref_report, 7), &ref_report)?;
+
+    // 5 轮 + 热身使终态世界时间为 6：every=3 的最后到点保存恰在末轮
+    // 之后（世界 6），其游标即日志尾段（tick 5）。
+    let case = Case::new("zero");
+    let dir = case.0.join("ckpt");
+    let log = case.0.join("input.jsonl");
+    let report1 = case.0.join("r1.json");
+    let _ = run(
+        case.command(&report1, 5)
+            .arg("--checkpoint-every")
+            .arg("3")
+            .arg("--checkpoint-dir")
+            .arg(&dir)
+            .arg("--input-log")
+            .arg(&log),
+        &report1,
+    )?;
+    let before = std::fs::read_to_string(&log)?;
+
+    let report2 = case.0.join("r2.json");
+    let (_, report2) = run(
+        case.command(&report2, 2)
+            .arg("--load-checkpoint")
+            .arg(&dir)
+            .arg("--input-log")
+            .arg(&log),
+        &report2,
+    )?;
+    let recovery = &report2["recovery"];
+    assert_eq!(recovery["checkpoint_time"], 6);
+    assert_eq!(recovery["reexecuted_ticks"], 0, "游标即日志尾：零重执行");
+    assert_eq!(
+        report2["world_ticks_committed"], 2,
+        "成功判据只含请求轮数（无重执行并入）"
+    );
+    assert!(
+        std::fs::read_to_string(&log)?.starts_with(&before),
+        "零重执行不截断：旧日志是续写后的前缀"
+    );
+    assert_eq!(
+        without_cpu(&report2["final"]),
+        without_cpu(&reference["final"]),
+        "保存后即崩的恢复与直跑等值"
+    );
+    Ok(())
+}
+
+/// 二次恢复收敛：恢复运行自身继续周期保存，从其新目录再次恢复仍收敛
+/// 到同一直跑终态——截断后的单线历史支持任意次恢复。
+#[test]
+fn second_recovery_from_recovered_run_still_converges() -> anyhow::Result<()> {
+    let reference = Case::new("ref-twice");
+    let ref_report = reference.0.join("r.json");
+    let (_, reference) = run(&mut reference.command(&ref_report, 10), &ref_report)?;
+
+    let case = Case::new("twice");
+    let first_dir = case.0.join("ckpt1");
+    let second_dir = case.0.join("ckpt2");
+    let log = case.0.join("input.jsonl");
+    let report1 = case.0.join("r1.json");
+    let _ = run(
+        case.command(&report1, 6)
+            .arg("--checkpoint-every")
+            .arg("2")
+            .arg("--checkpoint-dir")
+            .arg(&first_dir)
+            .arg("--input-log")
+            .arg(&log),
+        &report1,
+    )?;
+
+    // 第一次恢复：重执行 1 段 + 2 新轮（世界 6/7/8），续存到新目录，
+    // 世界 8 到点保存一份。
+    let report2 = case.0.join("r2.json");
+    let (_, report2) = run(
+        case.command(&report2, 2)
+            .arg("--load-checkpoint")
+            .arg(&first_dir)
+            .arg("--input-log")
+            .arg(&log)
+            .arg("--checkpoint-every")
+            .arg("2")
+            .arg("--checkpoint-dir")
+            .arg(&second_dir),
+        &report2,
+    )?;
+    assert_eq!(report2["recovery"]["reexecuted_ticks"], 1);
+    assert_eq!(report2["final"]["time"], 9);
+
+    // 第二次恢复（从恢复运行自己的检查点目录）：游标 tick 7、日志尾
+    // tick 8——重执行 1 段 + 2 新轮，终态仍与直跑 10 轮等值。
+    let report3 = case.0.join("r3.json");
+    let (_, report3) = run(
+        case.command(&report3, 2)
+            .arg("--load-checkpoint")
+            .arg(&second_dir)
+            .arg("--input-log")
+            .arg(&log),
+        &report3,
+    )?;
+    let recovery = &report3["recovery"];
+    assert_eq!(recovery["checkpoint_time"], 8);
+    assert_eq!(recovery["reexecuted_ticks"], 1);
+    assert_eq!(report3["final"]["time"], 11);
+    let lines = std::fs::read_to_string(&log)?.lines().count();
+    assert_eq!(
+        lines, 11,
+        "header + 7 保留段（二次截断）+ 1 重执行段 + 2 新段"
+    );
+    assert_eq!(
+        without_cpu(&report3["final"]),
+        without_cpu(&reference["final"]),
+        "二次恢复仍与直跑逐位等值（减 CPU 桶）"
     );
     Ok(())
 }
@@ -258,8 +382,8 @@ fn recovery_from_older_checkpoint_matches_straight_run() -> anyhow::Result<()> {
     )?;
     assert_eq!(report2["recovery"]["checkpoint_time"], 2);
     assert_eq!(
-        report2["recovery"]["replayed_segments"], 5,
-        "段 2..6 重放（热身平移起点）"
+        report2["recovery"]["reexecuted_ticks"], 5,
+        "段 2..6 重执行补齐（热身平移起点）"
     );
     assert_eq!(report2["final"]["time"], 8);
     assert_eq!(
@@ -308,7 +432,10 @@ fn broken_newest_checkpoint_downgrades_to_previous() -> anyhow::Result<()> {
     let recovery = &report2["recovery"];
     assert_eq!(recovery["skipped_broken"], 1, "坏最新份被跳过");
     assert_eq!(recovery["checkpoint_time"], 4);
-    assert_eq!(recovery["replayed_segments"], 3, "段 4..6 重放到日志尾");
+    assert_eq!(
+        recovery["reexecuted_ticks"], 3,
+        "段 4..6 重执行补齐到日志尾"
+    );
     assert_eq!(report2["final"]["time"], 8);
 
     let reference = Case::new("refd");
@@ -614,7 +741,7 @@ fn recovered_run_continues_periodic_checkpointing() -> anyhow::Result<()> {
         &report2,
     )?;
     assert_eq!(report2["recovery"]["checkpoint_time"], 6);
-    assert_eq!(report2["recovery"]["replayed_segments"], 1);
+    assert_eq!(report2["recovery"]["reexecuted_ticks"], 1);
     let auto = &report2["auto_checkpoint"];
     assert_eq!(
         auto["saved"], 1,
@@ -631,7 +758,7 @@ fn recovered_run_continues_periodic_checkpointing() -> anyhow::Result<()> {
     let lines = std::fs::read_to_string(&log)?.lines().count();
     assert_eq!(
         lines, 9,
-        "header + 6 旧段 + 2 新段（重放不写段），续接不双重记录"
+        "header + 5 保留段（截断到游标）+ 1 重执行段 + 2 新段，重执行与普通轮同样记段"
     );
     assert_eq!(
         without_cpu(&report2["final"]),

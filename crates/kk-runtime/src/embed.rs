@@ -750,6 +750,7 @@ impl Drop for EmbedEngine {
 mod checkpoint;
 mod execution;
 mod input_log;
+mod input_log_scan;
 mod mod_chain;
 mod placement;
 mod power_bank_admin;
@@ -759,9 +760,16 @@ mod replay;
 mod setup;
 mod switch;
 
-pub use input_log::{CommittedLogError, InputLogData, InputLogError, LogCursor, read_input_log};
+pub use input_log::{CommittedLogError, InputLogError, LogCursor};
+pub use input_log_scan::{
+    InputLogData, Retain, ScanError, ScanStats, read_input_log, scan_input_log,
+    truncate_after_cursor,
+};
 use mod_chain::ModSlotExecutor;
 use projection::{kkpv_audience_hash, market_view, power_account_view};
-pub use replay::{ReplayRound, assert_header_paired, rebuild_round, segments_from_checkpoint};
+pub use replay::{
+    ReplayRound, assert_header_paired, rebuild_round, segments_from_checkpoint,
+    strip_checkpoint_memory, verify_logged_memory,
+};
 
 pub use setup::terrain_codes_from_json;

@@ -106,18 +106,18 @@ pub(super) fn record(every: u32, dir: Option<&Path>, keep: Option<u32>, stats: &
         "deleted": stats.deleted,
         "delete_errors": stats.delete_errors,
         "save_ms_head": stats.save_ms.iter().take(5).collect::<Vec<_>>(),
-        "rpo": format!("仅检查点：最多丢 {every} tick；配合 --input-log 恢复可到日志尾（保存后崩溃 RPO=0）——不承诺零丢失"),
+        "rpo": format!("仅检查点：最多丢 {every} tick；配合 --input-log 恢复可重执行到日志尾（保存后崩溃 RPO=0）——不承诺零丢失"),
     })
 }
 
-/// v10 报告字段：目录恢复记录（所选文件/检查点时间/保存时游标/重放段
-/// 数/跳过坏份数）。
+/// v10 报告字段：目录恢复记录（所选文件/检查点时间/保存时游标/重执行
+/// 丢失拍数/跳过坏份数）。
 pub(super) fn recovery_record(found: &checkpoint::Recovery) -> Value {
     json!({
         "selected": found.file,
         "checkpoint_time": found.checkpoint_time,
         "log_cursor": found.log_cursor,
-        "replayed_segments": found.replay_segments.len(),
+        "reexecuted_ticks": found.reexecute_ticks,
         "skipped_broken": found.skipped_broken,
     })
 }

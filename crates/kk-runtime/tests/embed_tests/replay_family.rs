@@ -76,11 +76,13 @@ fn seal_line(mut record: serde_json::Map<String, Value>) -> (String, String) {
 }
 
 /// 等值比较前剥离的键：last_console 由沙箱执行产生（回放无沙箱），
-/// metadata 是调用方自定载荷。
+/// metadata 是调用方自定载荷；v2 起玩家 Memory 不随日志重建（回放保持
+/// 检查点值），剥离后由 verify_logged_memory 以摘要对账。
 fn strip_volatile(mut value: Value) -> Value {
     let object = value.as_object_mut().expect("检查点是对象");
     object.remove("last_console");
     object.remove("metadata");
+    kk_runtime::embed::strip_checkpoint_memory(&mut value);
     value
 }
 
@@ -144,10 +146,12 @@ pub(super) fn three_sources_replay_matches_live_impl() -> anyhow::Result<()> {
     let mut replay = EmbedEngine::new();
     replay.restore_checkpoint(start, None)?;
     replay.replay_input_rounds(&header, segments)?;
+    kk_runtime::embed::verify_logged_memory(segments, &final_live)
+        .expect("Memory 摘要与日志最后写回对账");
     assert_eq!(
         strip_volatile(replay.checkpoint(Value::Null)?),
         strip_volatile(final_live.clone()),
-        "回放终态必须与直跑终态逐位相等"
+        "回放终态必须与直跑终态逐位相等（Memory 剥离后摘要对账）"
     );
     assert_eq!(replay.input_log_segments(), None, "回放引擎不写新段");
     Ok(())
@@ -194,10 +198,9 @@ pub(super) fn injected_random_replay_matches_live_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// rebuild_round 的写回复建直测：raw_memory/segments 的 null 与 Some
-/// 两态都从真实段直接钉死。正常记段轮 raw_memory 恒为字符串，null 分支
-/// 服务未来/异构载荷（None=结算端保留旧值），故以字段改写直测而非
-/// 构造自然轮。
+/// rebuild_round 的写回复建直测（v2）：回放不重建玩家 Memory（写回恒
+/// None，结算端保持检查点值），段内 raw_memory_sha256 与终态提交值经
+/// verify_logged_memory 对账；摘要 null 分支以字段改写直测。
 pub(super) fn rebuild_writeback_null_and_some_impl() -> anyhow::Result<()> {
     let case = Case::new("rebuild");
     let (mut engine, log) = plain_engine(&case, "input.jsonl")?;
@@ -205,6 +208,7 @@ pub(super) fn rebuild_writeback_null_and_some_impl() -> anyhow::Result<()> {
     let write =
         "Memory.note = 'x'; RawMemory.segments[3] = 'seg'; RawMemory.setActiveSegments([3]); true";
     engine.run_players(&BTreeMap::from([("p1".to_string(), write.to_string())]))?;
+    let final_live = engine.checkpoint(Value::Null)?;
     drop(engine);
     let data = read_input_log(&log)?;
     let segment = data.segments[0].clone();
@@ -212,26 +216,178 @@ pub(super) fn rebuild_writeback_null_and_some_impl() -> anyhow::Result<()> {
     let round = kk_runtime::embed::rebuild_round(&segment)?;
     let writeback = &round.writebacks["p1"];
     assert!(writeback.cpu.is_some(), "CPU 新桶整桶重建");
-    // 正常轮 endTick 恒带 rawMemory（字符串），Some 态是常态。
-    assert!(
-        writeback
-            .raw_memory
-            .as_deref()
-            .is_some_and(|m| m.contains('x'))
+    assert_eq!(
+        writeback.raw_memory, None,
+        "v2 回放不重建 Memory（结算端保持检查点值）"
     );
     assert!(writeback.segments.is_some(), "段写回经 from_runner 重放");
+    kk_runtime::embed::verify_logged_memory(std::slice::from_ref(&segment), &final_live)
+        .expect("段内摘要与终态提交值对账");
 
-    // null 两态：字段置 null 后重建（rebuild 不做链校验，直接可测）。
+    // 摘要 null 两态：该轮无 Memory 写回的形态，重建照常（rebuild 不做
+    // 链校验，直接可测）。
     let mut nulled = segment.clone();
-    nulled["players"]["p1"]["raw_memory"] = Value::Null;
+    nulled["players"]["p1"]["raw_memory_sha256"] = Value::Null;
     nulled["players"]["p1"]["segments"] = Value::Null;
     let round = kk_runtime::embed::rebuild_round(&nulled)?;
     let writeback = &round.writebacks["p1"];
-    assert_eq!(
-        writeback.raw_memory, None,
-        "null 重建为 None（保留旧值语义）"
-    );
+    assert_eq!(writeback.raw_memory, None);
     assert_eq!(writeback.segments, None);
+
+    // 摘要形状拒绝：大写/短串/数字都不是 64 位小写十六进制。
+    for bad in [json!("A".repeat(64)), json!("abc"), json!(5)] {
+        let mut malformed = segment.clone();
+        malformed["players"]["p1"]["raw_memory_sha256"] = bad;
+        assert!(
+            kk_runtime::embed::rebuild_round(&malformed).is_err(),
+            "非 64 位小写十六进制摘要必须拒绝"
+        );
+    }
+    Ok(())
+}
+
+/// verify_logged_memory 的账目矩阵（v2）：真实引擎双玩家（一写一不写、
+/// 空串摘要与 null 区分、段内无 Memory 全值键）+ 纯函数直测（多玩家
+/// last-write-wins、null 不入账、空窗口 Ok、负向四分支）+ v1 形状夹具
+/// 按未知版本拒收。
+pub(super) fn verify_logged_memory_matrix_impl() -> anyhow::Result<()> {
+    // —— 真实引擎：p1 写 Memory，p2 正常执行但不写 ——
+    let case = Case::new("digest-matrix");
+    let mut engine = EmbedEngine::new();
+    engine.create_shard(&json!({
+        "players": ["p1", "p2"],
+        "rooms": [{"name": "W1N1", "owner": "p1", "rcl": 3}]
+    }))?;
+    engine.place_object(
+        "W1N1",
+        "creep",
+        &json!({"pos": [10, 10], "owner": "p1", "name": "c1", "body": ["move"]}),
+    )?;
+    let log = case.path("input.jsonl");
+    engine.enable_input_log(&log, json!({}))?;
+    engine.run_players(&BTreeMap::from([
+        ("p1".to_string(), "Memory.note = 'two'; true".to_string()),
+        ("p2".to_string(), "true".to_string()),
+    ]))?;
+    let final_live = engine.checkpoint(Value::Null)?;
+    drop(engine);
+    let data = read_input_log(&log)?;
+    let segment = &data.segments[0];
+    assert!(
+        segment["players"]["p1"]["raw_memory_sha256"].is_string(),
+        "写回玩家携带摘要"
+    );
+    let d_empty = sha256_hex(b"");
+    assert_eq!(
+        segment["players"]["p2"]["raw_memory_sha256"],
+        json!(d_empty),
+        "正常执行轮恒 Some（初始空串），与 null（无写回）区分"
+    );
+    for entry in segment["players"].as_object().unwrap().values() {
+        assert!(
+            !entry.as_object().unwrap().contains_key("raw_memory"),
+            "v2 段不携带 Memory 全值键"
+        );
+    }
+    kk_runtime::embed::verify_logged_memory(&data.segments, &final_live)
+        .expect("双玩家账目与终态对账通过");
+
+    // —— 纯函数矩阵 ——
+    let seg = |entries: &[(&str, Value)]| -> Value {
+        let mut players = serde_json::Map::new();
+        for (name, digest) in entries {
+            players.insert(
+                (*name).to_string(),
+                json!({"raw_memory_sha256": digest.clone()}),
+            );
+        }
+        json!({ "players": Value::Object(players) })
+    };
+    let live_of = |entries: &[(&str, Value)]| -> Value {
+        let mut players = serde_json::Map::new();
+        for (name, memory) in entries {
+            players.insert((*name).to_string(), json!({ "raw_memory": memory.clone() }));
+        }
+        json!({ "engine": { "players": Value::Object(players) } })
+    };
+    let d_a1 = sha256_hex(b"A1");
+    let d_b1 = sha256_hex(b"B1");
+
+    // 多玩家账目：p1 第二轮 null 不覆盖账目（last-write-wins 只对非空），
+    // p2 只写一轮，p3 全程无条目不入账。
+    let segments = vec![
+        seg(&[("p1", json!(d_a1.clone())), ("p3", Value::Null)]),
+        seg(&[("p1", Value::Null), ("p2", json!(d_b1.clone()))]),
+    ];
+    let live = live_of(&[
+        ("p1", json!("A1")),
+        ("p2", json!("B1")),
+        ("p3", json!("从未写回，两侧未动")),
+    ]);
+    kk_runtime::embed::verify_logged_memory(&segments, &live).expect("多玩家账目与终态对账通过");
+
+    // 空串 Memory：sha256("") 与 null（无写回）区分——空串入账且可对账。
+    let empty_segments = [seg(&[("p1", json!(d_empty))])];
+    let empty_live = live_of(&[("p1", json!(""))]);
+    kk_runtime::embed::verify_logged_memory(&empty_segments, &empty_live)
+        .expect("空串 Memory 摘要可对账");
+
+    // 空窗口：游标在日志尾是合法终态。
+    kk_runtime::embed::verify_logged_memory(&[], &live).expect("空窗口零账目");
+
+    // 负向：终态 Memory 被改写。
+    let tampered = live_of(&[("p1", json!("TAMPERED")), ("p2", json!("B1"))]);
+    let rejected = kk_runtime::embed::verify_logged_memory(&segments, &tampered).unwrap_err();
+    assert!(
+        rejected
+            .to_string()
+            .contains("与日志记录的最后一次写回不符"),
+        "{rejected:#}"
+    );
+
+    // 负向：段摘要值错（形状合法——模拟重封链后的改写），对账发现。
+    let wrong = "1".repeat(64);
+    let forged = [seg(&[("p1", json!(wrong))]), segments[1].clone()];
+    let rejected = kk_runtime::embed::verify_logged_memory(&forged, &live).unwrap_err();
+    assert!(
+        rejected
+            .to_string()
+            .contains("与日志记录的最后一次写回不符"),
+        "{rejected:#}"
+    );
+
+    // 负向：终态缺少该玩家。
+    let missing = live_of(&[("p1", json!("A1"))]);
+    let rejected = kk_runtime::embed::verify_logged_memory(&segments, &missing).unwrap_err();
+    assert!(rejected.to_string().contains("缺少 Memory"), "{rejected:#}");
+
+    // 负向：玩家在终态但缺 raw_memory 键（畸形检查点）。
+    let malformed = json!({"engine": {"players": {"p1": {}, "p2": {"raw_memory": "B1"}}}});
+    let rejected = kk_runtime::embed::verify_logged_memory(&segments, &malformed).unwrap_err();
+    assert!(rejected.to_string().contains("缺少 Memory"), "{rejected:#}");
+
+    // v1 形状夹具：version 1 且段内携带 raw_memory 全值键——按未知版本
+    // 显式拒绝（无迁移），v1 载荷到不了 rebuild。
+    let v1_log = case.path("v1.jsonl");
+    let header = json!({
+        "format": "kkscreeps-input-log", "version": 1, "kind": "header",
+        "prev_hash": null, "identity": {}, "metadata": {}
+    });
+    let (header_line, header_sha) = seal_line(header.as_object().unwrap().clone());
+    let v1_segment = json!({
+        "format": "kkscreeps-input-log", "version": 1, "kind": "segment",
+        "seq": 1, "tick": 1, "generation": 0, "now_ms": 0,
+        "source": "advance", "identity": {},
+        "intents": {},
+        "players": {"p1": {"raw_memory": "{\"n\":1}"}},
+        "prev_hash": header_sha,
+    });
+    let (segment_line, _) = seal_line(v1_segment.as_object().unwrap().clone());
+    std::fs::write(&v1_log, format!("{header_line}\n{segment_line}\n"))?;
+    match kk_runtime::embed::read_input_log(&v1_log) {
+        Err(kk_runtime::embed::InputLogError::UnknownVersion { version: 1, .. }) => {}
+        other => panic!("v1 形状夹具应按未知版本拒收：{other:?}"),
+    }
     Ok(())
 }
 
@@ -276,6 +432,8 @@ pub(super) fn dice_replay_matches_live_impl() -> anyhow::Result<()> {
     replay.restore_checkpoint(start, Some((&packages, &RegisterOptions::default())))?;
     replay.replay_input_rounds(&header, segments)?;
     let replay_final = replay.checkpoint(Value::Null)?;
+    kk_runtime::embed::verify_logged_memory(segments, &final_live)
+        .expect("Memory 摘要与日志最后写回对账");
     assert_eq!(
         strip_volatile(replay_final.clone()),
         strip_volatile(final_live.clone()),

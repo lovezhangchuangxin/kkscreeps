@@ -203,9 +203,17 @@ pub fn rebuild_round(segment: &Value) -> anyhow::Result<ReplayRound> {
 }
 
 /// 玩家写回复建：CPU 新桶整桶反序列化（不从 cpu_billed_ms 重推——那只是
-/// 实测佐证）；raw_memory 的 null/Some 区分保真（None=结算端保留旧值）；
+/// 实测佐证）；**v2 起玩家 Memory 不随段携带值，只携带 sha256 摘要**——
+/// 回放不重建 Memory（结算端保持检查点值），终态一致性由核对入口以
+/// 「终态 Memory 摘要 == 窗口内最后非空摘要」验证（`verify_logged_memory`）；
 /// segments 重放 `from_runner`（日志存的就是它的原始输入，纯函数过滤，
 /// 同函数重放即逐位等价，无需逆转换）。
+///
+/// Memory 与 segments/ism_local 的不对称是机制性的：后两者是回放需要
+/// **重建**的结算状态（writeback 应用路径消费它们），且受 runner 限额
+/// 约束、体积小（段激活键/本地段），保留全值使金标准仍逐位覆盖；Memory
+/// 是体积主导项（v1 实测 30KB/拍中占 25KB）且回放语义就是「保持检查点
+/// 值」，摘要化后由对账入口单独验证。
 fn rebuild_writeback(entry: &Value) -> anyhow::Result<PlayerWriteback> {
     anyhow::ensure!(
         entry["cpu_bucket"].is_object(),
@@ -213,11 +221,19 @@ fn rebuild_writeback(entry: &Value) -> anyhow::Result<PlayerWriteback> {
     );
     let bucket: kk_core::cpu::Bucket = serde_json::from_value(entry["cpu_bucket"].clone())
         .context("cpu_bucket 反序列化失败（日志版本或桶形状不符）")?;
-    let raw_memory = match &entry["raw_memory"] {
-        Value::Null => None,
-        Value::String(text) => Some(text.clone()),
-        other => anyhow::bail!("raw_memory 必须是字符串或 null：{other}"),
-    };
+    match &entry["raw_memory_sha256"] {
+        Value::Null => {}
+        Value::String(digest) => {
+            anyhow::ensure!(
+                digest.len() == 64
+                    && digest
+                        .bytes()
+                        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
+                "raw_memory_sha256 必须是 64 位十六进制小写摘要"
+            );
+        }
+        other => anyhow::bail!("raw_memory_sha256 必须是摘要字符串或 null：{other}"),
+    }
     let segments = match &entry["segments"] {
         Value::Null => None,
         value => Some(SegmentWriteback::from_runner(value)),
@@ -230,8 +246,59 @@ fn rebuild_writeback(entry: &Value) -> anyhow::Result<PlayerWriteback> {
     };
     Ok(PlayerWriteback {
         cpu: Some(bucket),
-        raw_memory,
+        raw_memory: None,
         ism_local,
         segments,
     })
+}
+
+/// 检查点比较的 Memory 剥离（v2）：回放不重建玩家 Memory，直跑/回放两
+/// 份检查点的 raw_memory 合法不同，逐位比较前先移除；一致性改由
+/// `verify_logged_memory` 以摘要对账（调用须在其之后）。
+pub fn strip_checkpoint_memory(checkpoint: &mut Value) {
+    let Some(players) = checkpoint
+        .get_mut("engine")
+        .and_then(|engine| engine.get_mut("players"))
+        .and_then(Value::as_object_mut)
+    else {
+        return;
+    };
+    for player in players.values_mut() {
+        if let Some(fields) = player.as_object_mut() {
+            fields.remove("raw_memory");
+        }
+    }
+}
+
+/// v2 摘要对账：回放窗口内每玩家最后一个非空 `raw_memory_sha256` 必须
+/// 等于直跑终态 Memory 的 sha256。段级链式摘要已保证日志里的摘要未被
+/// 篡改，此处验证「终态检查点 Memory == 日志记录的最后一次提交值」。
+/// 窗口内无写回的玩家不受影响（两侧 Memory 均未动，剥离后逐位比较
+/// 已覆盖）。
+pub fn verify_logged_memory(segments: &[Value], live: &Value) -> anyhow::Result<()> {
+    let mut expected: BTreeMap<&str, &str> = BTreeMap::new();
+    for segment in segments {
+        let Some(players) = segment["players"].as_object() else {
+            continue;
+        };
+        for (name, entry) in players {
+            if let Some(digest) = entry["raw_memory_sha256"].as_str() {
+                expected.insert(name, digest);
+            }
+        }
+    }
+    let players = live["engine"]["players"]
+        .as_object()
+        .context("直跑终态检查点缺少玩家域")?;
+    for (name, digest) in &expected {
+        let memory = players
+            .get(*name)
+            .and_then(|player| player["raw_memory"].as_str())
+            .with_context(|| format!("玩家 {name} 终态检查点缺少 Memory，与日志写回不符"))?;
+        anyhow::ensure!(
+            super::input_log::sha256_hex(memory.as_bytes()) == *digest,
+            "玩家 {name} 终态 Memory 摘要与日志记录的最后一次写回不符"
+        );
+    }
+    Ok(())
 }

@@ -26,6 +26,7 @@
 | [ADR-016](ADR-016-official-content-packs.md) | 官方玩法包、内容选择与公共 JS SDK 验收 | 细化 ADR-007/014/015：部分官方内容由 JS 实现，预设装配与存量迁移尚未实现 |
 
 | [ADR-017](ADR-017-background-services.md) | 独立线程的异步后台服务域 | G27.a 首片已交付；耐久任务与 outbox 另有提交边界 |
+| [ADR-018](ADR-018-production-persistence-posture.md) | 生产持久化=周期检查点权威，输入日志为显式审计件 | 技术基座随输入日志 v2 交付；服务侧接线在 G27.b/G28 线 |
 
 上述记录均已接受，具体修订与范围以各记录正文为准。
 

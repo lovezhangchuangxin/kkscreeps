@@ -58,15 +58,28 @@ fn input_log_records_commits_and_resumes() -> anyhow::Result<()> {
     assert_eq!(report["input_log"]["first_tick"], 1);
     assert_eq!(report["input_log"]["last_tick"], 3);
 
-    // 独立读回：三段全为玩家轮，段号 1..=3，写回随段落位。
+    // 独立读回：三段全为玩家轮，段号 1..=3，写回随段落位。v2：Memory
+    // 只入摘要——逐段摘要形状合法且随每轮提交变化（seen 每轮自增）。
     let data = read_input_log(&log)?;
     assert_eq!(data.segments.len(), 3);
+    let mut digests: Vec<&str> = Vec::new();
     for (index, segment) in data.segments.iter().enumerate() {
         assert_eq!(segment["seq"], index as u64 + 1);
         assert_eq!(segment["source"], "players");
-        let raw = segment["players"]["p1"]["raw_memory"].as_str().unwrap();
-        assert!(raw.contains("seen"), "玩家写回候选随段落位：{raw}");
+        let digest = segment["players"]["p1"]["raw_memory_sha256"]
+            .as_str()
+            .unwrap();
+        assert!(
+            digest.len() == 64
+                && digest
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
+            "玩家写回摘要是 64 位十六进制：{digest}"
+        );
+        digests.push(digest);
     }
+    let unique: std::collections::HashSet<&str> = digests.iter().copied().collect();
+    assert_eq!(unique.len(), 3, "每轮提交的 Memory 摘要随 seen 自增变化");
 
     // 同场景同日志路径续跑：先整读校验再续接，段号延续到 5。
     let report2 = fixture.0.join("r2.json");

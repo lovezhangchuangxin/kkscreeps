@@ -325,6 +325,8 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     )?;
     scenarios.run("tamper_matrix_impl", tamper_matrix_impl)?;
     scenarios.run("torn_tail_byte_forms_impl", torn_tail_byte_forms_impl)?;
+    scenarios.run("streaming_scan_impl", streaming_scan_impl)?;
+    scenarios.run("truncate_after_cursor_impl", truncate_after_cursor_impl)?;
     scenarios.run(
         "three_sources_replay_matches_live_impl",
         three_sources_replay_matches_live_impl,
@@ -344,6 +346,10 @@ fn embed_engine_suite() -> anyhow::Result<()> {
         rebuild_writeback_null_and_some_impl,
     )?;
     scenarios.run(
+        "verify_logged_memory_matrix_impl",
+        verify_logged_memory_matrix_impl,
+    )?;
+    scenarios.run(
         "settle_replayed_round_contract_impl",
         settle_replayed_round_contract_impl,
     )?;
@@ -353,7 +359,7 @@ fn embed_engine_suite() -> anyhow::Result<()> {
         cursor_and_header_pairing_impl,
     )?;
     scenarios.run("resume_and_lifecycle_impl", resume_and_lifecycle_impl)?;
-    scenarios.finish(97)?;
+    scenarios.finish(100)?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
     Ok(())
 }
