@@ -1,0 +1,82 @@
+{
+  "date": "2026-10-11",
+  "profile": "mature-rcl8-v1",
+  "players": 50,
+  "warmup": 5,
+  "ticks": 100,
+  "concurrency": 4,
+  "order": [
+    "old",
+    "new",
+    "new",
+    "old"
+  ],
+  "thermal_protocol": "2 个丢弃窗预热后采集",
+  "experiment": "L4b 解码器块内归并：两指针复用旧记录（免每拍 ~3210 次 idFromHalves 分配/哈希/Map 探测）+ SEEN_TICK 戳清扫（免 seen Set 与其存活）",
+  "old_sha256_prefix": "73c00619",
+  "new_sha256_prefix": "4a2ae71c",
+  "old_git": "62854ac (HEAD)",
+  "new_changes": "crates/kk-runner/src/prelude/game/kkpv.js",
+  "rows": [
+    {
+      "tag": "old1",
+      "version": "old",
+      "wall_p50": 678.98,
+      "wall_p95": 843.97,
+      "run_p50": 312.58,
+      "project_p50": 210.28,
+      "settle_p50": 152.56,
+      "cpu": 2271.92,
+      "rss_gb": 2.751
+    },
+    {
+      "tag": "new2",
+      "version": "new",
+      "wall_p50": 672.06,
+      "wall_p95": 832.01,
+      "run_p50": 296.48,
+      "project_p50": 210.58,
+      "settle_p50": 151.31,
+      "cpu": 2191.68,
+      "rss_gb": 2.79
+    },
+    {
+      "tag": "new3",
+      "version": "new",
+      "wall_p50": 655.93,
+      "wall_p95": 830.17,
+      "run_p50": 283.83,
+      "project_p50": 213.01,
+      "settle_p50": 154.13,
+      "cpu": 2136.37,
+      "rss_gb": 2.806
+    },
+    {
+      "tag": "old4",
+      "version": "old",
+      "wall_p50": 677.48,
+      "wall_p95": 845.66,
+      "run_p50": 303.94,
+      "project_p50": 212.76,
+      "settle_p50": 153.91,
+      "cpu": 2209.95,
+      "rss_gb": 2.792
+    }
+  ],
+  "new_over_old_mean": {
+    "wall_p50": 0.979,
+    "wall_p95": 0.9838,
+    "run_p50": 0.9413,
+    "project_p50": 1.0013,
+    "settle_p50": 0.9966,
+    "cpu": 0.9657,
+    "rss_gb": 1.0096
+  },
+  "fairness": {
+    "cpu_change": -0.034,
+    "rss_change": 0.01,
+    "parallelism_new": 3.26,
+    "parallelism_old": 3.3
+  },
+  "conclusion": "两对相邻样本方向一致（new 快 wall 1.0%/3.2%）；run -5.9% 与解码器机理落点吻合、project/settle 不动；CPU -3.4% 公平门②改善、RSS +1.0% 噪声级。保留。"
+}

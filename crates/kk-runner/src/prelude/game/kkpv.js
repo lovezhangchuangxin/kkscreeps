@@ -41,8 +41,8 @@
   const __mapSet = Map.prototype.set;
   const __mapDelete = Map.prototype.delete;
   const __mapForEach = Map.prototype.forEach;
-  const __setAdd = Set.prototype.add;
-  const __setHas = Set.prototype.has;
+  const __weakGet = WeakMap.prototype.get;
+  const __weakSet = WeakMap.prototype.set;
 
   const HEADER_LEN = 160;
   // 2^32 在 double 中精确；i64 取负经补码量值合成（见 readInt）。
@@ -282,6 +282,15 @@
   // 与 JSON 记录一致，setter 写入同样固化，不静默丢弃）。
   const __Symbol = Symbol;
   const DECODE_CTX = __Symbol('kk.decodeCtx');
+  // 清扫戳（本拍 expectedTick）：与旧 seen Set 等价但免 3210 次串哈希——
+  // 符号键不进 JSON/枚举面。
+  const SEEN_TICK = __Symbol('kk.seenTick');
+  // 每 resident Map 的上一拍记录序：records 全数组 + 每块累计末界 + 目录
+  // 键并行双列（u32 double 数组），供下一拍块内两指针归并对位——复用旧
+  // 记录时不物化 id 字符串（省每拍 ~3210 次 idFromHalves 分配/哈希/Map
+  // 探测与 seen Set 存活，GC 实测主税之一，见研究补记 L4）。块数变动的
+  // 错位轮走慢路径自愈（重建记录，正确性无害），下一拍恢复全量对位。
+  const mergeState = new WeakMap();
 
   // 变长字段的共享惰性访问器按**字段索引**工作：字段元数据（含列偏移）
   // 随块布局逐 tick 变化，因此放在 DECODE_CTX 里按索引取，而不是在闭包
@@ -373,7 +382,7 @@
   // （公开块出现在私有束说明通道装配有误）。resident 非 null 时启用
   // 跨 tick 记录常驻：id 命中且布局签名一致就就地更新（ctx 重指新块、
   // 急读属性重写、变长属性重装共享访问器），目录外的 id 由调用方清扫。
-  function decodeBlockInto(dv, records, start, len, expectedTick, resident, seen) {
+  function decodeBlockInto(dv, records, his, los, start, len, expectedTick, resident, prev) {
     const h = checkBlockHeader(dv, start, len, expectedTick);
     if ((h.flags & 1) !== 1) fail('私有束要求私有块');
     if (h.terrain[1] !== 0) fail('私有对象块不带地形段');
@@ -459,6 +468,14 @@
     const dirAt = start + h.directory[0];
     let prevHi = -1;
     let prevLo = -1;
+    // 块内归并（prev 非 null 时启用）：两指针推进，小于当键的旧记录即本拍
+    // 消亡（出 resident）；键相等即复用旧记录对象——完全不物化 id 字符串。
+    // 未命中或签名不符落回慢路径（idFromHalves + Map 查询），块错位自愈。
+    let pi = prev === null ? 0 : prev.ps;
+    const pe = prev === null ? 0 : prev.pe;
+    const prevArr = prev === null ? null : prev.arr;
+    const prevHiCol = prev === null ? null : prev.his;
+    const prevLoCol = prev === null ? null : prev.los;
     for (let i = 0; i < objectCount; i++) {
       const at = dirAt + i * 16;
       const lo = u32(dv, at);
@@ -471,16 +488,45 @@
       if (handle >= bucketList.length) fail('未知类型句柄');
       const bucket = bucketList[handle];
       if (row >= bucket.rows) fail('行号越界');
-      const id = idFromHalves(lo, hi);
+      let existing = null;
+      if (resident !== null && prevArr !== null) {
+        while (pi < pe) {
+          if (prevHiCol[pi] < hi || (prevHiCol[pi] === hi && prevLoCol[pi] < lo)) {
+            __reflectApply(__mapDelete, resident, [prevArr[pi].id]);
+            pi++;
+          } else {
+            break;
+          }
+        }
+        if (pi < pe && prevHiCol[pi] === hi && prevLoCol[pi] === lo) {
+          existing = prevArr[pi];
+          pi++;
+        }
+      }
       // 常驻命中：布局签名一致（访问器的字段索引语义不变）就就地更新，
       // 免去每拍重建记录对象；布局变化（字段增删/列类型变/换桶）重建。
+      if (existing !== null) {
+        if (existing[RESIDENT_SIG] === bucket.sig) {
+          existing[SEEN_TICK] = expectedTick;
+          updateResident(existing, dv, bucket, row, arenaBase, arenaLen);
+          records[records.length] = existing;
+          his[his.length] = hi;
+          los[los.length] = lo;
+          continue;
+        }
+        __reflectApply(__mapDelete, resident, [existing.id]);
+        existing = null;
+      }
+      const id = idFromHalves(lo, hi);
       if (resident !== null) {
-        __reflectApply(__setAdd, seen, [id]);
-        const existing = __reflectApply(__mapGet, resident, [id]);
-        if (existing !== undefined) {
-          if (existing[RESIDENT_SIG] === bucket.sig) {
-            updateResident(existing, dv, bucket, row, arenaBase, arenaLen);
-            records[records.length] = existing;
+        const found = __reflectApply(__mapGet, resident, [id]);
+        if (found !== undefined) {
+          if (found[RESIDENT_SIG] === bucket.sig) {
+            found[SEEN_TICK] = expectedTick;
+            updateResident(found, dv, bucket, row, arenaBase, arenaLen);
+            records[records.length] = found;
+            his[his.length] = hi;
+            los[los.length] = lo;
             continue;
           }
           __reflectApply(__mapDelete, resident, [id]);
@@ -496,7 +542,10 @@
         rec[DECODE_CTX] = { dv, row, arenaBase, arenaLen, fields: bucket.fields };
       }
       const fields = bucket.fields;
-      if (resident !== null) rec[RESIDENT_SIG] = bucket.sig;
+      if (resident !== null) {
+        rec[RESIDENT_SIG] = bucket.sig;
+        rec[SEEN_TICK] = expectedTick;
+      }
       for (let f = 0; f < fields.length; f++) {
         const field = fields[f];
         if (bitAt(dv, field.missingAt, row)) continue;
@@ -508,6 +557,15 @@
       }
       if (resident !== null) __reflectApply(__mapSet, resident, [id, rec]);
       records[records.length] = rec;
+      his[his.length] = hi;
+      los[los.length] = lo;
+    }
+    // 块尾残留的旧记录（键大于本块末键）：本拍消亡，出 resident。
+    if (resident !== null && prevArr !== null) {
+      while (pi < pe) {
+        __reflectApply(__mapDelete, resident, [prevArr[pi].id]);
+        pi++;
+      }
     }
   }
 
@@ -563,8 +621,10 @@
       fail('缺少信封 tick 一致性参数');
     }
     const records = [];
+    const his = [];
+    const los = [];
     forEachBlock(dv, total, (start, len) => {
-      decodeBlockInto(dv, records, start, len, expectedTick, null, null);
+      decodeBlockInto(dv, records, his, los, start, len, expectedTick, null, null);
     });
     return records;
   }
@@ -572,7 +632,9 @@
   /** 常驻版解码：resident 是跨 tick 存活的 id → 记录 Map（调用方持有，
    * 沙箱生命周期内复用）。id 命中且布局签名一致就地更新，未命中新建，
    * 本 tick 目录之外的 id 清扫出表。记录对象跨 tick 保持同一性——与
-   * Memory 常驻同属已接受的观察面（依赖每拍新对象的代码在官方即坏）。 */
+   * Memory 常驻同属已接受的观察面（依赖每拍新对象的代码在官方即坏）。
+   * 块序与上一拍一致时逐块两指针归并（免 id 串物化与 seen Set）；
+   * 清扫改走 SEEN_TICK 戳比对。块数变动即弃用归并一拍（慢路径自愈）。 */
   function decodeBundleResident(buffer, expectedTick, resident) {
     const dv = new __DataView(buffer);
     const total = __reflectApply(__dvByteLength, dv, []);
@@ -580,13 +642,34 @@
       fail('缺少信封 tick 一致性参数');
     }
     const records = [];
-    const seen = new __Set();
+    const his = [];
+    const los = [];
+    const state = __reflectApply(__weakGet, mergeState, [resident]);
+    // 块数一致才启用归并对位（束块序=投影房间序，房间集稳定时逐拍一致）
+    const prevEnds = state !== undefined ? state.ends : null;
+    let blockIndex = 0;
+    const ends = [];
     forEachBlock(dv, total, (start, len) => {
-      decodeBlockInto(dv, records, start, len, expectedTick, resident, seen);
+      let prev = null;
+      if (prevEnds !== null && blockIndex < prevEnds.length) {
+        prev = {
+          arr: state.records,
+          his: state.his,
+          los: state.los,
+          ps: blockIndex === 0 ? 0 : prevEnds[blockIndex - 1],
+          pe: prevEnds[blockIndex],
+        };
+      }
+      decodeBlockInto(dv, records, his, los, start, len, expectedTick, resident, prev);
+      ends[ends.length] = records.length;
+      blockIndex++;
     });
+    // 无论本轮块数是否变动都存回本轮记录序：变动轮的错位已由慢路径
+    // 自愈，下一拍以本轮真实布局为基线恢复全量对位。
+    __reflectApply(__weakSet, mergeState, [resident, { records, ends, his, los }]);
     __reflectApply(__mapForEach, resident, [
-      (_, id) => {
-        if (!__reflectApply(__setHas, seen, [id])) __reflectApply(__mapDelete, resident, [id]);
+      (rec, id) => {
+        if (rec[SEEN_TICK] !== expectedTick) __reflectApply(__mapDelete, resident, [id]);
       },
     ]);
     return records;
