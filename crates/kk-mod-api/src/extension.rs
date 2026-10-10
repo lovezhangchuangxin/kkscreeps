@@ -89,8 +89,13 @@ impl ExtensionCatalog {
     }
 
     /// 按结构类型短名查内建类型键（builtin:{structure_type}）。
-    /// 目录未声明该类型的扩展时返回 None。
+    /// 目录未声明该类型的扩展时返回 None。空目录免拼键直返 None——
+    /// 共享房间块构建用空目录逐对象查询，避免每次 format! 分配与键
+    /// 校验（采样热点 ~5ms/拍）。
     pub fn type_for_structure(&self, structure_type: &str) -> Option<&Key> {
+        if self.fields.is_empty() {
+            return None;
+        }
         let key = Key::new(format!("builtin:{structure_type}")).ok()?;
         self.fields.get_key_value(&key).map(|(k, _)| k)
     }
