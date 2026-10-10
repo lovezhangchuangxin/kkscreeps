@@ -22,7 +22,7 @@ impl World {
     /// 房内存在己方对象时授予视野，但旗和工地不授予；可见房中的敌方对象也会导出。
     /// 己方旗和工地可单独导出，即使其房间不可见；他人的旗被排除。
     /// 所有已注册房间的地形仍会提供，无主旗只在可见房间导出。
-    /// observer 观察标记授予限时额外房间视野（observed_rooms_of 并入，
+    /// observer 观察标记授予限时额外房间视野（索引 observed 表并入，
     /// 一拍生命周期）；控制器预订仍未实现、不授予视野。
     /// 视野归集参考：driver/lib/runtime/data.js 的 userObjects 房间计算。
     pub fn world_json_for_viewer(&self, user: &str, gcl_points: i64) -> Value {
@@ -96,19 +96,24 @@ impl World {
         let user = viewer.map(|(u, _)| u);
         // observer 观察标记授予下一拍限时视野：并入可见集后，房间的能量
         // 统计、事件与对象导出与己方对象房同口径（官方 data.js 同源）。
-        let observed = user.map(|user| self.observed_rooms_of(user));
-        let mut visible: std::collections::BTreeSet<&String> = match user {
+        // 代际共享索引取代逐玩家全服扫描；全量形态（world_json）不用索引。
+        let index = user.map(|_| self.visibility_index());
+        let visible: std::collections::BTreeSet<&String> = match user {
             None => self.rooms.keys().collect(),
-            Some(user) => self
-                .rooms
-                .iter()
-                .filter(|(_, state)| room_visible_to(state, user))
-                .map(|(name, _)| name)
-                .collect(),
+            Some(user) => {
+                let index = index.as_deref().expect("带查看者的投影必然构建可见性索引");
+                let mut visible: std::collections::BTreeSet<&String> = self
+                    .rooms
+                    .iter()
+                    .filter(|(name, _)| index.room_visible_to(name, user))
+                    .map(|(name, _)| name)
+                    .collect();
+                if let Some(observed) = index.observed_rooms_of(user) {
+                    visible.extend(observed.iter());
+                }
+                visible
+            }
         };
-        if let Some(observed) = &observed {
-            visible.extend(observed.iter());
-        }
         let mut objects = Vec::new();
         let mut rooms = serde_json::Map::new();
         for (name, state) in &self.rooms {
@@ -142,34 +147,35 @@ impl World {
             // 不可见房间仅导出名称和地形，不导出能量统计及事件。
             rooms.insert(name.clone(), Value::Object(entry));
             let room_visible = visible.contains(name);
-            for (id, object) in &state.objects {
-                // Mod 对象只在携带玩家面目录时进入投影（按对象/字段可见
-                // 性裁切）；内部全量形态（world_json，无目录）与查询快照
-                // 走 object_snapshot 的专用读面。
-                if let RoomObject::Mod(mod_object) = object {
-                    if let Some(surface) = surface
-                        && let Some(record) =
-                            mod_record_json(name, *id, mod_object, surface, user, room_visible)
-                    {
+            if room_visible {
+                for (id, object) in &state.objects {
+                    if let Some(record) = Self::world_json_object_of(
+                        name, state, controller, *id, object, user, true, surface, self.time,
+                    ) {
                         objects.push(record);
                     }
-                    continue;
                 }
-                if !object_exported_for(user, room_visible, object) {
-                    continue;
+            } else if let (Some(user), Some(index)) = (user, index.as_deref()) {
+                // 不可见房只枚举己方旗/工地与 Mod 对象候选（索引按 ID
+                // 升序给出），不再遍历该房全部对象。
+                if let Some(candidates) = index.invisible_room_candidates(name, user) {
+                    for id in candidates {
+                        let object = &state.objects[&id];
+                        if let Some(record) = Self::world_json_object_of(
+                            name,
+                            state,
+                            controller,
+                            id,
+                            object,
+                            Some(user),
+                            false,
+                            surface,
+                            self.time,
+                        ) {
+                            objects.push(record);
+                        }
+                    }
                 }
-                objects.push(
-                    object_json(
-                        name,
-                        *id,
-                        object,
-                        self.time,
-                        &state.terrain,
-                        controller,
-                        state.effects.get(id),
-                    )
-                    .expect("Mod 对象已在 world_json_impl 上文分流"),
-                );
             }
         }
         // 显式传递可见房名，prelude 不必再从 owner/user 等不同字段推断视野。
@@ -246,6 +252,47 @@ impl World {
         })
     }
 
+    /// 单对象的玩家 JSON 记录投影：Mod 裁切与导出门的完整路径，可见房
+    /// 全对象枚举与不可见房候选枚举共用（后者只含己方旗/工地与 Mod 对象）。
+    /// 返回 None 表示对象不进入玩家数据。
+    #[allow(clippy::too_many_arguments)]
+    fn world_json_object_of(
+        room: &str,
+        state: &crate::world::RoomState,
+        controller: Option<&kk_schema::room::ControllerObj>,
+        id: crate::world::ObjId,
+        object: &RoomObject,
+        user: Option<&str>,
+        room_visible: bool,
+        surface: Option<&kk_mod_api::player_surface::PlayerSurface>,
+        time: u64,
+    ) -> Option<Value> {
+        // Mod 对象只在携带玩家面目录时进入投影（按对象/字段可见
+        // 性裁切）；内部全量形态（world_json，无目录）与查询快照
+        // 走 object_snapshot 的专用读面。
+        if let RoomObject::Mod(mod_object) = object {
+            return surface.and_then(|surface| {
+                mod_record_json(room, id, mod_object, surface, user, room_visible)
+            });
+        }
+        if !object_exported_for(user, room_visible, object) {
+            return None;
+        }
+        Some(
+            object_json(
+                room,
+                id,
+                object,
+                time,
+                &state.terrain,
+                controller,
+                state.effects.get(&id),
+            )
+            // world_json_object_of 的调用方与全量枚举版同源分流 Mod 对象。
+            .expect("Mod 对象已在 world_json_object_of 上文分流"),
+        )
+    }
+
     /// 按 ID 返回原始沙箱记录，不过滤玩家视野。Mod 对象无原始记录
     /// （object_json 返回 None）；其查询走 object_snapshot_by_id 的
     /// 专用读面。运行时的 getObject 查询接口使用快照格式。
@@ -272,7 +319,7 @@ pub(crate) use crate::domain::room::{road_hits_max, room_energy};
 pub use find::matches_find;
 pub(crate) use object::{energy_resource_name, object_json, part_json};
 pub(crate) use visibility::{
-    ext_entries_json, mod_record_json, object_exported_for, room_visible_to,
+    VisibilityIndex, ext_entries_json, mod_record_json, object_exported_for,
 };
 
 /// 用标准 base64 字母表编码地形字节，尾组使用 = 填充。

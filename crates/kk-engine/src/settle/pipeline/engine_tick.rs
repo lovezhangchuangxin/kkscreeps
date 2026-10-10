@@ -134,6 +134,8 @@ impl Engine {
     ) -> Result<(), SettleError> {
         let mut inter_room_moves = Vec::new();
         let mut fresh_age = std::collections::BTreeSet::new();
+        // 世界房集在整轮结算内不变：span 只求一次，逐房 Plane 复用。
+        let world_span = market::world_span(self.world.rooms().keys().map(String::as_str));
         for name in &txn.room_names {
             if self.fail_room.as_deref() == Some(name.as_str()) {
                 return Err(SettleError(format!("故障注入：房间 {name} 结算失败")));
@@ -152,7 +154,7 @@ impl Engine {
                 buildings: self.buildings.clone(),
                 contrib: self.contrib.clone(),
                 extensions: self.extensions.clone(),
-                world_span: market::world_span(self.world.rooms().keys().map(String::as_str)),
+                world_span,
                 plan: self.plan.clone(),
             };
             let SettledRoom {

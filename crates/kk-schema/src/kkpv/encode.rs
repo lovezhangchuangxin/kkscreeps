@@ -23,7 +23,9 @@ pub fn encode(input: &KkpvBlockInput, limits: &KkpvLimits) -> Result<Vec<u8>, Kk
         return Err(KkpvError::LimitExceeded("max_terrain_bytes"));
     }
 
-    let mut objects = input.objects.clone();
+    // 借用引用排序而非克隆对象向量：编码不修改输入，逐房全量深克隆在
+    // 多房束下是可观的无效分配。
+    let mut objects: Vec<&KkpvObject> = input.objects.iter().collect();
     objects.sort_by_key(|o| o.id);
     for (a, b) in objects.iter().zip(objects.iter().skip(1)) {
         if a.id == b.id {

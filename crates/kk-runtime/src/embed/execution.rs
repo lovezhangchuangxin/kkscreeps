@@ -400,7 +400,9 @@ impl EmbedEngine {
                 // KKPV 通道：对象记录走二进制块束，world 是不含 objects 的信封；
                 // JSON 参考通道：整世界一个 Value。市场都注入 world 顶层。
                 let (world, kkpv_bundle) = if self.kkpv_channel {
-                    match source.kkpv_projection_for_viewer(
+                    // 共享装配路径：可共享房块字节跨查看者复用（束字节与
+                    // 逐查看者编码一致），信封与 market/power 注入不变。
+                    match source.kkpv_bundle_bytes_for_viewer(
                         &handle,
                         gcl,
                         self.engine.extensions(),
@@ -410,7 +412,7 @@ impl EmbedEngine {
                     ) {
                         Some(projection) => match projection
                             .map_err(|e| anyhow::anyhow!("KKPV 投影失败（玩家 {handle}）: {e}"))
-                            .and_then(|(mut envelope, blocks)| {
+                            .map(|(mut envelope, bundle)| {
                                 if let Some(obj) = envelope.as_object_mut() {
                                     obj.insert("market".into(), market_view(&self.engine, &handle));
                                     obj.insert(
@@ -418,14 +420,7 @@ impl EmbedEngine {
                                         power_account_view(&self.engine, &handle, now_ms),
                                     );
                                 }
-                                kk_schema::kkpv::encode_bundle(
-                                    &blocks,
-                                    &kk_schema::kkpv::KkpvLimits::default(),
-                                )
-                                .map_err(|e| {
-                                    anyhow::anyhow!("KKPV 块束编码失败（玩家 {handle}）: {e}")
-                                })
-                                .map(|bundle| (envelope, Some(bundle)))
+                                (envelope, Some(bundle))
                             }) {
                             Ok(pair) => pair,
                             Err(e) => {

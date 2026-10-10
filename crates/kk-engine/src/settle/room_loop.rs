@@ -154,9 +154,12 @@ pub fn settle_room(
                         Some("controller")
                     }
                     // powerCreep 是 Generic 承载的非结构对象，先于结构臂拦截。
+                    // 前置字面量门（含 \u 转义藏匿兜底）：误命中只多一次
+                    // 解析，结果不变。
                     Some(RoomObject::Generic(g))
-                        if kk_world::domain::generic::type_name(&g.data).as_deref()
-                            == Some("powerCreep") =>
+                        if kk_world::domain::literal_gate(&g.data, "\"powerCreep\"")
+                            && kk_world::domain::generic::type_name(&g.data).as_deref()
+                                == Some("powerCreep") =>
                     {
                         Some("powerCreep")
                     }
@@ -233,18 +236,15 @@ pub fn settle_room(
                 Some(RoomObject::Storage(_)) => "storage",
                 Some(RoomObject::Mod(_)) => "mod",
                 Some(RoomObject::Generic(g)) => {
-                    if kk_world::domain::generic::type_name(&g.data).as_deref() == Some("nuke") {
-                        "nuke"
-                    } else if kk_world::domain::generic::type_name(&g.data).as_deref()
-                        == Some("powerCreep")
-                    {
-                        "powerCreep"
-                    } else if kk_world::domain::generic::type_name(&g.data).as_deref()
-                        == Some("deposit")
-                    {
-                        "deposit"
-                    } else {
-                        match kk_world::domain::generic::structure_type(&g.data).as_deref() {
+                    // 单次解析取回 (type, structureType)：分派只需这两个键，
+                    // 不再对同一条 data 逐分支重复完整解析。
+                    let (type_name, structure) =
+                        kk_world::domain::generic::type_and_structure(&g.data);
+                    match type_name.as_deref() {
+                        Some("nuke") => "nuke",
+                        Some("powerCreep") => "powerCreep",
+                        Some("deposit") => "deposit",
+                        _ => match structure.as_deref() {
                             Some("container" | "rampart") => "decay",
                             Some("powerBank") => "powerBank",
                             Some("portal") => "portal",
@@ -262,7 +262,7 @@ pub fn settle_room(
                                 "mod-building"
                             }
                             _ => "",
-                        }
+                        },
                     }
                 }
                 _ => "",

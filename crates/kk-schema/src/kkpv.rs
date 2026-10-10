@@ -298,6 +298,22 @@ mod view;
 mod wire;
 
 pub use encode::{encode, encode_bundle, validate_bundle};
+/// 头部 audience_hash 字段的字节偏移（32 字节宽）。见 [`patch_block_audience`]。
+pub const AUDIENCE_HASH_OFFSET: usize = OFF_AUDIENCE_HASH;
+/// 把块的 audience_hash 改写为给定值。与以目标 audience 直接编码的产物
+/// 逐字节一致——除该 32 字节外不触及其余布局；供宿主在共享缓存字节上
+/// 按查看者装配私有束。本模块不解释 audience 语义（见模块注释）。
+///
+/// # Errors
+/// 块短于头部 audience 字段范围时返回错误。
+pub fn patch_block_audience(block: &mut [u8], audience: &[u8; 32]) -> Result<(), KkpvError> {
+    let end = AUDIENCE_HASH_OFFSET + 32;
+    if block.len() < end {
+        return Err(KkpvError::Malformed("块短于 audience_hash 字段".into()));
+    }
+    block[AUDIENCE_HASH_OFFSET..end].copy_from_slice(audience);
+    Ok(())
+}
 pub use merge::{MergedView, merge};
 pub use view::KkpvView;
 use wire::*;

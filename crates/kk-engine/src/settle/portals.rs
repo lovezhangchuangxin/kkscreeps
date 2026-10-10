@@ -85,6 +85,12 @@ pub fn collect_portal_transports(
             let RoomObject::Generic(g) = obj else {
                 continue;
             };
+            // 前置字面量门（含 \u 转义藏匿兜底，见
+            // kk_world::domain::literal_gate）：structureType 值为 portal
+            // 的载荷必命中；误命中只多一次解析，结果不变。
+            if !kk_world::domain::literal_gate(&g.data, "\"portal\"") {
+                continue;
+            }
             let Ok(data) = serde_json::from_str::<serde_json::Value>(&g.data) else {
                 continue;
             };

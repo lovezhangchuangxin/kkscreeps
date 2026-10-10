@@ -18,6 +18,24 @@ pub fn structure_type(data: &str) -> Option<String> {
         .map(str::to_string)
 }
 
+/// 单次解析同时读取 (type, structureType)；与分别调用
+/// [`type_name`]/[`structure_type`] 等价，供每 tick 的对象分类分派
+/// 使用，避免同一条 data 的多趟完整解析。
+pub fn type_and_structure(data: &str) -> (Option<String>, Option<String>) {
+    let Some(fields) = decode_fields(data) else {
+        return (None, None);
+    };
+    let type_name = fields
+        .get("type")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let structure = fields
+        .get("structureType")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    (type_name, structure)
+}
+
 /// 读取对象类别键 `type`（nuke/deposit/powerCreep 等非结构对象）；
 /// 缺失、类型错误和无效 JSON 均返回 None。
 pub fn type_name(data: &str) -> Option<String> {

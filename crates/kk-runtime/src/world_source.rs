@@ -59,6 +59,23 @@ pub trait WorldSource {
         None
     }
 
+    /// 为查看者装配完整的 KKPV 私有束字节（信封 + 与 encode_bundle 同形
+    /// 的束框架）。默认实现返回 None，语义与
+    /// [`WorldSource::kkpv_projection_for_viewer`] 一致：启用 KKPV 通道的
+    /// 调用方据此失败而不是静默回落。实现方可在此共享跨查看者的编码
+    /// 产物，但字节必须与逐查看者编码完全一致。
+    fn kkpv_bundle_bytes_for_viewer(
+        &self,
+        _viewer: &str,
+        _gcl_points: i64,
+        _catalog: &kk_mod_api::extension::ExtensionCatalog,
+        _surface: Option<&kk_mod_api::player_surface::PlayerSurface>,
+        _plan_hash: [u8; 32],
+        _audience_hash: [u8; 32],
+    ) -> Option<Result<(Value, Vec<u8>), String>> {
+        None
+    }
+
     /// 生成公开地形块输入：全部注册房间、与查看者无关。None 语义与
     /// [`WorldSource::kkpv_projection_for_viewer`] 一致（启用 KKPV 通道
     /// 时 fail-loud，不静默回落）。
@@ -117,6 +134,26 @@ impl WorldSource for kk_world::World {
 
     fn object_snapshot(&self, id: &str) -> Option<Value> {
         kk_world::ObjId::parse(id).and_then(|id| self.object_snapshot_by_id(id))
+    }
+
+    fn kkpv_bundle_bytes_for_viewer(
+        &self,
+        viewer: &str,
+        gcl_points: i64,
+        catalog: &kk_mod_api::extension::ExtensionCatalog,
+        surface: Option<&kk_mod_api::player_surface::PlayerSurface>,
+        plan_hash: [u8; 32],
+        audience_hash: [u8; 32],
+    ) -> Option<Result<(Value, Vec<u8>), String>> {
+        Some(kk_world::World::kkpv_bundle_for_viewer(
+            self,
+            viewer,
+            gcl_points,
+            catalog,
+            surface,
+            plan_hash,
+            audience_hash,
+        ))
     }
 
     fn kkpv_public_terrain_blocks(

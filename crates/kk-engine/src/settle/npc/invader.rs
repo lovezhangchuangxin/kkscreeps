@@ -97,6 +97,11 @@ fn hostile_hits(object: &RoomObject) -> Option<Option<u64>> {
             Some(Some(u64::from(c.hits)))
         }
         RoomObject::Generic(g) => {
+            // 前置字面量门（含 \u 转义藏匿兜底）：本臂只认
+            // type=powerCreep 的 Generic，其余在解析前排除。
+            if !kk_world::domain::literal_gate(&g.data, "\"powerCreep\"") {
+                return None;
+            }
             let data: serde_json::Value = serde_json::from_str(&g.data).ok()?;
             if data["type"] != "powerCreep"
                 || data["owner"]

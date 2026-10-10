@@ -25,6 +25,17 @@
       "equivalent": true,
       "actions_equal": true,
       "note": "Final adjacent-terminal fixture; all compared states and action counts equal"
+    },
+    {
+      "path": "50x6-after-opt-abc/summary.json",
+      "players": 50,
+      "rooms": 300,
+      "warmup": 5,
+      "ticks": 50,
+      "runs": 1,
+      "equivalent": true,
+      "actions_equal": true,
+      "note": "After performance batch A/B/C (visibility index, settle literal gates + single-parse classification, KKPV shared room blocks + typed direct constructor + JS eager fixed-width decode) on same machine/window as baseline; kk/xxs P50 1504.9/409.3ms (ratio 23.4x -> 3.68x), CPU 3993/2525 core-ms, RSS peak 3083/3833MiB"
     }
   ],
   "limits": [

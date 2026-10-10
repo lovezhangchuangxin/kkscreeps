@@ -108,6 +108,7 @@ impl RoomState {
             return Err(format!("对象 id 重复: {}", ObjId(id).as_str()));
         }
         if let RoomObject::Generic(g) = &object
+            && crate::domain::domain_validate_markers_present(&g.data)
             && let Ok(data) = serde_json::from_str::<serde_json::Value>(&g.data)
         {
             crate::domain::deposit::validate(&data)?;
@@ -180,6 +181,13 @@ struct ObjDir {
     rooms: BTreeMap<ObjId, String>,
 }
 
+/// 房间块共享缓存条目：(generation, plan_hash, 可共享房间块字节)。
+type RoomBlockCacheEntry = (
+    u64,
+    [u8; 32],
+    std::sync::Arc<BTreeMap<String, crate::kkpv::SharedRoomBlock>>,
+);
+
 /// 保存房间集合、时钟和对象分配状态；玩家沙箱与玩家账户由运行时管理。
 #[derive(Debug)]
 pub struct World {
@@ -213,6 +221,15 @@ pub struct World {
     /// (generation, 最大对象 ID)，供分配器使用。
     /// 与对象目录分开维护：只需扫描数字键，不必为每个对象分配房名字符串。
     max_id_cache: RefCell<(u64, u64)>,
+    /// (generation, 全服可见性索引)。逐玩家投影共用一次扫描的派生物，
+    /// 内容变更推进 generation 即失效；克隆共享同代际同内容，adopt_edit
+    /// 与 reset 显式清空。共享访问限制同对象目录。
+    pub(crate) visibility_cache:
+        RefCell<Option<(u64, std::sync::Arc<crate::projection::VisibilityIndex>)>>,
+    /// (generation, plan_hash, 可共享房间私有块字节)。KKPV 装配路径的
+    /// 共享编码缓存：可共享房一次编码、跨查看者复用（audience 置零，
+    /// 装配时改写）。失效与清空口径同可见性索引。
+    pub(crate) room_block_cache: RefCell<Option<RoomBlockCacheEntry>>,
 }
 
 // 独立副本拥有新身份；受控编辑发布时 adopt_edit 保留原世界身份。
@@ -230,6 +247,8 @@ impl Clone for World {
             terrain_cache: self.terrain_cache.clone(),
             obj_dir: self.obj_dir.clone(),
             max_id_cache: self.max_id_cache.clone(),
+            visibility_cache: self.visibility_cache.clone(),
+            room_block_cache: self.room_block_cache.clone(),
         }
     }
 }
@@ -241,45 +260,25 @@ impl Default for World {
 }
 
 impl World {
-    /// 观察限时视野：查看者名下 observer 的 observeRoom 标记（结算相写
-    /// 入、预意图相清零）指向的目标房集合。标记在观察者所在房，目标是
-    /// 任意房——须世界级扫描；目标房未注册时跳过（官方 data.js 的房间
-    /// 查询自然落空，Game.rooms 不出现该房）。
-    /// 来源：driver/lib/runtime/data.js:99-127 的 userObjects 房间计算。
-    pub(crate) fn observed_rooms_of(&self, user: &str) -> std::collections::BTreeSet<String> {
-        let mut observed = std::collections::BTreeSet::new();
-        for state in self.rooms.values() {
-            for object in state.objects.values() {
-                let RoomObject::Generic(g) = object else {
-                    continue;
-                };
-                if !g.data.contains("\"observeRoom\"")
-                    || crate::domain::object_owner(object).as_deref() != Some(user)
-                {
-                    continue;
-                }
-                let Ok(data) = serde_json::from_str::<serde_json::Value>(&g.data) else {
-                    continue;
-                };
-                if data
-                    .get("structureType")
-                    .and_then(serde_json::Value::as_str)
-                    != Some("observer")
-                {
-                    continue;
-                }
-                if let Some(target) = data.get("observeRoom").and_then(serde_json::Value::as_str)
-                    && self.rooms.contains_key(target)
-                {
-                    observed.insert(target.to_string());
-                }
-            }
-        }
-        observed
-    }
-
     pub fn instance(&self) -> Arc<()> {
         self.instance.clone()
+    }
+
+    /// 取当前代际的全服可见性索引；过期则单次扫描重建。逐玩家投影
+    /// （KKPV 私有块、信封与 JSON 通道）共用该索引，取代逐玩家
+    /// 全服扫描。见 [`crate::projection::VisibilityIndex`]。
+    pub(crate) fn visibility_index(&self) -> std::sync::Arc<crate::projection::VisibilityIndex> {
+        {
+            let cache = self.visibility_cache.borrow();
+            if let Some((generation, index)) = cache.as_ref()
+                && *generation == self.generation
+            {
+                return index.clone();
+            }
+        }
+        let index = std::sync::Arc::new(crate::projection::VisibilityIndex::build(self));
+        *self.visibility_cache.borrow_mut() = Some((self.generation, index.clone()));
+        index
     }
 
     pub fn seed(&self) -> u64 {
@@ -302,6 +301,8 @@ impl World {
             terrain_cache: RefCell::new(BTreeMap::new()),
             obj_dir: RefCell::new(ObjDir::default()),
             max_id_cache: RefCell::new((0, 0)),
+            visibility_cache: RefCell::new(None),
+            room_block_cache: RefCell::new(None),
         }
     }
 

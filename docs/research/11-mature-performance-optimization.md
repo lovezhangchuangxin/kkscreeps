@@ -1,6 +1,6 @@
 # 成熟房性能优化源码复查（2026-10-10）
 
-本页是基于 `26a5092` 的研究与实施建议，**优化尚未实现，没有优化后性能结果**。xxscreeps 对照固定为 `5ff0d1a682170f6b5f9c8bac3e703767625988e0`。实际进度统一维护在[接手台账](../plans/mod-next-batches.md)，开发者复现入口见[基准说明](../../scripts/benchmark/README.md)。
+本页是基于 `26a5092` 的研究与实施建议。**2026-10-10 追注：A/B/C 首批已实现并实测**（同窗比率 P50 23.4×→3.68×、CPU 1.58×、RSS 低 20%，证据见 [50x6-after-opt-abc](../../compat/reports/mature-comparison/2026-10-10/50x6-after-opt-abc/summary.json)，实施记录见[接手台账](../plans/mod-next-batches.md)）；正文以下分析为优化前历史证据，保留不追改。xxscreeps 对照固定为 `5ff0d1a682170f6b5f9c8bac3e703767625988e0`。实际进度统一维护在[接手台账](../plans/mod-next-batches.md)，开发者复现入口见[基准说明](../../scripts/benchmark/README.md)。
 
 ## 目标与已有证据
 
@@ -29,7 +29,7 @@
 
 [视野判定](../../crates/kk-world/src/projection/visibility.rs)遍历房间对象寻找己方非旗、非工地对象；[对象归属](../../crates/kk-world/src/domain/owner.rs)对 Generic 每次完整解析 `data` JSON。无己方对象的房间必须走到末尾。
 
-[KKPV 信封与私有块](../../crates/kk-world/src/kkpv.rs)分别调用视野判定，并分别调用[observer 查询](../../crates/kk-world/src/world/mod.rs)。observer 查询也遍历全服对象；私有块随后再遍历全部房间的对象，即使房间不可见。
+[KKPV 信封与私有块](../../crates/kk-world/src/kkpv/mod.rs)分别调用视野判定，并分别调用[observer 查询](../../crates/kk-world/src/world/mod.rs)。observer 查询也遍历全服对象；私有块随后再遍历全部房间的对象，即使房间不可见。
 
 【源码计数推断，非 profiler 计数】共同夹具初始每房 535 个对象（534 个显式对象及控制器），其中 132 个 Generic：100 rampart、6 link、6 tower、10 lab、5 container、terminal/factory/powerSpawn/observer/nuker 各 1；放置变体依据见[归一入口](../../crates/kk-world/src/place/place_structure.rs)。每玩家有 294 个无己方对象的房间：
 
@@ -59,7 +59,7 @@ xxscreeps 的对应参考是固定源码 `packages/xxscreeps/engine/processor/mo
 
 ### 4. KKPV 仍经过临时 JSON 记录
 
-[KKPV](../../crates/kk-world/src/kkpv.rs)仍走 `object_json → record_to_kkpv → encode_bundle`。Typed 对象先构造 Value，再转换为拥有字符串/集合的 KkpvObject，最后编码；Generic 也先解析再转换。
+[KKPV](../../crates/kk-world/src/kkpv/mod.rs)仍走 `object_json → record_to_kkpv → encode_bundle`。Typed 对象先构造 Value，再转换为拥有字符串/集合的 KkpvObject，最后编码；Generic 也先解析再转换。
 
 建议在索引消除全服重复扫描后，测实际可见对象的转换与编码成本，再实现直接写 KKPV 的类型化路径或共用借用记录访问器。JSON 保持参考通道；Mod 动态字段、ext 权限、引用类型、时间派生字段和 controller 归属三态保持一致，不能复制两套逐渐漂移的权限实现。共视野多玩家可共享经过权限分组的记录，但不能直接共享包含 owner 私有字段的房间块。
 

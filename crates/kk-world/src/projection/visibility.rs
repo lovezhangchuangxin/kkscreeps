@@ -1,14 +1,135 @@
 //! 玩家视野、对象与字段可见性裁切。
+use std::collections::{BTreeMap, BTreeSet};
+
 use super::*;
 
-/// 房间对查看者可见的条件：房内存在己方非旗/非工地对象。
-/// 归属只用于判断房间是否可见；旗和工地虽有主人，但不授予视野。
-/// 上游依据：driver/lib/runtime/data.js 的 userObjects 房间计算。
-pub(crate) fn room_visible_to(state: &crate::world::RoomState, user: &str) -> bool {
-    state.objects.values().any(|o| {
-        !matches!(o, RoomObject::ConstructionSite(_) | RoomObject::Flag(_))
-            && crate::domain::object_owner(o).as_deref() == Some(user)
-    })
+/// 同一代际的全服可见性索引：一次对象扫描的派生物，供逐玩家投影共用，
+/// 取代"每玩家每房间重复全服扫描"。语义与逐玩家扫描版完全一致：
+/// `room_visible_to` 等价于 room_owners 查表；`observed_rooms_of` 等价于
+/// observed 查表（observer 的归属读取与目标判定在构建时共用同一次
+/// Generic JSON 解析）。绑定世界 generation 失效——所有内容变更路径
+/// 都推进 generation（含 observer 标记清零所在的预意图相）。
+#[derive(Debug)]
+pub(crate) struct VisibilityIndex {
+    /// 房间 → 授予视野的玩家集合（房内存在该玩家的非旗/非工地对象）。
+    room_owners: BTreeMap<String, BTreeSet<String>>,
+    /// observer 主人 → 观察目标房集合（目标未注册的标记不进集合，
+    /// 与 observed_rooms_of 的 contains_key 过滤一致）。
+    observed: BTreeMap<String, BTreeSet<String>>,
+    /// 玩家 → 房间 → 己方旗/工地对象 ID（升序）。不可见房的私有块
+    /// 只需枚举这些对象：object_exported_for 在不可见房只放行己方旗与工地。
+    collections: BTreeMap<String, BTreeMap<String, Vec<crate::world::ObjId>>>,
+    /// 房间 → Mod 对象 ID（升序）。OwnerCollection 语义不受房间视野门，
+    /// 不可见房仍须逐对象走 mod_record_json 裁切；可见房在常规路径
+    /// 顺带处理，不查本表。
+    mod_objects: BTreeMap<String, Vec<crate::world::ObjId>>,
+}
+
+impl VisibilityIndex {
+    /// 单次扫描构建。Generic 只解析一次 JSON：owner 与 observer 判定
+    /// 共用（逐玩家版里这是两次独立解析）。
+    pub(crate) fn build(world: &World) -> Self {
+        let mut index = Self {
+            room_owners: BTreeMap::new(),
+            observed: BTreeMap::new(),
+            collections: BTreeMap::new(),
+            mod_objects: BTreeMap::new(),
+        };
+        for (name, state) in &world.rooms {
+            for (id, object) in &state.objects {
+                match object {
+                    // 旗与工地有归属但不授予视野；只作为归属者集合候选。
+                    RoomObject::ConstructionSite(_) | RoomObject::Flag(_) => {
+                        if let Some(owner) = crate::domain::object_owner(object) {
+                            index
+                                .collections
+                                .entry(owner.into_owned())
+                                .or_default()
+                                .entry(name.clone())
+                                .or_default()
+                                .push(*id);
+                        }
+                    }
+                    RoomObject::Mod(_) => {
+                        index.mod_objects.entry(name.clone()).or_default().push(*id);
+                    }
+                    RoomObject::Generic(g) => {
+                        let Ok(data) = serde_json::from_str::<Value>(&g.data) else {
+                            continue;
+                        };
+                        let owner = data.get("owner").and_then(Value::as_str);
+                        if let Some(owner) = owner {
+                            index
+                                .room_owners
+                                .entry(name.clone())
+                                .or_default()
+                                .insert(owner.to_string());
+                        }
+                        if data.get("structureType").and_then(Value::as_str) == Some("observer")
+                            && let Some(target) = data.get("observeRoom").and_then(Value::as_str)
+                            && let Some(owner) = owner
+                            && world.rooms.contains_key(target)
+                        {
+                            index
+                                .observed
+                                .entry(owner.to_string())
+                                .or_default()
+                                .insert(target.to_string());
+                        }
+                    }
+                    _ => {
+                        if let Some(owner) = crate::domain::object_owner(object) {
+                            index
+                                .room_owners
+                                .entry(name.clone())
+                                .or_default()
+                                .insert(owner.into_owned());
+                        }
+                    }
+                }
+            }
+        }
+        index
+    }
+
+    /// 房间对查看者可见的条件：房内存在己方非旗/非工地对象。
+    /// 归属只用于判断房间是否可见；旗和工地虽有主人，但不授予视野。
+    /// 上游依据：driver/lib/runtime/data.js 的 userObjects 房间计算。
+    /// （原逐房扫描版语义，构建时物化为 room_owners 表。）
+    pub(crate) fn room_visible_to(&self, room: &str, user: &str) -> bool {
+        self.room_owners
+            .get(room)
+            .is_some_and(|owners| owners.contains(user))
+    }
+
+    /// 观察限时视野：查看者名下 observer 的 observeRoom 标记（结算相
+    /// 写入、预意图相清零）指向的目标房集合；目标未注册时跳过（官方
+    /// data.js 的房间查询自然落空）。来源：driver/lib/runtime/data.js
+    /// 的 userObjects 房间计算。（原世界级扫描版语义，构建时物化。）
+    pub(crate) fn observed_rooms_of(&self, user: &str) -> Option<&BTreeSet<String>> {
+        self.observed.get(user)
+    }
+
+    /// 不可见房的私有块候选对象 ID（升序）：己方旗/工地与全部 Mod 对象
+    /// 归并。两者类型互斥故无重复；None 表示该房无可导出对象，调用方
+    /// 可整房跳过对象枚举。
+    pub(crate) fn invisible_room_candidates(
+        &self,
+        room: &str,
+        user: &str,
+    ) -> Option<Vec<crate::world::ObjId>> {
+        let own = self.collections.get(user).and_then(|rooms| rooms.get(room));
+        let mods = self.mod_objects.get(room);
+        if own.is_none() && mods.is_none() {
+            return None;
+        }
+        let mut ids: Vec<crate::world::ObjId> = own.map(|ids| ids.to_vec()).unwrap_or_default();
+        if let Some(mods) = mods {
+            ids.extend(mods.iter().copied());
+        }
+        ids.sort_unstable();
+        Some(ids)
+    }
 }
 
 /// 对象进入玩家数据的条件：无查看者时全部导出；他人旗排除在先；

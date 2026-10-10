@@ -29,7 +29,10 @@ impl World {
             }
             for (id, object) in &room.objects {
                 // 二进制恢复或直接替房不得夹带第二份 effects 权威状态。
-                if let RoomObject::Generic(g) = object
+                // 前置子串门见 domain_validate_markers_present：绝大多数
+                // Generic 无标记键，跳过整趟解析。
+                if let RoomObject::Generic(g) = &object
+                    && crate::domain::domain_validate_markers_present(&g.data)
                     && let Ok(data) = serde_json::from_str::<serde_json::Value>(&g.data)
                 {
                     if data.get("effects").is_some() {
@@ -223,6 +226,8 @@ impl World {
         draft.terrain_cache.borrow_mut().clear();
         draft.obj_dir.borrow_mut().generation = u64::MAX;
         *draft.max_id_cache.borrow_mut() = (u64::MAX, 0);
+        *draft.visibility_cache.borrow_mut() = None;
+        *draft.room_block_cache.borrow_mut() = None;
         draft.instance = self.instance.clone();
         *self = draft;
         Ok(())

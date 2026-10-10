@@ -7,9 +7,11 @@
  * 块布局与 crates/kk-schema/src/kkpv.rs 的 v1 编码一致：160 字节头、
  * ID 升序目录、按类型分桶的列式字段、集中 arena 与单字节嵌套标签。
  * 束框架是 u32 块数 + 逐块 u32 长度目录 + 顺序拼接的块字节。
- * 记录字段惰性解码：首次读取经 getter 解码并固化为值属性，未读取的
- * 字段不产生解码成本；缺失位置位的字段不定义属性，与 JSON 参考路径
- * 的缺键形态一致。
+ * 记录字段解码：定宽列（bool/int/uint/float/ref）急切读取为普通数据
+ * 属性；变长列（str/array/object）经共享惰性访问器首读解码并固化为值
+ * 属性（访问器按桶字段共享，解码上下文经 Symbol 键挂对象，均不逐对象
+ * 分配闭包）。缺失位置位的字段不定义属性，与 JSON 参考路径的缺键
+ * 形态一致。
  * 校验分工：此处做逐块结构与逐读取校验（段边界/互斥、目录长度精确、
  * 桶消费精确、载荷截断、UTF-8 严格性、块头 tick 与信封一致）。行占用
  * 互斥、字段目录键序、位图互斥与尾位等全量扫描不变式在生产链路上由
@@ -267,15 +269,21 @@
     }
   }
 
-  // 惰性字段：getter 首读解码并固化为值属性（writable 与 JSON 记录一致，
-  // setter 写入同样固化，不静默丢弃）；值属性化后不再走解码路径。
-  function defineField(rec, dv, field, row, arenaBase, arenaLen) {
-    __defineProperty(rec, field.key, {
+  // 惰性字段访问器：每（块, 桶, 字段）一份共享 getter/setter，闭包只
+  // 捕获列描述；对象身份经 Symbol 键的解码上下文传递（不可枚举，不进
+  // Object.keys/JSON.stringify）。getter 首读解码并固化为值属性（writable
+  // 与 JSON 记录一致，setter 写入同样固化，不静默丢弃）。
+  const __Symbol = Symbol;
+  const DECODE_CTX = __Symbol('kk.decodeCtx');
+
+  function makeLazyAccessors(field) {
+    return {
       enumerable: true,
       configurable: true,
       get() {
-        const v = readField(dv, field, row, arenaBase, arenaLen);
-        __defineProperty(rec, field.key, {
+        const ctx = this[DECODE_CTX];
+        const v = readField(ctx.dv, field, ctx.row, ctx.arenaBase, ctx.arenaLen);
+        __defineProperty(this, field.key, {
           value: v,
           writable: true,
           enumerable: true,
@@ -284,14 +292,14 @@
         return v;
       },
       set(v) {
-        __defineProperty(rec, field.key, {
+        __defineProperty(this, field.key, {
           value: v,
           writable: true,
           enumerable: true,
           configurable: true,
         });
       },
-    });
+    };
   }
 
   // 校验块头与四段边界，返回后续解码需要的头部信息。expectedTick 与
@@ -402,13 +410,19 @@
         cur += (fields[f].kind === 0 ? 1 : 8) * rows;
       }
       if (cur > bucketsEnd) fail('桶列越界');
+      let lazyAccessors = null;
       for (let f = 0; f < fieldCount; f++) {
         if (fields[f].keyOff + fields[f].keyLen > arenaLen) fail('字段键描述符越界');
         fields[f].key = utf8(dv, arenaBase + fields[f].keyOff, fields[f].keyLen);
         // "id" 由目录承担；字段键不得覆盖记录身份（与编码端拒绝一致）。
         if (fields[f].key === 'id') fail('字段键不得为 id');
+        // 变长字段的共享惰性访问器：每桶每字段一份，不逐对象分配。
+        if (fields[f].kind >= 5) {
+          if (lazyAccessors === null) lazyAccessors = new Array(fieldCount).fill(null);
+          lazyAccessors[f] = makeLazyAccessors(fields[f]);
+        }
       }
-      bucketList[bucketList.length] = { rows, fields };
+      bucketList[bucketList.length] = { rows, fields, lazyAccessors };
     }
     if (cur !== bucketsEnd) fail('桶段消费不符');
 
@@ -429,16 +443,22 @@
       const bucket = bucketList[handle];
       if (row >= bucket.rows) fail('行号越界');
       const rec = {};
-      __defineProperty(rec, 'id', {
-        value: idFromHalves(lo, hi),
-        writable: true,
-        enumerable: true,
-        configurable: true,
-      });
-      for (let f = 0; f < bucket.fields.length; f++) {
-        const field = bucket.fields[f];
-        if (!bitAt(dv, field.missingAt, row)) {
-          defineField(rec, dv, field, row, arenaBase, arenaLen);
+      rec.id = idFromHalves(lo, hi);
+      // 定宽列（bool/int/uint/float/ref）一次 DataView 读即值：急切装
+      // 普通数据属性比逐对象逐字段装访问器便宜得多，也免去其闭包分配。
+      // 变长列（str/array/object）保持首读惰性：共享访问器 + Symbol 上下文。
+      const hasVariable = bucket.lazyAccessors !== null;
+      if (hasVariable) {
+        rec[DECODE_CTX] = { dv, row, arenaBase, arenaLen };
+      }
+      const fields = bucket.fields;
+      for (let f = 0; f < fields.length; f++) {
+        const field = fields[f];
+        if (bitAt(dv, field.missingAt, row)) continue;
+        if (field.kind < 5) {
+          rec[field.key] = readField(dv, field, row, arenaBase, arenaLen);
+        } else {
+          __defineProperty(rec, field.key, bucket.lazyAccessors[f]);
         }
       }
       records[records.length] = rec;

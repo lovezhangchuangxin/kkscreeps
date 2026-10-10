@@ -841,3 +841,60 @@ fn world_block_merges_with_public_overlay() {
         assert!(merged.from_overlay(i), "对象全部来自 overlay");
     }
 }
+
+#[test]
+fn shared_bundle_assembly_matches_per_viewer_encoding() {
+    // 共享装配路径（可共享房复用块字节 + 回退房逐查看者编码）必须与
+    // kkpv_room_blocks_for_viewer + encode_bundle 的逐查看者编码逐字节
+    // 一致：覆盖可见/不可见查看者、他人旗回退、归属工地空块回退与
+    // 扩展字段回退（rich_world 的 W1N1 带扩展数据时不共享）。
+    let mut world = rich_world();
+    world
+        .insert(
+            "E2S2",
+            RoomObject::Flag(FlagObj {
+                id: 0,
+                x: 3,
+                y: 3,
+                name: "owned-flag".into(),
+                color: 1,
+                secondary_color: 1,
+                owner: Some("p1".into()),
+            }),
+        )
+        .expect("夹具旗可插入");
+    world
+        .insert(
+            "E2S2",
+            RoomObject::ConstructionSite(ConstructionSiteObj {
+                id: 0,
+                x: 4,
+                y: 4,
+                structure_type: "road".into(),
+                progress: 0,
+                progress_total: 100,
+                owner: Some("p1".into()),
+                name: None,
+            }),
+        )
+        .expect("夹具工地可插入");
+    let catalog = catalog_fixture();
+    let audience = |user: &str| {
+        let mut hash = [0u8; 32];
+        hash[..user.len()].copy_from_slice(user.as_bytes());
+        hash
+    };
+    for user in ["p1", "p2", "p3"] {
+        let (_, assembled) = world
+            .kkpv_bundle_for_viewer(user, 42, &catalog, None, [7; 32], audience(user))
+            .unwrap_or_else(|e| panic!("查看者 {user} 装配失败: {e}"));
+        let blocks = world
+            .kkpv_room_blocks_for_viewer(user, &catalog, None, [7; 32], audience(user))
+            .unwrap();
+        let reference = encode_bundle(&blocks, &KkpvLimits::default()).unwrap();
+        assert_eq!(
+            assembled, reference,
+            "查看者 {user} 的共享装配束必须与逐查看者编码逐字节一致"
+        );
+    }
+}

@@ -39,12 +39,18 @@ pub(crate) fn pc_data(obj: &RoomObject) -> Option<Value> {
     serde_json::from_str(&g.data).ok()
 }
 
-/// data.type 是否为 powerCreep。
+/// data.type 是否为 powerCreep。前置字面量门（含 \u 转义藏匿兜底，
+/// 见 kk_world::domain::literal_gate）：type 值为 powerCreep 的载荷必
+/// 命中；误命中只多一次解析，结果不变。
 pub(crate) fn is_power_creep(obj: &RoomObject) -> bool {
-    pc_data(obj)
-        .and_then(|v| v.get("type").and_then(Value::as_str).map(str::to_string))
-        .as_deref()
-        == Some("powerCreep")
+    let RoomObject::Generic(g) = obj else {
+        return false;
+    };
+    kk_world::domain::literal_gate(&g.data, "\"powerCreep\"")
+        && pc_data(obj)
+            .and_then(|v| v.get("type").and_then(Value::as_str).map(str::to_string))
+            .as_deref()
+            == Some("powerCreep")
 }
 
 /// powerCreep 的 owner（data.owner）。

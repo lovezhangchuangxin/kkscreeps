@@ -74,4 +74,7 @@ node --check scripts/benchmark/xxs-probe.mjs
 
 `research/` 保存架构、Mod 宿主/归因、玩家工作量与 KKPV 规模实验的采集脚本。日期标识它们对应的实验协议；历史证据和复现参数仍在 [研究索引](../../docs/research/README.md)，默认报告位置保持在 `docs/research/notes/`。这些脚本可复跑对应实验，不作为当前性能达标结论。
 
+
+2026-10-10 优化批追注：视野/observer 共享索引、结算字面量门与单次分类、KKPV 房间块共享装配与类型化直造、JS 定宽列急切解码已落地（见[接手台账](../../docs/plans/mod-next-batches.md)）；同机同窗复测归档于 [50x6-after-opt-abc](../../compat/reports/mature-comparison/2026-10-10/50x6-after-opt-abc/summary.json)，kk/xxs 同窗比率 P50 23.4×→3.68×、CPU 5.4×→1.58×、RSS 峰值低约 20%，动作与状态等价保持。上段"kk project P50 5552.90ms"为优化前归档口径，保留不追改；本批未跑五轮正式长窗。
+
 工具回归分别位于 `scripts/tests/` 和本目录。完整 `pnpm run check` 同时执行两组 Python 测试，以及门禁和文档链接检查器的 Node 回归测试。
