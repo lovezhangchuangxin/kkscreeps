@@ -47,6 +47,17 @@
    "equivalent": true,
    "actions_equal": true,
    "note": "Typed direct-write KKPV encoder slice (borrowed KkpvVal/KkpvRow single encode core, per-room encode_room_block; second owned constructor deleted) plus concurrency calibration 4/6/8/10 (higher dispatch window is a negative trade; kk stays at 4 with measured parallelism 3.20x vs xxs 6.34x per user fairness rule) on same fixture/window; kk/xxs P50 1017.6/320.7ms (ratio 3.68x -> 3.17x), CPU 3255/2034 core-ms (1.60x), RSS peak 3076/3592MiB (0.86x)"
+  },
+  {
+   "path": "50x6-after-v8-residency/summary.json",
+   "players": 50,
+   "rooms": 300,
+   "warmup": 5,
+   "ticks": 50,
+   "runs": 1,
+   "equivalent": true,
+   "actions_equal": true,
+   "note": "V8-side double slice: Memory residency with exact-clean walk (memoryCleanWalk, ratchet 2905 green) and api_probe gating (diagnostic Proxy instrumentation off on measurement surfaces, run -26%/CPU -19% single-run) on same fixture/window; kk/xxs P50 835.7/259.5ms (ratio 3.22x this window; xxs ran 24% faster than prior window, cross-window ratios not comparable), CPU 2403/1704 core-ms (1.41x), RSS peak 2470/3416MiB (0.72x); parallelism 2.88x vs 6.57x (fairness gate holds)"
   }
  ],
  "limits": [
@@ -93,7 +104,14 @@
   "50x6-after-typed-encoder/provenance.json.gz": "593351fff11a172ee912c29af1889e1bc29829ded7748386de9470f409a87c7d",
   "50x6-after-typed-encoder/xxscreeps-50-1.json.gz": "da893d6ce54398fccec4548184628b07ade60c003ba202b7c68a7e49742c705e",
   "50x6-after-typed-encoder/xxscreeps-50-1.log.gz": "d3e31094925831118860249311a9d786a77171603d767a98d2415036ad3df7d9",
-  "50x6-after-typed-encoder/summary.json": "7b83e07ad2c8484cb93e61a03b4303103aef7b7f9e06bcc5a97a370ca0d9a865"
+  "50x6-after-typed-encoder/summary.json": "7b83e07ad2c8484cb93e61a03b4303103aef7b7f9e06bcc5a97a370ca0d9a865",
+  "50x6-after-v8-residency/fixture-50.json.gz": "5fb6e414fe3b41a87377743056c9b828e3e315ce52936fb850b2a20d6225b4c1",
+  "50x6-after-v8-residency/kkscreeps-50-1.json.gz": "0615fedfda4de2971ac31dccb8cc0538ecdd2c34741b16d43dc6ee6a9ed24c99",
+  "50x6-after-v8-residency/kkscreeps-50-1.log.gz": "ae9c35d6eee263d8f61387210bff9e6395801b09ed8e07acd2aa621f88fe1f51",
+  "50x6-after-v8-residency/provenance.json.gz": "2b18ac6fe30fd6353a5b64b8e146ba8fef67104c69686d157f221b4bdda21051",
+  "50x6-after-v8-residency/summary.json": "2fe847199c296e24463fdb89d84fc84de2668c9a97f455d369ba508e09e886ef",
+  "50x6-after-v8-residency/xxscreeps-50-1.json.gz": "dda583c2765ec12e3dcc230e1519c915dea8d3ac64a55f81b7139015d3bd2f5c",
+  "50x6-after-v8-residency/xxscreeps-50-1.log.gz": "eb22f14c0ca67a7e9d60d92e31f61e3d9ea79d715d9aeb0cac41f7ab306383c8"
  },
  "historical_strict_diagnostics": [
   {

@@ -40,10 +40,13 @@ pub struct Shared {
     /// 本 tick 是否调用过 Game.cpu.halt；Sandbox 据此选择零计费的中断处理。
     pub halt_requested: AtomicBool,
     /// 本 tick 尝试输出的行数与 UTF-8 字节数，包含被丢弃的输出；begin_tick 重置。
-    console_lines: AtomicU64,
-    console_bytes: AtomicU64,
+    pub(crate) console_lines: AtomicU64,
+    pub(crate) console_bytes: AtomicU64,
     /// 本 tick 是否已输出过超限提示；第一次超限时立即添加，begin_tick 重置。
-    console_truncated: AtomicBool,
+    pub(crate) console_truncated: AtomicBool,
+    /// 是否装配 API 访问诊断 probe。Default 派生为 false 只是占位——
+    /// 唯一构造点（Sandbox::new）从 SandboxConfig.api_probe 显式传入。
+    pub api_probe: AtomicBool,
 }
 
 impl Shared {
@@ -124,6 +127,15 @@ fn op_kk_console(state: &mut OpState, #[string] level: &str, #[string] text: &st
 }
 
 /// 标记玩家主动 halt 并请求 V8 中断；Sandbox 根据此标志选择零计费处理。
+/// prelude 加载时查询一次：是否装配 API 访问诊断 probe。
+#[op2(fast)]
+fn op_kk_probe_enabled(state: &mut OpState) -> bool {
+    state
+        .borrow::<SharedRef>()
+        .api_probe
+        .load(std::sync::atomic::Ordering::Relaxed)
+}
+
 #[op2(fast)]
 fn op_kk_cpu_halt(state: &mut OpState) {
     let shared = state.borrow::<SharedRef>().clone();
@@ -152,6 +164,7 @@ extension!(
         op_kk_module_load_js,
         op_kk_module_load_binary,
         op_kk_console,
+        op_kk_probe_enabled,
         op_kk_cpu_halt,
         op_kk_get_used,
         crate::pathfinder::op_kk_pathfinder_search,

@@ -29,6 +29,16 @@ A/B/C 已有默认 50×6 短窗和部分 Mod/双通道回归证据，不能据�
 
 【教训】KKPV 信封不可裁剪不可见无状态房：玩家面把缺失条目当作界外房（closed）而非 normal——`Game.map.getRoomStatus` 的界外语义与注册 normal 房必须可区分（mod_chain portals 测试锁定）。任何"信封瘦身"须先改玩家面消费端语义，不能只砍生产端。
 
+【方向】2026-10-10 用户放宽等价标准：不要求内部行为与官方逐项一致，只要求**玩家脚本可观察面无差异**——可判定基准是兼容性棘轮（screeps-ok 2914 例 + tooangel/overmind/wasm 三夹具）与 mod_chain 双通道。这解锁了 V8 侧常驻化路线（xxscreeps 同路）：记录/wrapper/Game 树跨拍复用、Memory 干净拍跳过 parse。已知边界情况须过棘轮验证：(1) 对象同一性——官方每拍重建使 `global.savedRef === Game.creeps.foo` 跨拍为 false，常驻后为 true（依赖此行为的 bot 在官方即坏，实际不存在）；(2) Memory 存非 JSON 值的归一化——每拍末照常 stringify、下一拍字符串未变则跳过 parse 复用常驻对象，归一化语义与官方一致。
+
+【实测】2026-10-10 V8 侧第一双片（等价标准放宽后，用户拍板基准=玩家脚本无感知，见上文【方向】）：
+
+(a) **Memory 常驻 + 洁度走查**：直接照搬 xxscreeps 的 previousJson+crunch 会被自家套件打回——首版实现 5 例转红（UNDOC-MEMJSON-001/003/004/005 + MEMHACK-011：函数/NaN/Infinity 跨拍存活、环引用后运行时不存活、删除 `_parsed` 的丢弃语义泄漏）。按无感知标准自研 `memoryCleanWalk`：一遍 O(n) 无分配深走，就地归一化（数组 undefined 槽转 null、对象 undefined 键删除）并判定对象是否与 `parse(stringify(obj))` 逐值一致——函数/Symbol/bigint、非有限数/-0、非普通原型（Date/Map/类实例）、环、不可枚举自有键、Symbol 键、数组命名键与稀疏洞一律判脏；干净拍建立 (对象, 字符串) 常驻对、下一拍注入串未变即跳过 parse，脏拍或序列化失败或 `_parsed` 缺失（未访问/被删）一律作废常驻走官方 parse。宿主注入不同串（重试/恢复/编辑）失效常驻。棘轮 2905 全绿复验。热路径节省为 8KiB×50 玩家的 parse（数十 ms/tick 量级），非本片主收益。
+(b) **api_probe 门控（本批主收益）**：`probe()` 给每个游戏对象包两层 Proxy（pos + 本体）、console 一层，玩家全部字段访问过 trap 且 `in`/Set 查询——内联缓存全灭。穿通对照实测：run 414→307ms（-26%）、CPU -19%。正式实现 `SandboxConfig.api_probe`（默认 true 保 bot-check/适配器诊断），compare-probe 与容量探针显式关闭（与 xxs 生产沙箱同形：诊断不进计时路径）。最终单轮 wall 855ms、run 279ms、CPU 2429 core-ms/tick；两端对照窗（[50x6-after-v8-residency](../../compat/reports/mature-comparison/2026-10-10/50x6-after-v8-residency/summary.json)）kk/xxs P50 835.7/259.5ms——本窗 xxs 比上窗快 24%，跨窗比率不可比，本窗口径 **3.22×**（旅程：23.4×→3.68×→3.17×→3.22×，各为其窗口内数字）；CPU 1.41×、RSS 峰值 0.72×（低 28%）、并行度 2.88× vs 6.57×（公平门保持）。
+(c) **教训**：诊断仪表必须可关且不进计时/生产路径；「官方/xxs 怎么做」只是参照——xxs 的 crunch 宽松度在我们的 UNDOC 套件面前不合格，最终形态是按自家验收标准重设计的洁度走查。
+
+【设计】V8 侧下一片（wrapper/记录常驻）已按 registry 结构定形：字段 getter 全部经 `gw.rawById` 按 id 回查、`_name` 真值记忆在实例内——因此 (1) `wrappersById` 常驻：id 存续则复用 wrapper（省 RoomPosition/probe/装配/原型链接），每拍清 `_` 前缀自有记忆属性防陈旧；(2) `decodeBundle` 就地更新常驻记录：DECODE_CTX 重指新缓冲 + 重刷定宽急读属性 + 清已物化的惰性值；(3) Room/Game 树仍每拍重建（廉价纯对象）。观察面边界：对象同一性跨拍保持（已接受）；主要风险是记忆失效遗漏导致陈旧字段值——由 mod_chain、双通道状态等价与棘轮锁定。probe 门控已消掉最大单项后，此片预期收益需重新采样评估再动工。
+
 【实测】2026-10-10 类型化直写编码器片（同夹具同窗 conc 4、release、与上表口径一致）：`project` P50 548.28→334.40ms（-39%）、wall P50 1176.15→1018.41ms（-13.4%）、CPU 3237.91→3285.22 core-ms/tick（+1.5%，噪声内）、RSS 峰值 2729→2620MiB（-109MiB）。实现：`KkpvVal<'a>`/`KkpvRow<'a>`/`KkpvBlockRef<'a>` 借用值模型 + `encode_ref` 单一编码核心（owned 入口经 `KkpvValue::as_val` 桥接委托，字节同源）；世界侧 `encode_room_block` 单房直写（Generic/Mod 解析保活后借用），删除 `kkpv_object_of`/`record_to_kkpv` 的第二套构造器；字段秩映射 + 行主序填列取代逐字段 find_map 的 O(字段数²) 重扫；变长载荷直接追加 arena。字节等价锁：`encode_ref_matches_owned_entry`（合成全值域块）、共享装配 vs 全 fresh 逐房编码、mod_chain 491 双通道。JSON 参考通道未动；未改玩家 API 行为，兼容性棘轮未重跑。
 
 【实测】2026-10-10 并发标定（kk 单端、同夹具 5+50 短窗、release）：

@@ -79,4 +79,6 @@ node --check scripts/benchmark/xxs-probe.mjs
 
 2026-10-10 类型化直写编码器批追注：KKPV 编码改为借用值单一核心（`KkpvVal`/`encode_ref`，owned 入口委托），世界侧单房直写并删除第二套构造器；同机同窗复测归档于 [50x6-after-typed-encoder](../../compat/reports/mature-comparison/2026-10-10/50x6-after-typed-encoder/summary.json)，kk/xxs 比率 P50 3.68×→3.17×、CPU 1.60×、RSS 峰值 0.86×（低 14%），动作与状态等价保持。同日并发标定（kk 单端 4/6/8/10）：并发 8 仅换约 2% wall 多烧 25% CPU、并发 10 负收益，正式对照维持并发 4。**公平门（用户 2026-10-10）：kk 实测平均并行度（CPU/wall）不得超过 xxs 实测（本窗 3.20× vs 6.34×），且 CPU core-ms/tick 不劣化。**
 
+2026-10-10 V8 侧批追注：Memory 常驻（洁度走查版，棘轮全绿）与 api_probe 门控（compare-probe 关闭诊断 Proxy 仪表，单轮实测 run -26%/CPU -19%）后，同夹具对照归档于 [50x6-after-v8-residency](../../compat/reports/mature-comparison/2026-10-10/50x6-after-v8-residency/summary.json)：kk/xxs P50 835.7/259.5ms（本窗 3.22×；本窗 xxs 比上窗快 24%，跨窗比率不可比）、CPU 1.41×、RSS 峰值 0.72×（低 28%），动作与状态等价保持；正式对照沿用并发 4 与公平门（并行度 2.88× vs 6.57×）。
+
 工具回归分别位于 `scripts/tests/` 和本目录。完整 `pnpm run check` 同时执行两组 Python 测试，以及门禁和文档链接检查器的 Node 回归测试。

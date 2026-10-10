@@ -39,6 +39,9 @@ pub(crate) fn run(fixture: &str, warmup: u32, ticks: u32, concurrency: usize, re
                 id,
                 kk_runner::SandboxConfig {
                     cpu_limit,
+                    // 性能对照面：不装配 API 诊断 Proxy（与 xxscreeps 生产
+                    // 沙箱同形——诊断仪表不进计时路径）。
+                    api_probe: false,
                     ..kk_runner::SandboxConfig::default()
                 },
             );

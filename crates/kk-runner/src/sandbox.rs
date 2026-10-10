@@ -57,6 +57,12 @@ pub struct SandboxConfig {
     /// 计划级静态对象通行；只改变默认寻路矩阵，生物占格和玩家矩阵保持。
     pub obstacles_passable: bool,
     pub private_ramparts_passable: bool,
+    /// 是否装配 API 访问诊断 probe（Proxy 仪表）。诊断（bot-check 的
+    /// missing/hasProbes 报告）需要 true；纯性能测量面（compare-probe、
+    /// 容量探针）显式置 false——Proxy 拦截每个游戏对象的两层访问，
+    /// 实测占 run 相约四分之一墙钟与五分之一 CPU。默认 true 保持
+    /// 现有诊断工作流不变。
+    pub api_probe: bool,
 }
 
 impl Default for SandboxConfig {
@@ -74,6 +80,7 @@ impl Default for SandboxConfig {
             terrain_walls_passable: false,
             obstacles_passable: false,
             private_ramparts_passable: false,
+            api_probe: true,
         }
     }
 }
@@ -173,7 +180,10 @@ impl Sandbox {
             ..Default::default()
         });
 
-        let shared: SharedRef = Arc::new(Shared::default());
+        let shared: SharedRef = Arc::new(Shared {
+            api_probe: std::sync::atomic::AtomicBool::new(config.api_probe),
+            ..Shared::default()
+        });
         let mut install_watchdog = None;
         let host = {
             let _guard = tokio.enter();

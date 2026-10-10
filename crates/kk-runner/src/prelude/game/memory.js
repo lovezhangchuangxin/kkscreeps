@@ -8,6 +8,8 @@
   const __Array = Array;
   const __objectEntries = Object.entries;
   const __objectKeys = Object.keys;
+  const __Set = Set;
+  const __reflectApply = Reflect.apply;
   const { lodash } = globalThis.__kkp;
 
   // 宿主消息使用 null 原型，避免继承 Object.prototype.toJSON 改写顶层结果。
@@ -159,6 +161,7 @@
           // 官方 runtime.js:116-118：带 _parsed 门——set 即失效本 tick 的解析
           // 缓存，否则 tick 末写回会用陈旧 parse 覆写玩家刚 set 的 raw
           if (this._parsed) delete this._parsed;
+          residentParsed = undefined;
           rawMemoryData = v;
         },
       },
@@ -228,16 +231,83 @@
     }
   }
 
+  // Memory 常驻缓存：writeBack 成功 stringify 后记录 (解析对象, 字符串)
+  // 成对快照；下一拍首访时注入字符串未变则直接复用对象，跳过官方每拍
+  // 全量 JSON.parse（xxscreeps mods/meta/memory/memory.ts 的 previousJson
+  // 同路）。复用使对象跨拍保持同一性——依赖每拍新对象的 bot 在官方即坏，
+  // 接受面与 xxscreeps 一致（套件绿）。RawMemory.set 与宿主注入不同字符
+  // 串都会失效本对。
+  let residentParsed = undefined;
+  let residentString = undefined;
+
+  // Memory 洁度走查：一遍 O(n) 无分配深走，既做官方 JSON 往返的归一化
+  // （数组 undefined 槽转 null、对象 undefined 键删除），又判定对象是否
+  // 与 parse(stringify(obj)) 逐值一致——任何 stringify 丢弃/改写的值形态
+  // 都判脏：函数/Symbol/bigint、NaN/±Infinity/-0、非普通原型（Date/Map/
+  // 类实例——stringify 会把它们变成别的东西）、环（官方 stringify 抛错）、
+  // 不可枚举自有键与 Symbol 键（stringify 不带走）、数组命名键与稀疏洞。
+  // 干净才允许常驻复用；脏则作废常驻对，下一拍走完整 parse（官方同形）。
+  // 已知接受的残余差异（xxscreeps crunch 同样存在、套件无覆盖）：访问器
+  // 属性在走查与 stringify 中各读一次（官方只读一次）。
+  const __numberIsFinite = Number.isFinite;
+  const __objectIs = Object.is;
+  const __objectGetPrototypeOf = Object.getPrototypeOf;
+  const __objectGetOwnPropertyNames = Object.getOwnPropertyNames;
+  const __objectGetOwnPropertySymbols = Object.getOwnPropertySymbols;
+  const __setHas = Set.prototype.has;
+  const __setAdd = Set.prototype.add;
+  const OBJECT_PROTOTYPE = __Object.prototype;
+  function memoryCleanWalk(payload, seen) {
+    if (payload === null) return true;
+    const t = typeof payload;
+    if (t === 'boolean' || t === 'string') return true;
+    if (t === 'number') {
+      return __numberIsFinite(payload) && !__objectIs(payload, -0);
+    }
+    if (t !== 'object') return false;
+    if (__reflectApply(__setHas, seen, [payload])) return false;
+    __reflectApply(__setAdd, seen, [payload]);
+    if (__Array.isArray(payload)) {
+      const names = __objectGetOwnPropertyNames(payload);
+      if (names.length !== payload.length) return false;
+      for (let i = 0; i < payload.length; i++) {
+        const slot = payload[i];
+        if (slot === undefined) payload[i] = null;
+        else if (!memoryCleanWalk(slot, seen)) return false;
+      }
+      return true;
+    }
+    if (__objectGetPrototypeOf(payload) !== OBJECT_PROTOTYPE &&
+        __objectGetPrototypeOf(payload) !== null) {
+      return false;
+    }
+    const keys = __objectKeys(payload);
+    if (__objectGetOwnPropertyNames(payload).length !== keys.length) return false;
+    if (__objectGetOwnPropertySymbols(payload).length !== 0) return false;
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i];
+      const v = payload[k];
+      if (v === undefined) delete payload[k];
+      else if (!memoryCleanWalk(v, seen)) return false;
+    }
+    return true;
+  }
+
   function ensureMemory() {
     // 官方 game.js:479-497：无条件重解析（玩家预置 _parsed 会被覆盖，memhack
     // 005）；解析用全局 JSON.parse——官方 bundle 在玩家 realm 内同形（自害面，
-    // 与世界注入的预置 parse 不同源，见段首注释）
+    // 与世界注入的预置 parse 不同源，见段首注释）。常驻命中时跳过解析，
+    // 未命中走官方同形路径。
     let parsed;
-    try {
-      parsed = JSON.parse(rawMemoryData || '{}');
-      if (parsed !== null && typeof parsed === 'object') parsed.__proto__ = null;
-    } catch (e) {
-      parsed = null;
+    if (residentParsed !== undefined && rawMemoryData === residentString) {
+      parsed = residentParsed;
+    } else {
+      try {
+        parsed = JSON.parse(rawMemoryData || '{}');
+        if (parsed !== null && typeof parsed === 'object') parsed.__proto__ = null;
+      } catch (e) {
+        parsed = null;
+      }
     }
     RawMemory._parsed = parsed;
     // 官方 game.js:492-495：首访后固化为值属性——官方**没写** writable（默认
@@ -392,14 +462,24 @@
     const parsed = RawMemory._parsed;
     if (parsed) {
       try {
+        const clean = memoryCleanWalk(parsed, new __Set());
         const s = __jsonStringify(parsed);
         if (typeof s !== 'string') {
           // Memory.toJSON 返回非字符串时 stringify 得 undefined——玩家侧写回失败
-          // （官方顶层 throw、无玩家 console 行：错误只在 run 结局信封可见）
+          // （官方顶层 throw、无玩家 console 行：错误只在 run 结局信封可见）；
+          // 走查已做的归一化保留（对玩家而言只是无返回值的普通变异）
+          residentParsed = undefined;
           return nullEnv({ ok: false, error: 'Memory.toJSON 返回了非字符串' });
         }
         memoryPending = s;
+        if (clean) {
+          residentParsed = parsed;
+          residentString = s;
+        } else {
+          residentParsed = undefined;
+        }
       } catch (e) {
+        residentParsed = undefined;
         // 玩家异常对象的 message 可是污染 getter（抛错逃逸会被宿主误判硬中断）
         let why;
         try {
@@ -412,6 +492,13 @@
     }
     // ② segments tick 尾回收（官方 :250-269——在 Memory 序列化**之后**；违例
     // throw 与官方同义：整 tick 写回失败，已算好的 Memory 候选一并丢弃）
+    if (parsed) {
+      // 常驻对已在上方成功路径或各失败路径定论
+    } else {
+      // 未访问或 _parsed 被删：保存跳过，但玩家可能仍持有常驻对象引用并
+      // 已/将变异它——作废常驻对，下一拍重新 parse 注入串（官方丢弃语义）。
+      residentParsed = undefined;
+    }
     try {
       segmentsOutStash = buildSegmentsOut();
     } catch (e) {
@@ -433,7 +520,12 @@
   // Rust 捕获这些入口后删除 __kkp；Game 只持有闭包函数，不在 tick 中重查临时全局。
   globalThis.__kkp.memory = {
     setRawMemoryHost(data) {
-      rawMemoryData = data;
+      if (data !== rawMemoryData) {
+        // 宿主注入不同字符串（重试轮回放旧候选、恢复、管理编辑）——常驻
+        // 对失效，下一拍走完整 parse；相同字符串（正常提交回注）保持复用。
+        rawMemoryData = data;
+        residentParsed = undefined;
+      }
     },
     setIsmHost(value) {
       interShardLocal = value;

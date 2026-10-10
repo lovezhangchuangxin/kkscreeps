@@ -321,7 +321,11 @@ fn measure(options: &Options) -> anyhow::Result<Value> {
     engine.set_kkpv_channel(options.kkpv);
     engine.set_player_concurrency(options.concurrency)?;
     let vm_limits = ModVmLimits::default();
-    let player_budget = kk_runner::SandboxConfig::default();
+    // 容量/足迹测量面：不装配 API 诊断 Proxy（测的是生产形态成本）。
+    let player_budget = kk_runner::SandboxConfig {
+        api_probe: false,
+        ..kk_runner::SandboxConfig::default()
+    };
     engine.create_shard_with_mods(
         &json!({"players":handles,"rooms":rooms}),
         &packages,

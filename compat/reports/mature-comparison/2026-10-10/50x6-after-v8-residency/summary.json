@@ -1,0 +1,185 @@
+{
+  "success": true,
+  "equivalent": true,
+  "comparison_policy": "same initial fixture, complete player/room execution and real activity; gameplay divergence disclosed",
+  "strict_equivalence": false,
+  "scope": "engine execution/settlement/commit; no disk or HTTP",
+  "formal_window": false,
+  "provenance": {
+    "payload_manifest": {
+      "binary": "176d0ba85e8a1c5019fc7c4d277cd178e48e0388f7c10ce9665829d2adb05843",
+      "node": "8d66cad090d087ed8fac66d8f7248c8a9a55454680232a6d109f609aa2decf89",
+      "kk_sources": "ab73e6f29eba39f9324822f40d73153e642f61cf7fbdfd5313fada4632d6f070",
+      "cargo_lock": "3deebe9397aef614d249d4c927009044330648470328eff96205ec294031303e",
+      "xxs": "150bbf70f65c7898e77dd6e9c4c30e6732a45bf56c058b4ca5b011ff20792ff7",
+      "lodash": "58ace6bc5f2d226cae785c9039ff492a694483bc7e72f77e5e144e0663fbfdb1",
+      "xxs_lock": "c82429cf9529d9730273f792a2e5c83bba4be908f64940b48a94ed11a8435ecf",
+      "isolated_vm": "2c7d62be3d5803f1aa6bf58d79c0711901a68b766da16519acbf810c37d667cb",
+      "harness": "2a79d3402debd35efeb8b5dd7005fbc3bff8101eaea0653b416d6ade90ea7005",
+      "adapter": "d7883f84db328f03684e91be4de6dc06a0bf2629edc389f48362f179d6689f05",
+      "player": "af03ad7df5f1ba12f173695133ceb8126389844081d6a7ac77b9d865ff29f034",
+      "mature": "a3f1ae51c63c83fe6afaa7b9064640955fb04d3350be9749b529ddb3b2fa2ce0",
+      "mature_player": "b6d050331e0ad6deb09950c3de08b695719c9034bcc055b0c04a8da653a1d40d",
+      "mature_adapter": "410f0789feb0b9cacf2bcabfa41a5de52ac71af433a4691ca006665c963dab32"
+    },
+    "binary_sha256": "176d0ba85e8a1c5019fc7c4d277cd178e48e0388f7c10ce9665829d2adb05843",
+    "xxs_tree_sha256": "150bbf70f65c7898e77dd6e9c4c30e6732a45bf56c058b4ca5b011ff20792ff7",
+    "isolated_vm_sha256": "2c7d62be3d5803f1aa6bf58d79c0711901a68b766da16519acbf810c37d667cb",
+    "node": "v24.11.0",
+    "node_sha256": "8d66cad090d087ed8fac66d8f7248c8a9a55454680232a6d109f609aa2decf89",
+    "machine_model": "Mac16,12",
+    "memory_bytes": 25769803776,
+    "xxs_commit": "5ff0d1a682170f6b5f9c8bac3e703767625988e0",
+    "xxs_status": "?? .python-version\n?? src/",
+    "kk_commit": "45e2c0215d348ab35288682e8f56325db3254208",
+    "kk_status": "M compat/reports/kkscreeps.json\n M crates/kk-cli/src/probes/comparison.rs\n M crates/kk-cli/src/probes/mod_player.rs\n M crates/kk-runner/src/ops.rs\n M crates/kk-runner/src/prelude/game/memory.js\n M crates/kk-runner/src/prelude/runtime/shared.js\n M crates/kk-runner/src/sandbox.rs\n M docs/plans/mod-next-batches.md\n M docs/research/11-mature-performance-optimization.md\n M scripts/benchmark/README.md",
+    "adapter_sha256": "d7883f84db328f03684e91be4de6dc06a0bf2629edc389f48362f179d6689f05",
+    "harness_sha256": "2a79d3402debd35efeb8b5dd7005fbc3bff8101eaea0653b416d6ade90ea7005",
+    "machine": "macOS-15.7.3-arm64-arm-64bit",
+    "processor": "arm",
+    "logical_cpus": 10,
+    "command": [
+      "scripts/benchmark/compare.py",
+      "--xxs-root",
+      "/Users/keqing/Desktop/projects/sources/screeps/xxscreeps",
+      "--players",
+      "50",
+      "--runs",
+      "1",
+      "--warmup",
+      "5",
+      "--ticks",
+      "50",
+      "--concurrency",
+      "4",
+      "--timeout",
+      "1800",
+      "--output",
+      "/tmp/kkscreeps-v8-batch-comparison"
+    ],
+    "started_unix": 1791633334.179046,
+    "finished_unix": 1791633421.716218,
+    "xxs_status_after": "?? .python-version\n?? src/"
+  },
+  "summary": [
+    {
+      "profile": "mature",
+      "players": 50,
+      "rooms": 300,
+      "runs": 1,
+      "workload_comparisons": [
+        {
+          "state": {
+            "before": {
+              "equal": true,
+              "first_difference": null,
+              "rooms_with_difference": 0
+            },
+            "after": {
+              "equal": true,
+              "first_difference": null,
+              "rooms_with_difference": 0
+            }
+          },
+          "action_counts_equal": true,
+          "actions": {
+            "factory": {
+              "kkscreeps": 300,
+              "xxscreeps": 300,
+              "delta_percent": 0.0
+            },
+            "harvest": {
+              "kkscreeps": 24600,
+              "xxscreeps": 24600,
+              "delta_percent": 0.0
+            },
+            "link": {
+              "kkscreeps": 1500,
+              "xxscreeps": 1500,
+              "delta_percent": 0.0
+            },
+            "mineral": {
+              "kkscreeps": 2100,
+              "xxscreeps": 2100,
+              "delta_percent": 0.0
+            },
+            "move": {
+              "kkscreeps": 51300,
+              "xxscreeps": 51300,
+              "delta_percent": 0.0
+            },
+            "observe": {
+              "kkscreeps": 15000,
+              "xxscreeps": 15000,
+              "delta_percent": 0.0
+            },
+            "pathSearch": {
+              "kkscreeps": 6900,
+              "xxscreeps": 6900,
+              "delta_percent": 0.0
+            },
+            "power": {
+              "kkscreeps": 300,
+              "xxscreeps": 300,
+              "delta_percent": 0.0
+            },
+            "reaction": {
+              "kkscreeps": 2400,
+              "xxscreeps": 2400,
+              "delta_percent": 0.0
+            },
+            "terminal": {
+              "kkscreeps": 300,
+              "xxscreeps": 300,
+              "delta_percent": 0.0
+            },
+            "transfer": {
+              "kkscreeps": 16500,
+              "xxscreeps": 16500,
+              "delta_percent": 0.0
+            },
+            "upgrade": {
+              "kkscreeps": 8400,
+              "xxscreeps": 8400,
+              "delta_percent": 0.0
+            },
+            "withdraw": {
+              "kkscreeps": 11100,
+              "xxscreeps": 11100,
+              "delta_percent": 0.0
+            }
+          },
+          "equivalent": true
+        }
+      ],
+      "kkscreeps": {
+        "p50_ms": 835.698042,
+        "p95_ms": 997.229375,
+        "p99_ms": 1098.687417,
+        "cpu_core_ms_per_tick": 2402.96136,
+        "rss_bytes_sampled_p50": 2467774464,
+        "rss_bytes_sampled_peak": 2589917184
+      },
+      "xxscreeps": {
+        "p50_ms": 259.52879199999916,
+        "p95_ms": 386.9967919999981,
+        "p99_ms": 413.9078329999993,
+        "cpu_core_ms_per_tick": 1703.9026999999999,
+        "rss_bytes_sampled_p50": 3307716608,
+        "rss_bytes_sampled_peak": 3581706240
+      },
+      "kkscreeps_over_xxscreeps": {
+        "p50_ms": 3.220059075372272,
+        "p95_ms": 2.576841450923461,
+        "p99_ms": 2.654425283611393,
+        "cpu_core_ms_per_tick": 1.4102691192402008,
+        "rss_bytes_sampled_p50": 0.7460658685304156,
+        "rss_bytes_sampled_peak": 0.723095924248662
+      },
+      "observed_goal": {
+        "faster_p50": false,
+        "lower_peak_rss": true
+      }
+    }
+  ]
+}

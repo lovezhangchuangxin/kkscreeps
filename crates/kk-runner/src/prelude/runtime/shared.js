@@ -61,7 +61,13 @@
     if (b !== -1) s = s.slice(0, b);
     return s;
   };
+  // 宿主在沙箱创建时决定是否装配诊断仪表（SandboxConfig.api_probe）。
+  // 关闭时原样返回目标：字段访问直达内联缓存，省去两层 Proxy 拦截
+  //（实测占 run 相约四分之一墙钟）。missing/hasProbes 报告为空是
+  // 关闭时的预期形态，bot-check 等诊断工作流保持默认开启。
+  const PROBE_ENABLED = ops.op_kk_probe_enabled();
   function probe(target, basePath) {
+    if (!PROBE_ENABLED) return target;
     return new Proxy(target, {
       get(t, prop) {
         if (
