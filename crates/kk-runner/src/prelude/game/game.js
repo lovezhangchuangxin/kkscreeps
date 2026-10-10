@@ -12,6 +12,7 @@
   const __Set = Set;
   const __mapGet = Map.prototype.get;
   const __mapSet = Map.prototype.set;
+  const __mapForEach = Map.prototype.forEach;
   const __setAdd = Set.prototype.add;
   const __setHas = Set.prototype.has;
   const __reflectApply = Reflect.apply;
@@ -79,6 +80,10 @@
     const flags = {};
     const resources = {};
     const worldObjs = gw.world.objects || [];
+    // 单次分桶：按房收集 {os, ws} 平行数组，供 makeRoomQueries 与 room 回填
+    // 直接消费——省去逐可见房全量扫描与回填阶段的 objectsById 逐对象回查。
+    // 尾部索引赋值不走 push 方法分派（玩家可替换数组原型）。
+    const roomBuckets = new __Map();
     for (let i = 0; i < worldObjs.length; i++) {
       const o = worldObjs[i];
       // wrapper 常驻：id 存续且类型不变则复用包装（自有数据面已刷新），
@@ -86,6 +91,13 @@
       const w = gw.wrapObjectResident(o, gw.world.time);
       w.room = undefined;
       __reflectApply(__mapSet, gw.objectsById, [o.id, w]);
+      let bucket = __reflectApply(__mapGet, roomBuckets, [o.room]);
+      if (bucket === undefined) {
+        bucket = { os: [], ws: [] };
+        __reflectApply(__mapSet, roomBuckets, [o.room, bucket]);
+      }
+      bucket.os[bucket.os.length] = o;
+      bucket.ws[bucket.ws.length] = w;
       const mine = o.owner === gw.viewerName;
       if (o.type === 'creep') {
         // 官方 game.js:273-280：Game.creeps 只收本人 creep
@@ -138,14 +150,21 @@
     for (let i = 0; i < roomEntries.length; i++) {
       const name = roomEntries[i][0];
       if (gw.viewerName !== null && !__reflectApply(__setHas, visibleRooms, [name])) continue;
-      rooms[name] = gw.makeRoom(name, roomEntries[i][1]);
+      rooms[name] = gw.makeRoom(
+        name,
+        roomEntries[i][1],
+        __reflectApply(__mapGet, roomBuckets, [name]),
+      );
     }
-    // 从已建立的对象索引回填 room，避免为每个对象重新扫描世界数组。
-    for (let i = 0; i < worldObjs.length; i++) {
-      const o = worldObjs[i];
-      const w = __reflectApply(__mapGet, gw.objectsById, [o.id]);
-      if (w && rooms[o.room]) w.room = rooms[o.room];
-    }
+    // 回填 room：直接遍历分桶的包装数组，不再全量扫描世界与逐对象 Map 回查。
+    // 未建房间（rooms 无键）回填 undefined，与旧版「保持主循环重置值」等价。
+    __reflectApply(__mapForEach, roomBuckets, [
+      (bucket, bucketRoom) => {
+        const room = rooms[bucketRoom];
+        const ws = bucket.ws;
+        for (let i = 0; i < ws.length; i++) ws[i].room = room;
+      },
+    ]);
     // 常驻表清扫：消亡对象出表（rawById 已是本拍权威集合）。
     gw.sweepResidentWrappers();
 

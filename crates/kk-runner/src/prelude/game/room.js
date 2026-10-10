@@ -84,8 +84,8 @@
     },
   });
 
-  function makeRoom(name, r) {
-    const queries = makeRoomQueries(name);
+  function makeRoom(name, r, bucket) {
+    const queries = makeRoomQueries(name, bucket);
     const { controller, storageObj, terminalObj, roomObjs } = queries;
     // name/energyAvailable/energyCapacityAvailable/survivalInfo/visual 恒为
     // 自有属性；controller/storage/terminal 只在对应结构存在时挂载。

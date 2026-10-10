@@ -11,10 +11,12 @@
   const ERR_INVALID_ARGS = globalThis.ERR_INVALID_ARGS;
   const TERRAIN_MASK_WALL = globalThis.TERRAIN_MASK_WALL;
   const terrainWordAt = gw.terrainWordAt;
-  gw.makeRoomQueries = function (name) {
+  // bucket 由 buildGame 主循环单次分桶产出：{os: 本房原始对象[], ws: 对应
+  // 包装[]}。undefined/null 表示该房无对象（可见房可无对象）。查询装配只
+  // 遍历本房桶——省去逐可见房全量扫描与 objectsById 回查。
+  gw.makeRoomQueries = function (name, bucket) {
     // 无 controller 房间的官方投影是 undefined（非 null）
     let controller;
-    const worldObjs = gw.world.objects || [];
     // 一次扫描本房对象建立类型索引与 x*50+y 的空间索引，同时寻找 controller。
     // energy/resource 共用索引，lookAt 同格掉落资源会输出两项。
     // 来源：上游 engine/src/game/rooms.js 的 lookTypeRegisters/lookTypeSpatialRegisters。
@@ -47,7 +49,8 @@
       powerCreep: [],
     };
     // 保留本房原始对象供工地名额与占位检查；storage/terminal 另记录其玩家视图引用。
-    const roomObjs = [];
+    const roomObjs = bucket === undefined || bucket === null ? [] : bucket.os;
+    const roomWraps = bucket === undefined || bucket === null ? null : bucket.ws;
     let storageObj, terminalObj;
     lookSpatial.energy = [];
     lookSpatial.resource = lookSpatial.energy;
@@ -63,18 +66,17 @@
       }
       modLookTypes.sort();
     }
-    for (let i = 0; i < worldObjs.length; i++) {
-      const o = worldObjs[i];
-      if (o.room !== name) continue;
-      roomObjs.push(o);
+    for (let i = 0; i < roomObjs.length; i++) {
+      const o = roomObjs[i];
+      const w = roomWraps === null ? undefined : roomWraps[i];
       if (o.type === 'structure' && o.structureType === 'controller') {
-        controller = __reflectApply(__mapGet, gw.objectsById, [o.id]);
+        controller = w;
       }
       if (o.type === 'structure' && o.structureType === 'storage') {
-        storageObj = __reflectApply(__mapGet, gw.objectsById, [o.id]);
+        storageObj = w;
       }
       if (o.type === 'structure' && o.structureType === 'terminal') {
-        terminalObj = __reflectApply(__mapGet, gw.objectsById, [o.id]);
+        terminalObj = w;
       }
       // look 类型归类（官方装配分支同构：source/mineral 独立臂、spawn/controller
       // 属 structure、dropped resource 落 energy 臂）
@@ -98,8 +100,7 @@
       // mod 记录，此分支为死代码。
       else if (o.type === 'mod') t = o.modType;
       if (t === null) continue;
-      const w = __reflectApply(__mapGet, gw.objectsById, [o.id]);
-      if (!w) continue;
+      if (w === undefined) continue;
       lookReg[t][o.id] = w;
       const index = o.x * 50 + o.y;
       if (lookSpatial[t][index] === undefined) {
@@ -187,11 +188,13 @@
               : gw.modApi.findByConst[type];
           // 没有查看者时 MY_*/HOSTILE_* 无法分类，返回空；FIND_CREEPS 在此模式保留孵化对象。
           const neutral = gw.viewerName === null;
-          for (let i = 0; i < worldObjs.length; i++) {
-            const o = worldObjs[i];
-            if (o.room !== name) continue;
-            const w = __reflectApply(__mapGet, gw.objectsById, [o.id]);
-            if (!w) continue;
+          // 桶直读：roomObjs 是本房对象在当拍世界序中的子列（与旧全量扫描
+          // 按房过滤的同相对顺序一致），roomWraps 平行给出包装，免逐对象
+          // objectsById 回查。
+          for (let i = 0; i < roomObjs.length; i++) {
+            const o = roomObjs[i];
+            const w = roomWraps === null ? undefined : roomWraps[i];
+            if (w === undefined) continue;
             const isStruct = o.type === 'structure' || o.type === 'spawn';
             // 官方 findCacheFn 表（game.js:17-29）viewer 相关 10 臂：FIND_CREEPS
             // 族滤孵化雏形（!i.spawning——中立面保留）；MY_*=真值 my、HOSTILE_*

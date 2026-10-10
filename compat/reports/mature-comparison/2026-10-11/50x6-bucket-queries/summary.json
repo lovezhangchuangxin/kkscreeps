@@ -1,0 +1,81 @@
+{
+  "experiment": "L4a bucket queries: single-pass room bucketing in buildGame; makeRoomQueries/find/backfill consume buckets",
+  "date": "2026-10-11",
+  "profile": "mature-rcl8-v1",
+  "players": 50,
+  "rooms": 300,
+  "warmup": 5,
+  "ticks": 100,
+  "concurrency": 4,
+  "order": [
+    "old",
+    "new",
+    "new",
+    "old"
+  ],
+  "thermal_protocol": "两轮冷首窗伪影（首窗比热稳态快至 30%）后改为：2 个丢弃窗预热到热稳态再采 O,N,N,O；同二进制四窗对照证实首窗伪影（707.8 vs 750±20）",
+  "old_sha256_prefix": "21b9a2da",
+  "new_sha256_prefix": "e450851a",
+  "old_git": "3a15a4c (clean HEAD)",
+  "new_changes": "crates/kk-runner/src/prelude/game/{game,room,room/queries}.js",
+  "rows": [
+    {
+      "tag": "old1",
+      "version": "old",
+      "wall_p50": 758.15,
+      "run_p50": 369.79,
+      "project_p50": 224.4,
+      "settle_p50": 162.4,
+      "wall_p95": 955.78,
+      "cpu_core_ms_per_tick": 2508.45,
+      "rss_peak_gb": 2.729
+    },
+    {
+      "tag": "new2",
+      "version": "new",
+      "wall_p50": 721.12,
+      "run_p50": 332.64,
+      "project_p50": 222.74,
+      "settle_p50": 160.48,
+      "wall_p95": 882.55,
+      "cpu_core_ms_per_tick": 2361.01,
+      "rss_peak_gb": 2.764
+    },
+    {
+      "tag": "new3",
+      "version": "new",
+      "wall_p50": 725.38,
+      "run_p50": 329.92,
+      "project_p50": 222.28,
+      "settle_p50": 160.38,
+      "wall_p95": 909.7,
+      "cpu_core_ms_per_tick": 2364.8,
+      "rss_peak_gb": 2.746
+    },
+    {
+      "tag": "old4",
+      "version": "old",
+      "wall_p50": 756.77,
+      "run_p50": 359.82,
+      "project_p50": 224.53,
+      "settle_p50": 163.92,
+      "wall_p95": 922.82,
+      "cpu_core_ms_per_tick": 2494.58,
+      "rss_peak_gb": 2.741
+    }
+  ],
+  "new_over_old_mean": {
+    "wall_p50": 0.9548,
+    "wall_p95": 0.954,
+    "run_p50": 0.9081,
+    "project_p50": 0.9913,
+    "settle_p50": 0.9833,
+    "cpu_core_ms_per_tick": 0.9446,
+    "rss_peak_gb": 1.0073
+  },
+  "fairness": {
+    "parallelism_new": 3.27,
+    "parallelism_old": 3.3
+  },
+  "conclusion": "两对相邻样本方向一致（new 快 wall 4.9%/4.3%）；run -9.2% 与分桶机理落点吻合、project/settle 不动；CPU -5.5% 公平门②改善；RSS +0.7% 噪声级。保留。"
+}
