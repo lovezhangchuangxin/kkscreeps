@@ -40,15 +40,95 @@ pub fn encode(input: &KkpvBlockInput, limits: &KkpvLimits) -> Result<Vec<u8>, Kk
     encode_ref(&block, limits)
 }
 
+/// 单字段的编码计划：列是全调用共享 `columns_all` 缓冲里的区间
+/// （`col_base..col_base+rows`，行主序），变长字段的 arena 单元则是
+/// `cells_all` 平铺缓冲的区间（`cells_base..+rows`；usize::MAX 表示
+/// 定宽字段没有单元）。
 struct FieldPlan<'o> {
     key: &'o str,
     key_desc: (u32, u32),
     kind: u8,
-    column: Vec<Option<&'o KkpvVal<'o>>>,
+    col_base: usize,
+    rows: u32,
+    cells_base: usize,
 }
 struct BucketPlan<'o> {
     rows: u32,
     fields: Vec<FieldPlan<'o>>,
+}
+
+/// FNV-1a 字符串哈希：编码热路径的键短且高度重复，符号表只用于
+/// 把重复字符串折叠成下标，碰撞只多一次等值比较、不改结果；相比
+/// 默认 SipHash（防碰撞哈希 DoS 的通用选择，此处输入是自家权威数据）
+/// 短键开销低数倍。
+fn fnv_str(s: &str) -> u64 {
+    // FNV-1a 乘法按设计溢出回绕（哈希本就取低 64 位）。
+    s.bytes().fold(0xcbf2_9ce4_8422_2325_u64, |h, b| {
+        (h ^ u64::from(b)).wrapping_mul(0x100_0000_01b3)
+    })
+}
+
+/// 单次 [`encode_ref`] 调用内的符号表：开放寻址线性探测，把类型键与
+/// 字段键折叠为 `names` 下标，使分桶/并集/查重/秩映射全部退化为整数
+/// 比较。键借用输入行，生命周期与调用同界，不跨块复用。
+struct SymTab<'k> {
+    mask: usize,
+    /// u32::MAX 为空槽，否则是 names 下标。
+    slots: Vec<u32>,
+    names: Vec<&'k str>,
+}
+
+impl<'k> SymTab<'k> {
+    fn new() -> Self {
+        Self {
+            mask: 127,
+            slots: vec![u32::MAX; 128],
+            names: Vec::new(),
+        }
+    }
+
+    fn intern(&mut self, key: &'k str) -> u32 {
+        let mut at = fnv_str(key) as usize & self.mask;
+        loop {
+            match self.slots[at] {
+                u32::MAX => {
+                    let sym = self.names.len() as u32;
+                    self.names.push(key);
+                    self.slots[at] = sym;
+                    // 负载过半即扩容（翻倍重插），探测保持 O(1)。
+                    if self.names.len() * 2 > self.slots.len() {
+                        self.rehash();
+                    }
+                    return sym;
+                }
+                sym if self.names[sym as usize] == key => return sym,
+                _ => at = (at + 1) & self.mask,
+            }
+        }
+    }
+
+    fn rehash(&mut self) {
+        let new_len = self.slots.len() * 2;
+        self.slots = vec![u32::MAX; new_len];
+        self.mask = new_len - 1;
+        for (sym, &name) in self.names.iter().enumerate() {
+            let mut at = fnv_str(name) as usize & self.mask;
+            while self.slots[at] != u32::MAX {
+                at = (at + 1) & self.mask;
+            }
+            self.slots[at] = sym as u32;
+        }
+    }
+
+    fn name(&self, sym: u32) -> &'k str {
+        self.names[sym as usize]
+    }
+}
+
+/// 符号分桶：收集期按首现序，随后按名称排序（对齐 BTreeMap 迭代序）。
+struct SymBucket {
+    type_sym: u32,
+    members: Vec<usize>,
 }
 
 /// 将借用行编码为完整的 KKPV 块。对象按 ID 升序、类型桶与字段按键
@@ -85,24 +165,42 @@ pub fn encode_ref(input: &KkpvBlockRef<'_>, limits: &KkpvLimits) -> Result<Vec<u
         }
     }
 
-    // 类型分桶；BTreeMap 同时给出类型键的确定顺序与句柄分配。
-    let mut buckets: std::collections::BTreeMap<&str, Vec<usize>> =
-        std::collections::BTreeMap::new();
+    // 类型分桶：符号化后按名称排序（对齐 BTreeMap 迭代序）。成熟负载
+    // 每拍数百块 × 每块数百对象，逐对象一次 intern 取代 BTreeMap 的
+    // 逐对象字符串比较树。
+    let mut syms = SymTab::new();
+    let id_field_sym = syms.intern("id");
+    let mut buckets: Vec<SymBucket> = Vec::new();
     for &index in &order {
-        buckets
-            .entry(input.rows[index].type_key.as_ref())
-            .or_default()
-            .push(index);
+        let type_sym = syms.intern(input.rows[index].type_key.as_ref());
+        match buckets.iter_mut().find(|b| b.type_sym == type_sym) {
+            Some(bucket) => bucket.members.push(index),
+            None => buckets.push(SymBucket {
+                type_sym,
+                members: vec![index],
+            }),
+        }
     }
     if buckets.len() > limits.max_types {
         return Err(KkpvError::LimitExceeded("max_types"));
     }
+    buckets.sort_by(|a, b| syms.name(a.type_sym).cmp(syms.name(b.type_sym)));
 
     let mut arena = ArenaBuilder { bytes: Vec::new() };
     let room_desc = arena.push_str(input.room_name)?;
     let mut type_descs = Vec::with_capacity(buckets.len());
     let mut plans = Vec::with_capacity(buckets.len());
-    for (type_key, members) in &buckets {
+    // 全调用单一列缓冲（columns_all，秩主序、stride=本桶行数；字段经
+    // col_base 区间引用，避免桶间切片失效）与秩/查重表，替代逐桶逐列
+    // `vec![None; n]` 的一拍数百次分配与释放。
+    let mut columns_all: Vec<Option<&KkpvVal<'_>>> = Vec::new();
+    let mut bucket_syms: Vec<u32> = Vec::new();
+    // 行内查重（stamp=行号+1，0 为未见）与并集标记（rank_of≥0 即已入集）。
+    let mut rank_of: Vec<i64> = Vec::new();
+    let mut seen_row: Vec<u32> = Vec::new();
+    for bucket in &buckets {
+        let members = &bucket.members;
+        let type_key = syms.name(bucket.type_sym);
         if members.len() > u32::MAX as usize {
             return Err(KkpvError::LimitExceeded("max_objects"));
         }
@@ -110,63 +208,83 @@ pub fn encode_ref(input: &KkpvBlockRef<'_>, limits: &KkpvLimits) -> Result<Vec<u
             return Err(KkpvError::LimitExceeded("max_string_bytes"));
         }
         type_descs.push(arena.push_str(type_key)?);
-        // 字段目录是全桶键并集（BTreeSet 保键序）；重复只指同一对象内
-        // 出现两次同名键。秩映射一次建立，随后行主序填充列，避免逐字段
-        // find_map 重扫的 O(字段数²) 字符串比较。
-        let mut key_set: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
-        let mut seen: Vec<&str> = Vec::new();
-        for &index in members {
-            seen.clear();
+        // 字段目录是全桶键并集（按名称排序）；重复只指同一对象内出现
+        // 两次同名键。行内查重走符号戳（同拍同 stamp 即重复），错误
+        // 检测顺序与逐键 BTreeSet 版一致（行序、键序遍历）。
+        bucket_syms.clear();
+        for (row_no, &index) in members.iter().enumerate() {
+            let stamp = (row_no + 1) as u32;
             for (key, _) in &input.rows[index].fields {
-                if *key == "id" {
+                let sym = syms.intern(key);
+                if sym == id_field_sym {
                     return Err(KkpvError::DuplicateField {
-                        type_key: (*type_key).into(),
+                        type_key: type_key.into(),
                         field: "id".into(),
                     });
                 }
                 if key.len() > limits.max_string_bytes {
                     return Err(KkpvError::LimitExceeded("max_string_bytes"));
                 }
-                if seen.contains(key) {
+                if seen_row.len() <= sym as usize {
+                    seen_row.resize(sym as usize + 1, 0);
+                    rank_of.resize(sym as usize + 1, -1);
+                }
+                if seen_row[sym as usize] == stamp {
                     return Err(KkpvError::DuplicateField {
-                        type_key: (*type_key).into(),
+                        type_key: type_key.into(),
                         field: (*key).into(),
                     });
                 }
-                seen.push(key);
-                key_set.insert(key);
+                seen_row[sym as usize] = stamp;
+                if rank_of[sym as usize] < 0 {
+                    rank_of[sym as usize] = bucket_syms.len() as i64;
+                    bucket_syms.push(sym);
+                }
             }
         }
-        if key_set.len() > limits.max_fields_per_type {
+        if bucket_syms.len() > limits.max_fields_per_type {
             return Err(KkpvError::LimitExceeded("max_fields_per_type"));
         }
-        let keys: Vec<&str> = key_set.iter().copied().collect();
-        let rank_of: std::collections::HashMap<&str, u32> = keys
-            .iter()
-            .enumerate()
-            .map(|(rank, key)| (*key, rank as u32))
-            .collect();
-        let mut columns: Vec<Vec<Option<&KkpvVal<'_>>>> =
-            keys.iter().map(|_| vec![None; members.len()]).collect();
-        for (row, &index) in members.iter().enumerate() {
+        // 并集按名称排序定秩（= BTreeSet 迭代序），随后行主序填充列。
+        bucket_syms.sort_by(|&a, &b| syms.name(a).cmp(syms.name(b)));
+        let rows = members.len();
+        let col_base = columns_all.len();
+        columns_all.resize(col_base + bucket_syms.len() * rows, None);
+        for (rank, &sym) in bucket_syms.iter().enumerate() {
+            rank_of[sym as usize] = rank as i64;
+        }
+        for (row_no, &index) in members.iter().enumerate() {
             for (key, value) in &input.rows[index].fields {
-                columns[rank_of[key] as usize][row] = Some(value);
+                let sym = syms.intern(key);
+                let rank = rank_of[sym as usize] as usize;
+                columns_all[col_base + rank * rows + row_no] = Some(value);
             }
         }
-        let mut fields = Vec::with_capacity(keys.len());
-        for (key, column) in keys.iter().zip(columns) {
+        let mut fields = Vec::with_capacity(bucket_syms.len());
+        for (rank, &sym) in bucket_syms.iter().enumerate() {
+            let key = syms.name(sym);
             let key_desc = arena.push_str(key)?;
             fields.push(FieldPlan {
                 key,
                 key_desc,
                 kind: KIND_BOOL,
-                column,
+                col_base: col_base + rank * rows,
+                rows: rows as u32,
+                cells_base: usize::MAX,
             });
+        }
+        // 桶结束：整表复位查重戳与秩（表长=符号数，量级几十），供下桶复用。
+        for stamp in seen_row.iter_mut() {
+            *stamp = 0;
+        }
+        for rank in rank_of.iter_mut() {
+            *rank = -1;
         }
         // 列类型按键序逐列推断，与逐字段构建版的错误报告顺序一致。
         for field in &mut fields {
             let mut kind: Option<u8> = None;
-            for value in field.column.iter().flatten() {
+            let column = &columns_all[field.col_base..field.col_base + field.rows as usize];
+            for value in column.iter().flatten() {
                 if let Some(value_kind) = kind_of_val(value) {
                     match kind {
                         None => kind = Some(value_kind),
@@ -188,34 +306,43 @@ pub fn encode_ref(input: &KkpvBlockRef<'_>, limits: &KkpvLimits) -> Result<Vec<u
             fields,
         });
     }
+    // 行 → 桶秩（目录写入的整数查表，取代 BTreeMap row_counters 的
+    // 逐对象字符串查找）；桶内行号按成员序（ID 升序）在写入时累加。
+    let mut row_bucket = vec![0u32; input.rows.len()];
+    for (rank, bucket) in buckets.iter().enumerate() {
+        for &member in &bucket.members {
+            row_bucket[member] = rank as u32;
+        }
+    }
 
-    // 变长载荷在结构段之前进入 arena；描述符按桶/字段/行的确定顺序写入。
-    // 直接追加进 arena，消除逐载荷的临时缓冲拷贝。
-    let mut variable_cells: Vec<Vec<Vec<(u32, u32)>>> = Vec::with_capacity(plans.len());
-    for plan in &plans {
-        let mut per_field = Vec::with_capacity(plan.fields.len());
-        for field in &plan.fields {
-            let mut cells = Vec::with_capacity(field.column.len());
-            if is_variable(field.kind) {
-                for value in &field.column {
-                    match value {
-                        None | Some(KkpvVal::Null) => cells.push((0u32, 0u32)),
-                        Some(value) => {
-                            let start = arena.bytes.len();
-                            encode_nested_val(value, limits, 0, &mut arena.bytes)?;
-                            let end = arena.bytes.len();
-                            let fits = |v: usize| {
-                                u32::try_from(v)
-                                    .map_err(|_| KkpvError::LimitExceeded("max_arena_bytes"))
-                            };
-                            cells.push((fits(start)?, fits(end - start)?));
-                        }
+    // 变长载荷在结构段之前进入 arena；单元写入全调用平铺缓冲
+    // `cells_all`（字段经 cells_base 区间引用），位图缓冲整调用复用。
+    let mut cells_all: Vec<(u32, u32)> = Vec::new();
+    // 嵌套查重 scratch：整调用一份，栈式 base/truncate 复用。
+    let mut nested_seen: Vec<&str> = Vec::new();
+    for plan in &mut plans {
+        for field in &mut plan.fields {
+            if !is_variable(field.kind) {
+                continue;
+            }
+            field.cells_base = cells_all.len();
+            let column = &columns_all[field.col_base..field.col_base + field.rows as usize];
+            for value in column {
+                match value {
+                    None | Some(KkpvVal::Null) => cells_all.push((0u32, 0u32)),
+                    Some(value) => {
+                        let start = arena.bytes.len();
+                        encode_nested_val(value, limits, 0, &mut arena.bytes, &mut nested_seen)?;
+                        let end = arena.bytes.len();
+                        let fits = |v: usize| {
+                            u32::try_from(v)
+                                .map_err(|_| KkpvError::LimitExceeded("max_arena_bytes"))
+                        };
+                        cells_all.push((fits(start)?, fits(end - start)?));
                     }
                 }
             }
-            per_field.push(cells);
         }
-        variable_cells.push(per_field);
     }
     if arena.bytes.len() > limits.max_arena_bytes {
         return Err(KkpvError::LimitExceeded("max_arena_bytes"));
@@ -223,7 +350,8 @@ pub fn encode_ref(input: &KkpvBlockRef<'_>, limits: &KkpvLimits) -> Result<Vec<u
 
     let directory_len = order.len() * DIRECTORY_ENTRY;
     let mut bucket_bytes = Vec::new();
-    for (i, (plan, per_field)) in plans.iter().zip(&variable_cells).enumerate() {
+    let mut bitmap: Vec<u8> = Vec::new();
+    for (i, plan) in plans.iter().enumerate() {
         let type_desc = type_descs[i];
         bucket_bytes.extend_from_slice(&type_desc.0.to_le_bytes());
         bucket_bytes.extend_from_slice(&type_desc.1.to_le_bytes());
@@ -237,8 +365,12 @@ pub fn encode_ref(input: &KkpvBlockRef<'_>, limits: &KkpvLimits) -> Result<Vec<u
         }
         let bitmap_len = bitmap_bytes(plan.rows);
         for field in &plan.fields {
-            let mut bitmap = vec![0u8; bitmap_len];
-            for (row, value) in field.column.iter().enumerate() {
+            bitmap.clear();
+            bitmap.resize(bitmap_len, 0);
+            for (row, value) in columns_all[field.col_base..field.col_base + field.rows as usize]
+                .iter()
+                .enumerate()
+            {
                 if value.is_none() {
                     bitmap[row / 8] |= 1 << (row % 8);
                 }
@@ -246,24 +378,31 @@ pub fn encode_ref(input: &KkpvBlockRef<'_>, limits: &KkpvLimits) -> Result<Vec<u
             bucket_bytes.extend_from_slice(&bitmap);
         }
         for field in &plan.fields {
-            let mut bitmap = vec![0u8; bitmap_len];
-            for (row, value) in field.column.iter().enumerate() {
+            bitmap.clear();
+            bitmap.resize(bitmap_len, 0);
+            for (row, value) in columns_all[field.col_base..field.col_base + field.rows as usize]
+                .iter()
+                .enumerate()
+            {
                 if matches!(value, Some(KkpvVal::Null)) {
                     bitmap[row / 8] |= 1 << (row % 8);
                 }
             }
             bucket_bytes.extend_from_slice(&bitmap);
         }
-        for (field, cells) in plan.fields.iter().zip(per_field) {
+        for field in &plan.fields {
             let width = column_width(field.kind);
-            for (row, value) in field.column.iter().enumerate() {
+            let rows = field.rows as usize;
+            let column = &columns_all[field.col_base..field.col_base + rows];
+            let cells = field.cells_base;
+            for (row, value) in column.iter().enumerate() {
                 match value {
                     None | Some(KkpvVal::Null) => {
                         bucket_bytes.extend(std::iter::repeat_n(0u8, width));
                     }
                     Some(value) => {
                         if is_variable(field.kind) {
-                            let cell = cells[row];
+                            let cell = cells_all[cells + row];
                             bucket_bytes.extend_from_slice(&cell.0.to_le_bytes());
                             bucket_bytes.extend_from_slice(&cell.1.to_le_bytes());
                         } else {
@@ -345,23 +484,17 @@ pub fn encode_ref(input: &KkpvBlockRef<'_>, limits: &KkpvLimits) -> Result<Vec<u
     let (arena_o, arena_l) = seg_pair(arena_off, arena.bytes.len())?;
     out[OFF_ARENA..OFF_ARENA + 4].copy_from_slice(&arena_o.to_le_bytes());
     out[OFF_ARENA + 4..OFF_ARENA + 8].copy_from_slice(&arena_l.to_le_bytes());
-    // 目录按对象（已按 ID 升序）写入；句柄是桶在类型键序中的秩，
-    // 行号是对象在其桶内按 ID 的序。
-    let mut row_counters: std::collections::BTreeMap<&str, (u32, u32)> = buckets
-        .keys()
-        .enumerate()
-        .map(|(rank, key)| (*key, (rank as u32, 0)))
-        .collect();
+    // 目录按对象（已按 ID 升序）写入；句柄是桶在类型键序中的秩（行→桶
+    // 整数查表），行号是对象在其桶内按 ID 的序（逐桶计数器累加）。
+    let mut row_counters = vec![0u32; buckets.len()];
     for (i, &index) in order.iter().enumerate() {
         let object = &input.rows[index];
-        let counter = row_counters
-            .get_mut(object.type_key.as_ref())
-            .expect("对象必属已建桶");
+        let bucket_rank = row_bucket[index] as usize;
         let at = directory_off + i * DIRECTORY_ENTRY;
         out[at..at + 8].copy_from_slice(&object.id.to_le_bytes());
-        out[at + 8..at + 12].copy_from_slice(&counter.0.to_le_bytes());
-        out[at + 12..at + 16].copy_from_slice(&counter.1.to_le_bytes());
-        counter.1 += 1;
+        out[at + 8..at + 12].copy_from_slice(&(bucket_rank as u32).to_le_bytes());
+        out[at + 12..at + 16].copy_from_slice(&row_counters[bucket_rank].to_le_bytes());
+        row_counters[bucket_rank] += 1;
     }
     out[buckets_off..buckets_off + bucket_bytes.len()].copy_from_slice(&bucket_bytes);
     out[arena_off..arena_off + arena.bytes.len()].copy_from_slice(&arena.bytes);

@@ -110,7 +110,7 @@
   "engine benchmark, excludes disk/HTTP/client",
   "synthetic mature roles and Memory parameters; not arbitrary real-bot distribution"
  ],
- "next": "L1b retained after same-engine ABBA (wall -9.7%, project -24.3%, CPU -2.0%); projection serial segment shrunk from ~297 to ~228ms; next queue: L2 room-parallel settle, L3 run/settle overlap via room-ready settle, L4 V8 CPU cuts (makeRoomQueries single-pass, envelope), L5 concurrency recalibration incl. retest of withdrawn parallel encoding now that burst energy shrank; formal xxs speed/RSS target remains unmet",
+ "next": "L2' retained (project now ~178-201ms/tick from 297 pre-L1b); next queue: L3 run/settle overlap (main thread waits ~295ms during V8 window; intentRooms room-ready settle design, mindful of burst power-density lesson), L4 V8 CPU cuts (incl. run +3.1% L1b side-effect attribution), L5 concurrency recalibration incl. 2-core-affinity retest of withdrawn parallel encoding; formal xxs speed/RSS target remains unmet",
  "files_sha256": {
   "50x6-adjacent/fixture-50.json.gz": "71e0ae6bec783ff7f6fd0e38f79d264e9fe8cfcf3dbeb4e2684c91877be017dc",
   "50x6-adjacent/kkscreeps-50-1.json.gz": "4bb0a25622ce0a6ad90efb66310d8b191d7fa830f410bc7118636c1e934658e7",
@@ -225,7 +225,13 @@
   "50x6-generic-zero-copy/new3.json.gz": "2267ae25ed63969acd2495fcee1ad0d5e9e25106f70bd537d16d7979e6129416",
   "50x6-generic-zero-copy/old1.json.gz": "7775e8a7096b793293a0fa2e87509be2ea8beae72644125eee82548442f8adf9",
   "50x6-generic-zero-copy/old4.json.gz": "089c78f7b8075a567fdf4ec7a90579a68db114eada0e4d09c2785d470d26d102",
-  "50x6-generic-zero-copy/summary.json": "56219128a66489eaf04181dcf7114bd16adcd10805eb8228a899229a131dd518"
+  "50x6-generic-zero-copy/summary.json": "56219128a66489eaf04181dcf7114bd16adcd10805eb8228a899229a131dd518",
+  "50x6-encoder-scratch/fixture-50.json.gz": "a808f002ecb79ab7ae4211c76d0b6fffdf17c3d8ed1522b6f044e9c004d72b68",
+  "50x6-encoder-scratch/new2.json.gz": "b7b907237057ddf689a4457b6cd0aa6a281931bd3362283af2b280d435688cd5",
+  "50x6-encoder-scratch/new3.json.gz": "21c2cad442d11fabb0596ce7476c40a995863a898aaf3bdf3f2b0f3474e6db42",
+  "50x6-encoder-scratch/old1.json.gz": "82898927cde5e10fe240a92e8705ebd555be76a0f9989079edbf5d2e25b04ff7",
+  "50x6-encoder-scratch/old4.json.gz": "26bf5faf2dee8a54a0d3a3a400b83328e9a41eeeb2757a6de2044340b54d3f4b",
+  "50x6-encoder-scratch/summary.json": "f672edac5f23021f1396f20c862865b2af0dad06fba6c56ebc19ffed463809ed"
  },
  "historical_strict_diagnostics": [
   {
@@ -315,6 +321,23 @@
    "runs_per_version": 2,
    "formal_acceptance": false,
    "decision": "retain L1b Generic zero-copy scan (restricted-grammar scanner emits borrowed KkpvVal directly with IndexMap insertion-order semantics, serde reference path kept as fallback; kk-world pins serde_json preserve_order to match shipped binaries via deno_core); both adjacent pairs consistent: wall P50 -11.0%, project P50 -27.5%, CPU -4.0% mean (worst pair +0.7% within noise), RSS peak -1.0%. Equivalence locked by unit differential tests, mod_chain 493, ratchet 2905/floor."
+  },
+  {
+   "path": "50x6-encoder-scratch/summary.json",
+   "players": 50,
+   "rooms": 300,
+   "order": [
+    "old",
+    "new",
+    "new",
+    "old"
+   ],
+   "warmup": 5,
+   "ticks": 100,
+   "concurrency": 4,
+   "runs_per_version": 2,
+   "formal_acceptance": false,
+   "decision": "retain L2' encoder scratch (FNV symbol tab + single flat column/cells/bitmap buffers + integer directory lookup; byte-identical by 33 kk-schema locks); both adjacent pairs wall-consistent: wall P50 -10.4%, project -22.2%, CPU -5.5% mean (worst pair +1.9% within noise), RSS peak -2.0%. Sample-profile attribution: memcmp 15.8ms + SipHash 11ms + column alloc/drop ~15ms eliminated. Original L2 plan (room-parallel settle) redirected by evidence: settle_room only ~24ms/tick of the 113ms settle phase."
   }
  ]
 }

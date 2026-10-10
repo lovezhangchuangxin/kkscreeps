@@ -294,3 +294,20 @@ RSS 采样中位数均值下降 12.09%，峰值均值仅下降 1.80%；首对新
 公平门通过且 CPU 均值改善；并行度 2001/609≈3.29× 远低于 xxs 同窗约 6.3×。run 段均值 +3.1%（两次 ABBA 均小幅偏高），疑似编码器内存布局变化的次级影响，整拍 CPU 仍下降——登记待 L4 重采样归因。[摘要与四轮原始报告](../../compat/reports/mature-comparison/2026-10-10/50x6-generic-zero-copy/summary.json)入库；旧二进制与 HEAD release 逐字节一致，新二进制 sha `8818a0fa`。验证链：generic_scan 单测 4、kk-world 101（两种构建形态均过）、mod_chain 493、棘轮 2905/floor 零转红、完整无参数 `pnpm run check`。首轮 ABBA（排序序版扫描器 sha `71dbc44d`）方向相同（wall -9.7%/CPU -2.0%），被最终插入序版取代。
 
 【登记后续】投影串行段从 ~292ms 降至 ~220ms（本机口径）；下一片按队列走 L2 结算房并行（Mod 钩子/全局合并保持有序）与 L3 run/settle 重叠。
+
+
+## 2026-10-11 补记：L2 方向修正与编码器 scratch 落地（L2'，现行实现）
+
+【方向修正】L2 原计划"结算房并行"。`sample` 采样（12 秒双份、~18 拍）证明该方向收益极小：settle 相 ~113ms/拍中，`settle_room` 全部调用点合计仅 ~24ms；大头是 commit/adopt 机制的 BTreeMap 房间表重建与 drop（~22ms）、验证 ~6ms、market/nukes/portals 等全局项与 `Working::new`/索引释放。同批采样另证主线程在 run 相等待 ~295ms（L3 重叠窗口）、共享块每代际全量重建 ~186ms。**并行化一个只占 24ms 的函数没有意义**，L2 按证据改道为投影串行段削减。
+
+【现行实现】`encode_ref` 内部重写（kk-schema，线格式与错误形态逐位不变，33 例字节等价锁全绿）：
+
+- **FNV-1a 符号表**（开放寻址线性探测、调用内生命周期）把类型键与字段键折叠为下标：分桶、字段并集、行内查重、秩映射全部退化为整数比较——取代逐桶 `BTreeSet<&str>` 并集（采样实测 memcmp 15.8ms/拍）、逐行 `seen.contains` 线性串比、逐桶 `HashMap<&str,u32>`（SipHash 11ms/拍）。桶按名称排序、字段并集按名称定秩，均对齐 BTreeMap/BTreeSet 迭代序。
+- **行内查重走符号戳**（stamp=行号+1，同拍同 stamp 即重复）：检出点与逐键 BTreeSet 版一致（行序键序遍历），错误形态不变。
+- **全调用单一平坦缓冲**：列矩阵（`columns_all`，字段经 `col_base` 区间引用——桶间 clear 会使旧切片失效，故用整数区间而非切片）、变长单元（`cells_all` + `cells_base`）、位图缓冲逐字段复用——取代逐桶逐列 `vec![None; n]`（一拍数百次分配与释放，采样 malloc_zone_realloc+drop glue ~15ms/拍）。
+- **目录写入整数查表**（行→桶秩预表 + 逐桶计数器）取代 `BTreeMap<&str,(u32,u32)>` 逐对象字符串查找。
+- **嵌套对象查重 scratch**：`encode_nested_val` 增调用方复用的栈式线性扫描参数（base..truncate 为对象作用域），取代逐嵌套对象分配 BTreeSet；检出同一首个重复键。
+
+冻结二进制 ABBA（O,N,N,O、5+100、并发 4，旧=HEAD 38f75e48，新 sha `d644327f`）：两对相邻样本 wall 方向一致（new 快 4.4%/14.9%），均值 wall P50 **-10.4%**、投影段 **-22.2%**、CPU **-5.5%**（公平门通过且均值改善，最差对 +1.9% 在噪声带）、RSS 峰值 -2.0%；run/settle 亦小幅改善（-4.6%/-4.1%，分配压力下降次级效应）。[摘要与四轮原始报告](../../compat/reports/mature-comparison/2026-10-10/50x6-encoder-scratch/summary.json)入库。验证链：kk-schema 33、kk-world 101、mod_chain 493、棘轮 2905/floor 零转红、完整无参数 `pnpm run check`。
+
+【登记后续】投影串行段旅程：~297ms（L1b 前）→ ~215ms（L1b 后）→ ~178-201ms（本片后，本机口径）。剩余：信封/视野每查看者 ~33ms（`ExtensionCatalog::type_for` 逐对象哈希查 4.9ms 可静态预表）、`checked_job_receipt` ~9.7ms、KkpvRow 树 drop ~15ms。settle 侧 commit/adopt 的 BTreeMap 重建与 drop ~22ms 登记 L3'/L4 前采样复核。

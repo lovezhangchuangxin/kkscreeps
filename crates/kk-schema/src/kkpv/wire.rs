@@ -76,12 +76,16 @@ pub(super) const TAG_OBJECT: u8 = 8;
 // —— 编码 —————————————————————————————————————————————————
 
 /// 嵌套标签编码的唯一实现：owned 输入经 [`KkpvValue::as_val`] 桥接后
-/// 共用本函数，防止两套编码漂移。
-pub(super) fn encode_nested_val(
-    value: &KkpvVal<'_>,
+/// 共用本函数，防止两套编码漂移。`seen` 是调用方提供的复用查重
+/// scratch：对象键查重用它做栈式线性扫描（base..len 为当前对象作用
+/// 域），取代逐嵌套对象分配 BTreeSet；首个重复键的检测点与插入序
+/// 版一致。
+pub(super) fn encode_nested_val<'o>(
+    value: &'o KkpvVal<'o>,
     limits: &KkpvLimits,
     depth: usize,
     out: &mut Vec<u8>,
+    seen: &mut Vec<&'o str>,
 ) -> Result<(), KkpvError> {
     if depth > limits.max_value_depth.min(NESTING_HARD_CAP) {
         return Err(KkpvError::DepthExceeded);
@@ -130,7 +134,7 @@ pub(super) fn encode_nested_val(
                 .map_err(|_| KkpvError::LimitExceeded("max_array_len"))?;
             out.extend_from_slice(&length.to_le_bytes());
             for item in items {
-                encode_nested_val(item, limits, depth + 1, out)?;
+                encode_nested_val(item, limits, depth + 1, out, seen)?;
             }
         }
         KkpvVal::Object(entries) => {
@@ -140,18 +144,21 @@ pub(super) fn encode_nested_val(
             // 嵌套记录保持条目顺序：JSON 参考通道的嵌套对象（store、
             // spawning 等）在 preserve_order 构建下是插入序，玩家可见的
             // 键序（如 Object.keys(creep.store)）不得因二进制通道重排。
-            // 只拒绝重复键；字节确定性由输入条目序决定。
-            let mut seen = std::collections::BTreeSet::new();
+            // 只拒绝重复键；字节确定性由输入条目序决定。查重用调用方
+            // scratch 的栈式线性扫描（对象键数受 max_object_entries
+            // 上限约束，线性扫描与旧 BTreeSet 检出同一首个重复键）。
+            let base = seen.len();
             for (key, _) in entries {
                 if key.len() > limits.max_string_bytes {
                     return Err(KkpvError::LimitExceeded("max_string_bytes"));
                 }
-                if !seen.insert(*key) {
+                if seen[base..].contains(key) {
                     return Err(KkpvError::DuplicateField {
                         type_key: "嵌套记录".into(),
                         field: (*key).into(),
                     });
                 }
+                seen.push(key);
             }
             out.push(TAG_OBJECT);
             let length = u32::try_from(entries.len())
@@ -162,8 +169,9 @@ pub(super) fn encode_nested_val(
                     .map_err(|_| KkpvError::LimitExceeded("max_string_bytes"))?;
                 out.extend_from_slice(&key_len.to_le_bytes());
                 out.extend_from_slice(key.as_bytes());
-                encode_nested_val(value, limits, depth + 1, out)?;
+                encode_nested_val(value, limits, depth + 1, out, seen)?;
             }
+            seen.truncate(base);
         }
     }
     Ok(())
