@@ -1,6 +1,35 @@
 # 成熟房性能优化源码复查（2026-10-10）
 
-本页是基于 `26a5092` 的研究与实施建议。**2026-10-10 追注：A/B/C 首批已实现并实测**（同窗比率 P50 23.4×→3.68×、CPU 1.58×、RSS 低 20%，证据见 [50x6-after-opt-abc](../../compat/reports/mature-comparison/2026-10-10/50x6-after-opt-abc/summary.json)，实施记录见[接手台账](../plans/mod-next-batches.md)）；正文以下分析为优化前历史证据，保留不追改。xxscreeps 对照固定为 `5ff0d1a682170f6b5f9c8bac3e703767625988e0`。实际进度统一维护在[接手台账](../plans/mod-next-batches.md)，开发者复现入口见[基准说明](../../scripts/benchmark/README.md)。
+本页是基于 `26a5092` 的研究与实施建议。**2026-10-10 追注：A/B/C 首批已实现并实测**（同窗比率 P50 23.4×→3.68×、CPU 1.58×、RSS 低 20%，证据见 [50x6-after-opt-abc](../../compat/reports/mature-comparison/2026-10-10/50x6-after-opt-abc/summary.json)，实施记录见[接手台账](../plans/mod-next-batches.md)）；下方“目标与已有证据”起的研究正文为优化前历史证据，保留不追改。xxscreeps 对照固定为 `5ff0d1a682170f6b5f9c8bac3e703767625988e0`。实际进度统一维护在[接手台账](../plans/mod-next-batches.md)，开发者复现入口见[基准说明](../../scripts/benchmark/README.md)。
+
+## 2026-10-10 补充：后续架构改造的 Mod 约束
+
+本节是 A/B/C 首批之后的实施约束，以下旧正文仍为优化前研究。用户再次确认：Mod 须具有与固定 xxscreeps 对照范围相当的灵活扩展能力，性能改造不能收缩目标；当前未开放领域不因此变为已完成。统一约束见[总体架构](../architecture/overall.md#性能改造与-mod-扩展能力)，验证要求见[性能验收](../architecture/performance-acceptance.md#架构优化的-mod-正确性前置)。
+
+后续片保留动态对象/字段/资源和规则的通用消费路径；共享块按权限分组并正确失效；候选优化保持 Mod 写入、链拒绝与整轮失败的恢复语义。流水线与并行须核对真实读写域、意图到齐和处理器依赖，无法证明独立的工作走有序路径。声明与可并行优化的资格不能成为删去目标扩展能力的理由，现有权限也不因优化而放宽。
+
+A/B/C 已有默认 50×6 短窗和部分 Mod/双通道回归证据，不能据此宣称全领域 Mod 性能和灵活性已经验收。原生快速路径与动态通用路径的成本分别核验，后续缓存、候选和调度改造按受影响能力补齐公共 SDK 回归，不另增近期性能场景组。流水线有机会减少等待，但耗时取决于依赖、资源竞争与归并，不能直接以 runner/processor 两相的最大值预测优化后 wall。
+
+### 2026-10-10 补遗：首批实测复盘与后续片设计
+
+本小节由 A/B/C 实施方对上节约束的复核与设计补充；【实测】为 release 探针或 sample profiler 采样，【推断】为据此的归因估算。
+
+**与 Mod 约束的关系**：A/B/C 现行共享条件比上节约束更保守——房内存在任何 Mod 对象或扩展字段即整房回退逐查看者编码（见 `SharedRoomBlock` 构建条件），未做权限分组；约束不与已交付实现冲突，是后续片的收紧方向。
+
+【实测】首批后的剩余归因（50×6、并发 4、release）：
+- `run` 相从 35ms 升至约 390ms 不是回退——投影不再掩蔽后暴露的是 V8 执行墙钟（约 8ms/玩家），其中 GC 约占 V8 CPU 三分之一（采样），根因是每拍逐玩家重建记录/wrapper/Game 树与 Memory 全量 parse/stringify（官方语义；xxscreeps 以常驻 isolate 有意偏离）。xxs 同窗 CPU/wall≈6.5× 而名义并发为 4，其内部并行度超过 harness 旋钮；kk 线程-per-player 底座支持更高派发窗口，**建议在 E 片前单做一组 concurrency 8（10 核机）对照**，量化纯调度收益后再决定流水线投入。
+- `project` 剩余约 540ms 中，KkpvObject 树的构建+释放约占 190ms/tick【推断：sample 主线程 drop glue 采样折算】——根治是类型化直写编码器（跳过树中间形态）；公开地形束仍每代际整份重编码+全量校验（约 800KB，B.6 残留 1，需放宽块头 tick 校验改绑 terrain_epoch）；信封保持全房目（不可裁剪，见下）。
+- `settle` 剩余约 245ms 中：economy/structures/movement 路径的 Generic 二次解析（分类已单次化，但各类型 tick、障碍检查、动作记录仍各自 parse）；意图派发交叉积（每房遍历全部玩家全部对象指令，B 片分桶未做）；候选整房克隆与格索引每拍重建。
+
+【设计】共享条件按声明元数据精化（落实上节"按权限分组"）：viewer 无关性可从冻结计划静态判定——`RoomVisible` 可见性、全 `Public` 字段且无 owner_field 的 Mod 对象，其投影记录对所有查看者是同一份字节；仅含 `Public` 扩展字段的 ext 块同理。含 Mod 内容的房间据此仍可共享，只有真正使用 Owner 裁切/OwnerCollection 语义的内容回退逐查看者。缓存已绑 (generation, plan_hash)，切包失效路径不变。
+
+【设计】Generic 表示演进双轨并存（常态而非过渡）：(a) 类型化装配线——rampart 打样（100/房、无 store、字段最简；一次建好结构 helper、夹具边界归一、投影臂与检查点版本 bump，无存量用户策略使版本升级只拒旧不迁移），link/tower/container 跟进（合计约 117/132≈89% 数量）；lab/factory/terminal 字段最重（动态资源键 store+多冷却钟），按打样后的单类型成本再定去留。(b) sidecar——所有现存写点的统一形状是 parse→mutate→`g.data = v.to_string()`，写点顺手把刚序列化的树存回 sidecar 即得零成本失效（sidecar 与其字符串同生同灭，无陈旧窗口）；读侧命中或单次解析回填；`data` 字段收私有+统一写入口把纪律编译期化。powerCreep/deposit/portal/mod 建筑这类本质动态对象长期留 Generic+sidecar。两轨按"新内建热类型走枚举、动态长尾走 Generic"分流。
+
+【澄清】`literal_gate` 与旧正文"不能用字符串 contains 替代 JSON 类型/归属判别"的关系：B 片的 contains 是**过滤器不是判别器**——命中或含 `\u` 转义时仍走完整 JSON parse 后判定。其可靠性依赖 `contains("\\u")` 兜底：合法 JSON 中 ASCII 字母只能以字面量或 `\uXXXX` 转义出现，藏匿目标键/值（如 `"\u0065ffects"`）必含 `\u`（escaped-key 权威性测试锁定）。拷贝该门漏掉 `\u` 兜底会重新打开藏匿通道。
+
+【教训】KKPV 信封不可裁剪不可见无状态房：玩家面把缺失条目当作界外房（closed）而非 normal——`Game.map.getRoomStatus` 的界外语义与注册 normal 房必须可区分（mod_chain portals 测试锁定）。任何"信封瘦身"须先改玩家面消费端语义，不能只砍生产端。
+
+【设计】E 片入门形态（配合总体架构的有序/并行约束）：Mod JS 钩子（begin/end_settlement、realm/namespace 状态）与跨房/账户/ID/RNG 归并留在有序全局侧，纯引擎房间候选并行；房间级"意图到齐即可结算"所需的 intentRooms 可由视野索引 room_owners 反查派生（A 片索引的第二个消费者）。验收以默认/Mod 串行参考等价为准。
 
 ## 目标与已有证据
 
