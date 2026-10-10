@@ -71,6 +71,7 @@ fn main() {
         }
         Command::ModPlayerProbe {
             players,
+            rooms_per_player,
             concurrency,
             warmup,
             ticks,
@@ -80,6 +81,7 @@ fn main() {
         } => {
             std::process::exit(probes::mod_player::run(probes::mod_player::Options {
                 players,
+                rooms_per_player,
                 concurrency,
                 warmup,
                 ticks,

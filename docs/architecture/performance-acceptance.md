@@ -43,7 +43,7 @@ target/release/kkscreeps mod-player-probe --players 2 --concurrency 2 --warmup 5
 target/release/kkscreeps mod-player-probe --players 2 --concurrency 2 --warmup 500 --ticks 3000 --kkpv --report /tmp/mod-player-kkpv.json
 ```
 
-玩家数为 1..320（房间按 20 列网格分布避免世界越界），并发数为 1..32，采集窗口为 1..50000 tick，预热为 0..50000。报告含里程碑 RSS（建分片前/后、放置后、热身后）与每玩家边际足迹，供满员容量评估（基线证据见 [capacity-isolate-probe](../../compat/reports/capacity-isolate-probe/summary.json)）。默认玩家及 Mod 预算不变，报告记录两者配置、包和玩家脚本 SHA-256。每轮核验全部玩家实际执行且无异常、查询与动作返回值、VM/Memory 序号、全部 counter 的提交值、worker 原生动作后的能量、控制器累计进度、source 消耗与再生、namespace 累计次数以及世界 tick/generation；任何不符使命令失败。固定 RCL 4 与单 WORK 在最多 100000 轮内不达到升级阈值，控制器进度应等于累计升级次数。短窗口允许未进入采集分支，报告准确列出采集窗口内每玩家的升级与采集次数，不将预热动作计入。
+玩家数为 1..320（房间按 20 列网格分布避免世界越界），每玩家房数 1..8 且总房数 ≤320，并发数为 1..32，采集窗口为 1..50000 tick，预热为 0..50000。多房负载下每间自有房各放置一套 counter/source/worker 状态机，逐房核验。报告含里程碑 RSS（建分片前/后、放置后、热身后）与每玩家边际足迹，供满员容量评估（基线证据见 [capacity-isolate-probe](../../compat/reports/capacity-isolate-probe/summary.json)）。默认玩家及 Mod 预算不变（玩家 V8 堆上限随 `kk_runner::DEFAULT_HEAP_LIMIT`，报告 player_budget 记录），报告记录两者配置、包和玩家脚本 SHA-256。每轮核验全部玩家实际执行且无异常、查询与动作返回值、VM/Memory 序号、全部 counter 的提交值、worker 原生动作后的能量、控制器累计进度、source 消耗与再生、namespace 累计次数以及世界 tick/generation；任何不符使命令失败。固定 RCL 4 与单 WORK 在最多 100000 轮内不达到升级阈值，控制器进度应等于累计升级次数。短窗口允许未进入采集分支，报告准确列出采集窗口内每玩家的升级与采集次数，不将预热动作计入。
 
 当前报告为 v2，新增原生动作目标的逐轮验证；进程 CPU 成本不能与仅检查 worker 能量的 v1 窗口混合汇总。采集脚本的门禁始终执行，Python 优化模式也不禁用；校验完整阶段集合、指标类型与采样数、边界动作和对象效果，再比较各窗口身份与完整快照。归档逐次采用同目录原子替换，后续失败保留已经验收的窗口；复审修复与 v2 原始采集见[复审记录](../research/notes/mod-player-review-2026-10-04.md)。
 

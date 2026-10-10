@@ -2,7 +2,7 @@
   "tool": "kkscreeps mod-player-probe",
   "date": "2026-10-10",
   "platform": "macOS darwin 24.6.0 arm64 (开发机；绝对 RSS 为本机分配器口径，Linux 验收须复测，边际结构可跨平台参考)",
-  "matrix": "每玩家 1 房 RCL4 + worker/source/Mod counter，合成负载 harvest/upgrade 循环；warmup 30 + ticks 100，concurrency 4",
+  "matrix": "每玩家 1 房 RCL4 + worker/source/Mod counter（p2-p300、p100-kkpv）；50×6 修订口径=每玩家 6 房各一套状态机（p50x6 双通道）；warmup 30 + ticks 100，concurrency 4",
   "runs": {
     "p2-json": {
       "players": 2,
@@ -78,6 +78,40 @@
       "run_p50_ms": 1.169085,
       "settle_p50_ms": 5.134375,
       "wall_p50_ms": 30.157166999999998
+    },
+    "p50x6-json": {
+      "players": 50,
+      "rooms_per_player": 6,
+      "channel": "json",
+      "warmup": 30,
+      "ticks": 100,
+      "concurrency": 4,
+      "rss_baseline": 3424256,
+      "rss_after_shard": 484179968,
+      "rss_after_warmup": 1420247040,
+      "rss_peak": 1525022720,
+      "project_p50_ms": 56.025875,
+      "run_p50_ms": 3.146084,
+      "settle_p50_ms": 15.471166,
+      "wall_p50_ms": 74.445333,
+      "cpu_core_ms_per_tick": 213.75968
+    },
+    "p50x6-kkpv": {
+      "players": 50,
+      "rooms_per_player": 6,
+      "channel": "kkpv",
+      "warmup": 30,
+      "ticks": 100,
+      "concurrency": 4,
+      "rss_baseline": 3260416,
+      "rss_after_shard": 485752832,
+      "rss_after_warmup": 908361728,
+      "rss_peak": 1052966912,
+      "project_p50_ms": 40.601415,
+      "run_p50_ms": 2.321086,
+      "settle_p50_ms": 15.01725,
+      "wall_p50_ms": 58.13095800000001,
+      "cpu_core_ms_per_tick": 146.67408
     }
   },
   "findings": {
@@ -86,7 +120,8 @@
     "projection_superlinear": "project p50 每玩家成本随规模上升：50/100/300 玩家 ≈ 0.18/0.32/1.03ms（JSON 每视图含全世界地形）",
     "kkpv_wins_at_scale": "100 玩家下 KKPV project -26.8%/run -44.6%/RSS 峰值 -36.1%（共享地形块摊销）；单玩家下 KKPV 慢是长存批的外部证据（project 0.77→1.39ms/run 2.87→4.11ms，gameplay-tooangel-survival），不在本目录 5 份报告内。",
     "target_assessment": "2GB/100 玩家目标（口径 9 区块/人均 3 房/总 300 房）当前不达标且判定保守：结构成本 884MiB + JSON 热身增长 1.88GiB 已超 2GiB（未计峰值 4.08GiB）。夹具是 1 房/人——目标口径下 churn 再 ×3（100×300 房 vs 实测 100×100），只会更差。注意 KKPV 100 玩家（单房）峰值 2668MiB（2.60GiB）自身已超 2GiB：三项路径（生产默认 KKPV、JSON 地形嵌入改共享/按需、isolate 生命周期管理）方向有 A/B 与归因支撑，但无量化落点——按报告数据削减需求 ≥0.60GiB（KKPV 峰值口径）至 0.74GiB（JSON 热身口径），保守化整 0.8GiB，未验证够用——容量验收在 Linux 服务形态上复测后再下结论。",
-    "scale_300": "300 玩家可跑（tick wall p50 413ms ≈ 2.4 tick/s，本机口径），非 2GB 场景"
+    "scale_300": "300 玩家可跑（tick wall p50 413ms ≈ 2.4 tick/s，本机口径），非 2GB 场景",
+    "target_assessment_50x6": "修订口径实测（2026-10-10，50 玩家×6 房=300 房、每房一套 worker/source/counter，warmup 30+ticks 100、concurrency 4、release、macOS 口径）：两通道峰值均低于 2GiB——KKPV 峰值 1004MiB（余量 ~1.0GiB）、JSON 峰值 1454MiB（余量 ~0.6GiB）；结构足迹 462-463MiB（每玩家 9.2MiB，与 1 房口径一致——isolate 主导、房间数对结构层近零边际）；热身增长 JSON 889MiB vs KKPV 400MiB。KKPV 在新口径延续全面优势：project -28%/run -26%/wall -22%/cpu -31%/峰值 -31%。相对 D 的 100 玩家×1 房实测：KKPV 峰值 2668→1004MiB，主要来自玩家数减半的结构性削减（-423MiB）；churn 模型按 D 口径反而预测更高（JSON O(玩家×全服房) 100×100→50×300 净 ×1.5），但实测 KKPV 热身增长 910→400MiB——再次印证 RSS 增长受 GC/分配器保留调节而非原始 churn，容量判定以窗口峰值为准。边界如实：窗口 100 拍两通道仍各 +100/+138MiB 未稳态（GC 稳态须长窗确认）；绝对值为 macOS 分配器口径，Linux 2GB 服务形态复测是最终验收。工程含义：生产默认 KKPV 依然推荐（成本面全面占优）；isolate 生命周期管理/LRU 驱逐从「必要条件」降级为「保险与扩展项」（1004MiB 峰值下 2GB 已有余量，驱逐换来的余量用于更高玩家数或更长稳态）。"
   },
   "caveats": "绝对 RSS 为 macOS(darwin 24.6.0 arm64) 分配器口径，Linux 容量验收须复测；窗口 100 拍未见 GC 稳态（json 100p 窗口内仍 +1210MiB 在涨），长窗复测留容量验收；未记录机器总 RAM；字节统计除注明 GiB 外均以 MiB 计（MiB→十进制 GB 换算 ×1.049）。"
 }

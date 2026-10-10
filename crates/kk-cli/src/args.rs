@@ -86,9 +86,12 @@ pub(crate) enum Command {
     },
     /// 连续运行玩家与 Mod 联合负载，核验每轮动作并采集阶段与进程成本
     ModPlayerProbe {
-        /// 玩家数（1..320）；房间按 20 列网格分布，每玩家独立房
+        /// 玩家数（1..320）；房间按 20 列网格分布，每玩家独立自有房
         #[arg(long, default_value_t = 2)]
         players: u32,
+        /// 每玩家自有房数（1..8）；总房数（玩家×房）须 ≤320，全部 rcl4
+        #[arg(long, default_value_t = 1)]
+        rooms_per_player: u32,
         #[arg(long, default_value_t = 2)]
         concurrency: usize,
         #[arg(long, default_value_t = 500)]

@@ -14,6 +14,8 @@ use super::{metadata, process::ProcessProbe};
 
 pub(crate) struct Options {
     pub players: u32,
+    /// 每玩家独立自有房数；总房数（玩家×房）受网格容量 320 限制。
+    pub rooms_per_player: u32,
     pub concurrency: usize,
     pub warmup: u32,
     pub ticks: u32,
@@ -22,8 +24,9 @@ pub(crate) struct Options {
     pub report: String,
 }
 
-struct Player {
-    handle: String,
+/// 单房的核验状态机：creep 能量驱动的采集/升级交替、控制器进度、
+/// source 消耗与再生。多房负载下每房独立一套。
+struct RoomLoad {
     room: String,
     counter: String,
     creep: String,
@@ -34,6 +37,11 @@ struct Player {
     upgrades: u32,
     harvests: u32,
     energy: i64,
+}
+
+struct Player {
+    handle: String,
+    rooms: Vec<RoomLoad>,
 }
 
 pub(crate) fn run(options: Options) -> i32 {
@@ -53,29 +61,37 @@ pub(crate) fn run(options: Options) -> i32 {
     }
 }
 
-/// 满员阶梯的网格房名：第 i 个玩家的房 = W{i%20+1}N{i/20+1}（RoomName
+/// 满员阶梯的网格房名：第 k 个房间槽位 = W{k%20+1}N{k/20+1}（RoomName
 /// 约定 W/N 取负减一，最大坐标 |xx|=21、|yy|=17，远离 ±127 世界边界；
-/// i∈0..320 单射）。
-fn room_name(i: usize) -> String {
-    format!("W{}N{}", i % 20 + 1, i / 20 + 1)
+/// k∈0..320 单射）。
+fn room_name(k: usize) -> String {
+    format!("W{}N{}", k % 20 + 1, k / 20 + 1)
 }
 
-fn player_code(room: &str) -> String {
+fn player_code(rooms: &[String]) -> String {
+    let list = rooms
+        .iter()
+        .map(|room| format!("'{room}'"))
+        .collect::<Vec<_>>()
+        .join(",");
     format!(
         r#"(function(){{
-      const room=Game.rooms['{room}'];
-      const counter=room.find(FIND_COUNTERS)[0];
-      if (!(counter instanceof Counter) || room.lookForAt(LOOK_COUNTERS,10,12)[0]!==counter)
-        throw Error('Mod class/query mismatch');
       globalThis.rounds=(globalThis.rounds||0)+1;
       const previous=Memory.rounds||0;
       Memory.rounds=globalThis.rounds;
-      const creep=Object.values(Game.creeps)[0];
-      const action=creep.store.energy>0?'upgrade':'harvest';
-      const native=action==='upgrade'?creep.upgradeController(room.controller)
-        :creep.harvest(room.find(FIND_SOURCES)[0]);
-      return {{round:globalThis.rounds,previous,counter:counter.value,
-        increment:counter.increment(),action,native}};
+      const out=[];
+      for (const name of [{list}]){{
+        const room=Game.rooms[name];
+        const counter=room.find(FIND_COUNTERS)[0];
+        if (!(counter instanceof Counter) || room.lookForAt(LOOK_COUNTERS,10,12)[0]!==counter)
+          throw Error('Mod class/query mismatch');
+        const creep=room.find(FIND_CREEPS)[0];
+        const action=creep.store.energy>0?'upgrade':'harvest';
+        const native=action==='upgrade'?creep.upgradeController(room.controller)
+          :creep.harvest(room.find(FIND_SOURCES)[0]);
+        out.push({{counter:counter.value,increment:counter.increment(),action,native}});
+      }}
+      return {{round:globalThis.rounds,previous,rooms:out}};
     }})()"#
     )
 }
@@ -85,11 +101,14 @@ fn snapshot(engine: &EmbedEngine, players: &[Player]) -> Value {
         "time":engine.get_game_time(), "generation":engine.engine_generation(),
         "mod_state":engine.engine_mod_state("workload"),
         "players":players.iter().map(|p| json!({
-            "handle":p.handle,"room":p.room,"upgrades":p.upgrades,"harvests":p.harvests,
-            "counter":engine.get_object(&p.counter),"creep":engine.get_object(&p.creep),
-            "controller":engine.find_in_room(&p.room,kk_core::constants::FIND_STRUCTURES)
-                .into_iter().find(|o|o["structureType"]=="controller"),
-            "sources":engine.find_in_room(&p.room,kk_core::constants::FIND_SOURCES),
+            "handle":p.handle,
+            "rooms":p.rooms.iter().map(|r| json!({
+                "room":r.room,"upgrades":r.upgrades,"harvests":r.harvests,
+                "counter":engine.get_object(&r.counter),"creep":engine.get_object(&r.creep),
+                "controller":engine.find_in_room(&r.room,kk_core::constants::FIND_STRUCTURES)
+                    .into_iter().find(|o|o["structureType"]=="controller"),
+                "sources":engine.find_in_room(&r.room,kk_core::constants::FIND_SOURCES),
+            })).collect::<Vec<_>>(),
         })).collect::<Vec<_>>(),
     })
 }
@@ -121,79 +140,94 @@ fn step(
             run.console
         );
         let value = &run.expr["value"];
-        let action = if player.energy > 0 {
-            "upgrade"
-        } else {
-            "harvest"
-        };
         ensure!(
-            *value
-                == json!({"round":round,"previous":round-1,"counter":round-1,
-            "increment":0,"action":action,"native":0}),
-            "{} 第 {round} 轮玩家状态/动作不符: {value}",
+            value["round"] == round && value["previous"] == round - 1,
+            "{} 第 {round} 轮全局轮次不符: {value}",
             player.handle
         );
-        if action == "upgrade" {
-            player.upgrades += 1;
-            player.energy -= 1;
-        } else {
-            player.harvests += 1;
-            player.energy += 2;
-        }
+        let outcomes = value["rooms"]
+            .as_array()
+            .with_context(|| format!("{} 第 {round} 轮缺 rooms 数组", player.handle))?;
         ensure!(
-            engine.get_object(&player.counter).context("counter 消失")?["fields"]["value"] == round,
-            "{} 第 {round} 轮 Mod 动作未提交",
+            outcomes.len() == player.rooms.len(),
+            "{} 第 {round} 轮房间回执数不符: {value}",
             player.handle
         );
-        let creep = engine.get_object(&player.creep).context("creep 消失")?;
-        // 管理 JSON 的空仓不保留 energy 键；玩家 Store API 仍返回 0。
-        let actual_energy = match creep["store"].get("energy") {
-            None => 0,
-            Some(value) => value.as_i64().context("creep energy 非整数")?,
-        };
-        ensure!(
-            actual_energy == player.energy,
-            "{} 第 {round} 轮原生动作未提交",
-            player.handle
-        );
-        // 固定 RCL 4、单 WORK，窗口最多 100000 轮，低于升至 RCL 5 所需进度。
-        // 能量减少也可能来自 drop 等动作，必须同时验证升级目标的实际效果。
-        let controller = engine
-            .get_object(&player.controller)
-            .context("controller 消失")?;
-        ensure!(
-            controller["level"] == 4 && controller["progress"] == player.upgrades,
-            "{} 第 {round} 轮控制器升级效果不符",
-            player.handle
-        );
-        if action == "harvest" {
-            player.source_energy -= 2;
-        }
-        // 指令先采集，source tick 再按 ENERGY_REGEN_TIME 的到期轮补满。
-        // 不能只验证 worker 收到能量，遗漏 source 消耗或再生错误。
-        let time = initial_time + u64::from(round) - 1;
-        if player.source_energy < 3000 {
-            let deadline = *player
-                .source_regeneration
-                .get_or_insert(time + kk_core::constants::ENERGY_REGEN_TIME as u64);
-            if time >= deadline - 1 {
-                player.source_energy = 3000;
-                player.source_regeneration = None;
+        for (load, outcome) in player.rooms.iter_mut().zip(outcomes) {
+            let action = if load.energy > 0 {
+                "upgrade"
+            } else {
+                "harvest"
+            };
+            ensure!(
+                *outcome == json!({"counter":round-1,"increment":0,"action":action,"native":0}),
+                "{} 房 {} 第 {round} 轮状态/动作不符: {value}",
+                player.handle,
+                load.room
+            );
+            if action == "upgrade" {
+                load.upgrades += 1;
+                load.energy -= 1;
+            } else {
+                load.harvests += 1;
+                load.energy += 2;
             }
+            ensure!(
+                engine.get_object(&load.counter).context("counter 消失")?["fields"]["value"]
+                    == round,
+                "{} 房 {} 第 {round} 轮 Mod 动作未提交",
+                player.handle,
+                load.room
+            );
+            let creep = engine.get_object(&load.creep).context("creep 消失")?;
+            // 管理 JSON 的空仓不保留 energy 键；玩家 Store API 仍返回 0。
+            let actual_energy = match creep["store"].get("energy") {
+                None => 0,
+                Some(value) => value.as_i64().context("creep energy 非整数")?,
+            };
+            ensure!(
+                actual_energy == load.energy,
+                "{} 房 {} 第 {round} 轮原生动作未提交",
+                player.handle,
+                load.room
+            );
+            // 固定 RCL 4、单 WORK，窗口最多 100000 轮，低于升至 RCL 5 所需进度。
+            // 能量减少也可能来自 drop 等动作，必须同时验证升级目标的实际效果。
+            let controller = engine
+                .get_object(&load.controller)
+                .context("controller 消失")?;
+            ensure!(
+                controller["level"] == 4 && controller["progress"] == load.upgrades,
+                "{} 房 {} 第 {round} 轮控制器升级效果不符",
+                player.handle,
+                load.room
+            );
+            if action == "harvest" {
+                load.source_energy -= 2;
+            }
+            // 指令先采集，source tick 再按 ENERGY_REGEN_TIME 的到期轮补满。
+            // 不能只验证 worker 收到能量，遗漏 source 消耗或再生错误。
+            let time = initial_time + u64::from(round) - 1;
+            if load.source_energy < 3000 {
+                let deadline = *load
+                    .source_regeneration
+                    .get_or_insert(time + kk_core::constants::ENERGY_REGEN_TIME as u64);
+                if time >= deadline - 1 {
+                    load.source_energy = 3000;
+                    load.source_regeneration = None;
+                }
+            }
+            let source = engine.get_object(&load.source).context("source 消失")?;
+            ensure!(
+                source["energy"] == load.source_energy
+                    && source["energyCapacity"] == 3000
+                    && source["ticksToRegeneration"]
+                        == json!(load.source_regeneration.map(|t| t.saturating_sub(time + 1))),
+                "{} 房 {} 第 {round} 轮 source 消耗/再生效果不符",
+                player.handle,
+                load.room
+            );
         }
-        let source = engine.get_object(&player.source).context("source 消失")?;
-        ensure!(
-            source["energy"] == player.source_energy
-                && source["energyCapacity"] == 3000
-                && source["ticksToRegeneration"]
-                    == json!(
-                        player
-                            .source_regeneration
-                            .map(|t| t.saturating_sub(time + 1))
-                    ),
-            "{} 第 {round} 轮 source 消耗/再生效果不符",
-            player.handle
-        );
         let state = engine
             .player_state_for_test(&player.handle)
             .context("玩家状态缺失")?;
@@ -210,7 +244,9 @@ fn step(
     );
     ensure!(
         engine.engine_mod_state("workload")
-            == json!({"increments":u64::from(round)*players.len() as u64}),
+            == json!({"increments":u64::from(round)
+                * players.len() as u64
+                * players.first().map_or(1, |p| p.rooms.len()) as u64}),
         "第 {round} 轮 Mod namespace 计数不符"
     );
     ensure!(
@@ -224,6 +260,14 @@ fn measure(options: &Options) -> anyhow::Result<Value> {
     ensure!(
         (1..=320).contains(&options.players),
         "--players 须为 1..320"
+    );
+    ensure!(
+        (1..=8).contains(&options.rooms_per_player),
+        "--rooms-per-player 须为 1..8"
+    );
+    ensure!(
+        u64::from(options.players) * u64::from(options.rooms_per_player) <= 320,
+        "总房数（玩家×每玩家房）须 ≤320（20 列网格容量）"
     );
     ensure!(
         (1..=32).contains(&options.concurrency),
@@ -259,14 +303,19 @@ fn measure(options: &Options) -> anyhow::Result<Value> {
         })
         .collect::<anyhow::Result<_>>()?;
     // 房间按 20 列网格分布：线性 W{n}N1 在大玩家数下越过世界边界（±127）。
-    // 公式支持到 N16 行（约 320 玩家；列固定 20，行到 127 需把上限提到 2540
-    // 并重估列宽）。
-    let room_name = |i: usize| room_name(i);
+    // 公式支持到 N16 行（约 320 个房间槽位；列固定 20，行到 127 需把上限
+    // 提到 2540 并重估列宽）。玩家 i 的第 j 间房占槽位 i*每玩家房数+j，
+    // 全部 rcl4 自有——多房负载下每玩家视野随房数增长。
+    let rooms_per_player = options.rooms_per_player as usize;
+    let room_name = |k: usize| room_name(k);
     let handles: Vec<_> = (1..=options.players).map(|i| format!("p{i}")).collect();
     let rooms: Vec<_> = handles
         .iter()
         .enumerate()
-        .map(|(i, h)| json!({"name":room_name(i),"rcl":4,"owner":h}))
+        .flat_map(|(i, h)| {
+            (0..rooms_per_player)
+                .map(move |j| json!({"name":room_name(i * rooms_per_player + j),"rcl":4,"owner":h}))
+        })
         .collect();
     let mut engine = EmbedEngine::new();
     engine.set_kkpv_channel(options.kkpv);
@@ -285,63 +334,72 @@ fn measure(options: &Options) -> anyhow::Result<Value> {
     let mut players = Vec::new();
     let mut codes = BTreeMap::new();
     for (i, handle) in handles.into_iter().enumerate() {
-        let room = room_name(i);
-        let (x, y) = engine
-            .get_controller_pos(&room)
-            .context("controller 缺失")?;
-        ensure!(
-            x.abs_diff(2).max(y.abs_diff(1)) <= 3,
-            "controller 超出升级距离"
+        let mut loads = Vec::new();
+        for j in 0..rooms_per_player {
+            let room = room_name(i * rooms_per_player + j);
+            let (x, y) = engine
+                .get_controller_pos(&room)
+                .context("controller 缺失")?;
+            ensure!(
+                x.abs_diff(2).max(y.abs_diff(1)) <= 3,
+                "controller 超出升级距离"
+            );
+            let source = engine.place_object(
+                &room,
+                "structure",
+                &json!({"pos":[2,2],"structureType":"source",
+                "energy":3000,"energyCapacity":3000}),
+            )?;
+            let controller = engine
+                .find_in_room(&room, kk_core::constants::FIND_STRUCTURES)
+                .into_iter()
+                .find(|o| o["structureType"] == "controller")
+                .context("controller 缺失")?;
+            ensure!(
+                controller["level"] == 4 && controller["progress"] == 0,
+                "初始控制器状态不符"
+            );
+            let controller = controller["id"]
+                .as_str()
+                .context("controller ID 缺失")?
+                .to_string();
+            let creep = engine.place_object(
+                &room,
+                "creep",
+                &json!({"pos":[2,1],"owner":handle,
+                "name":format!("worker{i}_{j}"),"body":["work","carry","move"],"store":{"energy":50},
+                // 合成负载延长寿命，整个有限窗口保持同一 worker；不模拟孵化与死亡。
+                    "ticksToLive":total+1}),
+            )?;
+            ensure!(
+                engine.get_object(&creep).context("初始 creep 缺失")?["ticksToLive"] == total + 1,
+                "合成 worker 寿命未生效"
+            );
+            let counter = engine.place_mod_object(
+                &room,
+                "workload:counter",
+                &json!({"owner":handle,"x":10,"y":12}),
+            )?;
+            loads.push(RoomLoad {
+                room,
+                counter,
+                creep,
+                controller,
+                source,
+                source_energy: 3000,
+                source_regeneration: None,
+                upgrades: 0,
+                harvests: 0,
+                energy: 50,
+            });
+        }
+        codes.insert(
+            handle.clone(),
+            player_code(&loads.iter().map(|l| l.room.clone()).collect::<Vec<_>>()),
         );
-        let source = engine.place_object(
-            &room,
-            "structure",
-            &json!({"pos":[2,2],"structureType":"source",
-            "energy":3000,"energyCapacity":3000}),
-        )?;
-        let controller = engine
-            .find_in_room(&room, kk_core::constants::FIND_STRUCTURES)
-            .into_iter()
-            .find(|o| o["structureType"] == "controller")
-            .context("controller 缺失")?;
-        ensure!(
-            controller["level"] == 4 && controller["progress"] == 0,
-            "初始控制器状态不符"
-        );
-        let controller = controller["id"]
-            .as_str()
-            .context("controller ID 缺失")?
-            .to_string();
-        let creep = engine.place_object(
-            &room,
-            "creep",
-            &json!({"pos":[2,1],"owner":handle,
-            "name":format!("worker{i}"),"body":["work","carry","move"],"store":{"energy":50},
-            // 合成负载延长寿命，整个有限窗口保持同一 worker；不模拟孵化与死亡。
-                "ticksToLive":total+1}),
-        )?;
-        ensure!(
-            engine.get_object(&creep).context("初始 creep 缺失")?["ticksToLive"] == total + 1,
-            "合成 worker 寿命未生效"
-        );
-        let counter = engine.place_mod_object(
-            &room,
-            "workload:counter",
-            &json!({"owner":handle,"x":10,"y":12}),
-        )?;
-        codes.insert(handle.clone(), player_code(&room));
         players.push(Player {
             handle,
-            room,
-            counter,
-            creep,
-            controller,
-            source,
-            source_energy: 3000,
-            source_regeneration: None,
-            upgrades: 0,
-            harvests: 0,
-            energy: 50,
+            rooms: loads,
         });
     }
     let initial_time = engine.get_game_time();
@@ -362,7 +420,15 @@ fn measure(options: &Options) -> anyhow::Result<Value> {
     }
     let rss_after_warmup = super::process::resident_bytes()?;
     let warmed = snapshot(&engine, &players);
-    let actions_before: Vec<_> = players.iter().map(|p| (p.upgrades, p.harvests)).collect();
+    let actions_before: Vec<_> = players
+        .iter()
+        .map(|p| {
+            p.rooms
+                .iter()
+                .map(|r| (r.upgrades, r.harvests))
+                .collect::<Vec<_>>()
+        })
+        .collect();
     engine.perf_reset();
     let mut process = ProcessProbe::start()?;
     for round in options.warmup + 1..=total {
@@ -383,14 +449,22 @@ fn measure(options: &Options) -> anyhow::Result<Value> {
     let action_counts: Vec<_> = players
         .iter()
         .zip(actions_before)
-        .map(|(p, (upgrades, harvests))| {
-            json!({"player":p.handle,"executions":options.ticks,"mod_increments":options.ticks,
-            "upgrades":p.upgrades-upgrades,"harvests":p.harvests-harvests})
+        .map(|(p, before)| {
+            let (mut upgrades, mut harvests) = (0u32, 0u32);
+            for (load, (was_upgrades, was_harvests)) in p.rooms.iter().zip(before) {
+                upgrades += load.upgrades - was_upgrades;
+                harvests += load.harvests - was_harvests;
+            }
+            json!({"player":p.handle,"executions":options.ticks,
+            "mod_increments":options.ticks * options.rooms_per_player,
+            "upgrades":upgrades,"harvests":harvests})
         })
         .collect();
     Ok(json!({
-        "tool":"kkscreeps mod-player-probe", "schema_version":2,
-        "players":options.players,"player_concurrency":options.concurrency,
+        "tool":"kkscreeps mod-player-probe", "schema_version":3,
+        "players":options.players,"rooms_per_player":options.rooms_per_player,
+        "rooms_total":u64::from(options.players)*u64::from(options.rooms_per_player),
+        "player_concurrency":options.concurrency,
         "warmup":options.warmup,"ticks":options.ticks,
         "channel":if options.kkpv {"kkpv"} else {"json"},
         "scope":"run_players with projection, player API, native and Mod intents, unified commit",
@@ -403,7 +477,8 @@ fn measure(options: &Options) -> anyhow::Result<Value> {
             "settlement_cpu_ms":vm_limits.settlement.cpu.as_millis(),
             "settlement_wall_ms":vm_limits.settlement.wall.as_millis(),"memory_bytes":vm_limits.memory_bytes},
         "player_budget":{"limit":player_budget.cpu_limit,"bucket_cap":player_budget.bucket_cap,
-            "initial_bucket":player_budget.initial_bucket,"max_per_tick":player_budget.max_per_tick},
+            "initial_bucket":player_budget.initial_bucket,"max_per_tick":player_budget.max_per_tick,
+            "heap_limit_bytes":player_budget.heap_limit_bytes},
         "player_code_sha256":format!("{:x}",Sha256::digest(serde_json::to_vec(&codes)?)),
         "memory_milestones": {
             "rss_bytes_baseline": rss_baseline,
@@ -448,6 +523,7 @@ mod tests {
     fn options() -> Options {
         Options {
             players: 2,
+            rooms_per_player: 1,
             concurrency: 2,
             warmup: 3,
             ticks: 60,
@@ -495,10 +571,49 @@ mod tests {
         // 世界时间含 createShard 热身结算拍：1503 探测轮 + 1。
         assert_eq!(report["workload"]["after"]["time"], 1504);
         for player in report["workload"]["after"]["players"].as_array().unwrap() {
-            assert_eq!(player["creep"]["ticksToLive"], 1);
+            let room = &player["rooms"][0];
+            assert_eq!(room["creep"]["ticksToLive"], 1);
             // 计数器只在玩家结算轮递增：热身拍先于对象放置，不计数。
-            assert_eq!(player["counter"]["fields"]["value"], 1503);
+            assert_eq!(room["counter"]["fields"]["value"], 1503);
         }
+        Ok(())
+    }
+
+    /// 多房负载：每玩家 N 间自有房各有一套 worker/source/counter 状态机，
+    /// 双通道等价、每房动作独立核验、报告记录房数口径；网格上限外的
+    /// 组合在测量前拒绝。
+    #[test]
+    fn multi_room_load_commits_per_room_actions_across_channels() -> anyhow::Result<()> {
+        let mut reference = None;
+        for binary in [false, true] {
+            let mut opts = options();
+            opts.kkpv = binary;
+            opts.rooms_per_player = 3;
+            opts.warmup = 3;
+            // 每房独立状态机：初始能量 50，前 50 轮全 upgrade，60+3=63 轮
+            // 才进入采集/升级交替——窗口须越过 50 才能断言 harvests>0。
+            opts.ticks = 60;
+            let report = measure(&opts)?;
+            assert_eq!(report["rooms_per_player"], 3);
+            assert_eq!(report["rooms_total"], 6);
+            for player in report["workload"]["after"]["players"].as_array().unwrap() {
+                assert_eq!(player["rooms"].as_array().unwrap().len(), 3);
+            }
+            for action in report["workload"]["window_actions"].as_array().unwrap() {
+                assert_eq!(action["mod_increments"], 180);
+                assert!(action["upgrades"].as_u64().unwrap() >= 3);
+                assert!(action["harvests"].as_u64().unwrap() > 0);
+            }
+            if let Some(reference) = &reference {
+                assert_eq!(&report["workload"], reference);
+            } else {
+                reference = Some(report["workload"].clone());
+            }
+        }
+        let mut opts = options();
+        opts.players = 300;
+        opts.rooms_per_player = 2;
+        assert!(measure(&opts).is_err(), "总房数超网格容量须拒绝");
         Ok(())
     }
 
