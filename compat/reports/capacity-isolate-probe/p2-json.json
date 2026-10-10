@@ -1,0 +1,696 @@
+{
+  "tool": "kkscreeps mod-player-probe",
+  "schema_version": 2,
+  "players": 2,
+  "player_concurrency": 4,
+  "warmup": 30,
+  "ticks": 100,
+  "channel": "json",
+  "scope": "run_players with projection, player API, native and Mod intents, unified commit",
+  "fixture": "one long-lived worker, source and Mod counter per owned room; harvest/upgrade cycle",
+  "process_scope": "all process threads; includes per-round validation and RSS sampling",
+  "player_cpu_clock": "thread_cpu_time",
+  "metadata": {
+    "os": "macos",
+    "arch": "aarch64",
+    "logical_cpus": 10,
+    "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+    "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+    "git_commit": "e97d362b6bfc97b3a6405be23145a28520fa281f",
+    "git_status": "M crates/kk-cli/src/probes/mod_player.rs\n M crates/kk-cli/src/probes/process.rs",
+    "debug_assertions": false,
+    "unix_time_ms": 1791609108086
+  },
+  "package_digests": {
+    "workload": "34d0a59a1065e815c8f0974b4953573f034084345642ac1880a98105cbbbfb86"
+  },
+  "vm_limits": {
+    "registration_cpu_ms": 500,
+    "registration_wall_ms": 2000,
+    "settlement_cpu_ms": 100,
+    "settlement_wall_ms": 1000,
+    "memory_bytes": 134217728
+  },
+  "player_budget": {
+    "limit": 20.0,
+    "bucket_cap": 10000.0,
+    "initial_bucket": 10000.0,
+    "max_per_tick": 500.0
+  },
+  "player_code_sha256": "9af1456fd96adcc128f04e07056dcc417939baceb4d15194bb51bcca981a2912",
+  "memory_milestones": {
+    "rss_bytes_baseline": 3293184,
+    "rss_bytes_after_shard": 50036736,
+    "rss_bytes_after_placement": 50331648,
+    "rss_bytes_after_warmup": 55115776,
+    "rss_bytes_per_player_after_shard": 23371776,
+    "rss_bytes_growth_warmup": 4784128
+  },
+  "process": {
+    "scope": "current_process_all_threads",
+    "window": "after_warmup_through_collection_loop",
+    "wall_ms": 28.924125,
+    "cpu_core_ms": 47.126000000000005,
+    "cpu_core_ms_per_tick": 0.47126000000000007,
+    "rss_bytes_after": 70909952,
+    "rss_bytes_sampled_peak": 70909952,
+    "rss_bytes_sampled_p50": 65011712,
+    "rss_observations": 101,
+    "rss_retained_samples": 101,
+    "rss_sampling_wall_ms": 0.08850200000000007,
+    "includes_sampling_and_workload_checks": true,
+    "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+  },
+  "phases": {
+    "ticks": 100,
+    "phases": {
+      "project": {
+        "count": 100,
+        "p50_ms": 0.049458,
+        "p95_ms": 0.054834,
+        "p99_ms": 0.057417,
+        "max_ms": 0.058917,
+        "total_ms": 5.013374999999999
+      },
+      "run": {
+        "count": 100,
+        "p50_ms": 0.082417,
+        "p95_ms": 0.114957,
+        "p99_ms": 0.346375,
+        "max_ms": 0.563583,
+        "total_ms": 9.661662999999999
+      },
+      "settle": {
+        "count": 100,
+        "p50_ms": 0.106292,
+        "p95_ms": 0.129125,
+        "p99_ms": 0.143916,
+        "max_ms": 0.1845,
+        "total_ms": 10.869454999999997
+      },
+      "wall": {
+        "count": 100,
+        "p50_ms": 0.244125,
+        "p95_ms": 0.285834,
+        "p99_ms": 0.50175,
+        "max_ms": 0.723875,
+        "total_ms": 25.741671999999994
+      }
+    }
+  },
+  "workload": {
+    "before": {
+      "time": 1,
+      "generation": 10,
+      "mod_state": null,
+      "players": [
+        {
+          "handle": "p1",
+          "room": "W1N1",
+          "upgrades": 0,
+          "harvests": 0,
+          "counter": {
+            "kind": "mod",
+            "id": "kk0000000000000005",
+            "typeKey": "workload:counter",
+            "pos": {
+              "x": 10,
+              "y": 12,
+              "roomName": "W1N1"
+            },
+            "fields": {
+              "owner": "p1",
+              "x": 10,
+              "y": 12,
+              "value": 0
+            }
+          },
+          "creep": {
+            "kind": "creep",
+            "id": "kk0000000000000004",
+            "name": "worker0",
+            "pos": {
+              "x": 2,
+              "y": 1,
+              "roomName": "W1N1"
+            },
+            "hits": 300,
+            "hitsMax": 300,
+            "fatigue": 0,
+            "body": [
+              {
+                "type": "work",
+                "hits": 100
+              },
+              {
+                "type": "carry",
+                "hits": 100
+              },
+              {
+                "type": "move",
+                "hits": 100
+              }
+            ],
+            "owner": "p1",
+            "ticksToLive": 131,
+            "spawning": false,
+            "store": {
+              "energy": 50
+            },
+            "storeCapacity": 50
+          },
+          "controller": {
+            "kind": "structure",
+            "structureType": "controller",
+            "id": "kk0000000000000001",
+            "pos": {
+              "x": 1,
+              "y": 1,
+              "roomName": "W1N1"
+            },
+            "level": 4,
+            "progress": 0,
+            "progressTotal": 405000,
+            "ticksToDowngrade": 40000,
+            "safeMode": null,
+            "safeModeAvailable": 0,
+            "safeModeCooldown": null,
+            "reservation": null,
+            "sign": null,
+            "upgradeBlocked": null,
+            "isPowerEnabled": false,
+            "owner": "p1"
+          },
+          "sources": [
+            {
+              "kind": "source",
+              "id": "kk0000000000000003",
+              "pos": {
+                "x": 2,
+                "y": 2,
+                "roomName": "W1N1"
+              },
+              "energy": 3000,
+              "energyCapacity": 3000,
+              "ticksToRegeneration": null
+            }
+          ]
+        },
+        {
+          "handle": "p2",
+          "room": "W2N1",
+          "upgrades": 0,
+          "harvests": 0,
+          "counter": {
+            "kind": "mod",
+            "id": "kk0000000000000008",
+            "typeKey": "workload:counter",
+            "pos": {
+              "x": 10,
+              "y": 12,
+              "roomName": "W2N1"
+            },
+            "fields": {
+              "owner": "p2",
+              "x": 10,
+              "y": 12,
+              "value": 0
+            }
+          },
+          "creep": {
+            "kind": "creep",
+            "id": "kk0000000000000007",
+            "name": "worker1",
+            "pos": {
+              "x": 2,
+              "y": 1,
+              "roomName": "W2N1"
+            },
+            "hits": 300,
+            "hitsMax": 300,
+            "fatigue": 0,
+            "body": [
+              {
+                "type": "work",
+                "hits": 100
+              },
+              {
+                "type": "carry",
+                "hits": 100
+              },
+              {
+                "type": "move",
+                "hits": 100
+              }
+            ],
+            "owner": "p2",
+            "ticksToLive": 131,
+            "spawning": false,
+            "store": {
+              "energy": 50
+            },
+            "storeCapacity": 50
+          },
+          "controller": {
+            "kind": "structure",
+            "structureType": "controller",
+            "id": "kk0000000000000002",
+            "pos": {
+              "x": 1,
+              "y": 1,
+              "roomName": "W2N1"
+            },
+            "level": 4,
+            "progress": 0,
+            "progressTotal": 405000,
+            "ticksToDowngrade": 40000,
+            "safeMode": null,
+            "safeModeAvailable": 0,
+            "safeModeCooldown": null,
+            "reservation": null,
+            "sign": null,
+            "upgradeBlocked": null,
+            "isPowerEnabled": false,
+            "owner": "p2"
+          },
+          "sources": [
+            {
+              "kind": "source",
+              "id": "kk0000000000000006",
+              "pos": {
+                "x": 2,
+                "y": 2,
+                "roomName": "W2N1"
+              },
+              "energy": 3000,
+              "energyCapacity": 3000,
+              "ticksToRegeneration": null
+            }
+          ]
+        }
+      ]
+    },
+    "warmed": {
+      "time": 31,
+      "generation": 40,
+      "mod_state": {
+        "increments": 60
+      },
+      "players": [
+        {
+          "handle": "p1",
+          "room": "W1N1",
+          "upgrades": 30,
+          "harvests": 0,
+          "counter": {
+            "kind": "mod",
+            "id": "kk0000000000000005",
+            "typeKey": "workload:counter",
+            "pos": {
+              "x": 10,
+              "y": 12,
+              "roomName": "W1N1"
+            },
+            "fields": {
+              "owner": "p1",
+              "x": 10,
+              "y": 12,
+              "value": 30
+            }
+          },
+          "creep": {
+            "kind": "creep",
+            "id": "kk0000000000000004",
+            "name": "worker0",
+            "pos": {
+              "x": 2,
+              "y": 1,
+              "roomName": "W1N1"
+            },
+            "hits": 300,
+            "hitsMax": 300,
+            "fatigue": 0,
+            "body": [
+              {
+                "type": "work",
+                "hits": 100
+              },
+              {
+                "type": "carry",
+                "hits": 100
+              },
+              {
+                "type": "move",
+                "hits": 100
+              }
+            ],
+            "owner": "p1",
+            "ticksToLive": 101,
+            "spawning": false,
+            "store": {
+              "energy": 20
+            },
+            "storeCapacity": 50
+          },
+          "controller": {
+            "kind": "structure",
+            "structureType": "controller",
+            "id": "kk0000000000000001",
+            "pos": {
+              "x": 1,
+              "y": 1,
+              "roomName": "W1N1"
+            },
+            "level": 4,
+            "progress": 30,
+            "progressTotal": 405000,
+            "ticksToDowngrade": 40000,
+            "safeMode": null,
+            "safeModeAvailable": 0,
+            "safeModeCooldown": null,
+            "reservation": null,
+            "sign": null,
+            "upgradeBlocked": null,
+            "isPowerEnabled": false,
+            "owner": "p1"
+          },
+          "sources": [
+            {
+              "kind": "source",
+              "id": "kk0000000000000003",
+              "pos": {
+                "x": 2,
+                "y": 2,
+                "roomName": "W1N1"
+              },
+              "energy": 3000,
+              "energyCapacity": 3000,
+              "ticksToRegeneration": null
+            }
+          ]
+        },
+        {
+          "handle": "p2",
+          "room": "W2N1",
+          "upgrades": 30,
+          "harvests": 0,
+          "counter": {
+            "kind": "mod",
+            "id": "kk0000000000000008",
+            "typeKey": "workload:counter",
+            "pos": {
+              "x": 10,
+              "y": 12,
+              "roomName": "W2N1"
+            },
+            "fields": {
+              "owner": "p2",
+              "x": 10,
+              "y": 12,
+              "value": 30
+            }
+          },
+          "creep": {
+            "kind": "creep",
+            "id": "kk0000000000000007",
+            "name": "worker1",
+            "pos": {
+              "x": 2,
+              "y": 1,
+              "roomName": "W2N1"
+            },
+            "hits": 300,
+            "hitsMax": 300,
+            "fatigue": 0,
+            "body": [
+              {
+                "type": "work",
+                "hits": 100
+              },
+              {
+                "type": "carry",
+                "hits": 100
+              },
+              {
+                "type": "move",
+                "hits": 100
+              }
+            ],
+            "owner": "p2",
+            "ticksToLive": 101,
+            "spawning": false,
+            "store": {
+              "energy": 20
+            },
+            "storeCapacity": 50
+          },
+          "controller": {
+            "kind": "structure",
+            "structureType": "controller",
+            "id": "kk0000000000000002",
+            "pos": {
+              "x": 1,
+              "y": 1,
+              "roomName": "W2N1"
+            },
+            "level": 4,
+            "progress": 30,
+            "progressTotal": 405000,
+            "ticksToDowngrade": 40000,
+            "safeMode": null,
+            "safeModeAvailable": 0,
+            "safeModeCooldown": null,
+            "reservation": null,
+            "sign": null,
+            "upgradeBlocked": null,
+            "isPowerEnabled": false,
+            "owner": "p2"
+          },
+          "sources": [
+            {
+              "kind": "source",
+              "id": "kk0000000000000006",
+              "pos": {
+                "x": 2,
+                "y": 2,
+                "roomName": "W2N1"
+              },
+              "energy": 3000,
+              "energyCapacity": 3000,
+              "ticksToRegeneration": null
+            }
+          ]
+        }
+      ]
+    },
+    "after": {
+      "time": 131,
+      "generation": 140,
+      "mod_state": {
+        "increments": 260
+      },
+      "players": [
+        {
+          "handle": "p1",
+          "room": "W1N1",
+          "upgrades": 103,
+          "harvests": 27,
+          "counter": {
+            "kind": "mod",
+            "id": "kk0000000000000005",
+            "typeKey": "workload:counter",
+            "pos": {
+              "x": 10,
+              "y": 12,
+              "roomName": "W1N1"
+            },
+            "fields": {
+              "owner": "p1",
+              "x": 10,
+              "y": 12,
+              "value": 130
+            }
+          },
+          "creep": {
+            "kind": "creep",
+            "id": "kk0000000000000004",
+            "name": "worker0",
+            "pos": {
+              "x": 2,
+              "y": 1,
+              "roomName": "W1N1"
+            },
+            "hits": 300,
+            "hitsMax": 300,
+            "fatigue": 0,
+            "body": [
+              {
+                "type": "work",
+                "hits": 100
+              },
+              {
+                "type": "carry",
+                "hits": 100
+              },
+              {
+                "type": "move",
+                "hits": 100
+              }
+            ],
+            "owner": "p1",
+            "ticksToLive": 1,
+            "spawning": false,
+            "store": {
+              "energy": 1
+            },
+            "storeCapacity": 50
+          },
+          "controller": {
+            "kind": "structure",
+            "structureType": "controller",
+            "id": "kk0000000000000001",
+            "pos": {
+              "x": 1,
+              "y": 1,
+              "roomName": "W1N1"
+            },
+            "level": 4,
+            "progress": 103,
+            "progressTotal": 405000,
+            "ticksToDowngrade": 40000,
+            "safeMode": null,
+            "safeModeAvailable": 0,
+            "safeModeCooldown": null,
+            "reservation": null,
+            "sign": null,
+            "upgradeBlocked": null,
+            "isPowerEnabled": false,
+            "owner": "p1"
+          },
+          "sources": [
+            {
+              "kind": "source",
+              "id": "kk0000000000000003",
+              "pos": {
+                "x": 2,
+                "y": 2,
+                "roomName": "W1N1"
+              },
+              "energy": 2946,
+              "energyCapacity": 3000,
+              "ticksToRegeneration": 220
+            }
+          ]
+        },
+        {
+          "handle": "p2",
+          "room": "W2N1",
+          "upgrades": 103,
+          "harvests": 27,
+          "counter": {
+            "kind": "mod",
+            "id": "kk0000000000000008",
+            "typeKey": "workload:counter",
+            "pos": {
+              "x": 10,
+              "y": 12,
+              "roomName": "W2N1"
+            },
+            "fields": {
+              "owner": "p2",
+              "x": 10,
+              "y": 12,
+              "value": 130
+            }
+          },
+          "creep": {
+            "kind": "creep",
+            "id": "kk0000000000000007",
+            "name": "worker1",
+            "pos": {
+              "x": 2,
+              "y": 1,
+              "roomName": "W2N1"
+            },
+            "hits": 300,
+            "hitsMax": 300,
+            "fatigue": 0,
+            "body": [
+              {
+                "type": "work",
+                "hits": 100
+              },
+              {
+                "type": "carry",
+                "hits": 100
+              },
+              {
+                "type": "move",
+                "hits": 100
+              }
+            ],
+            "owner": "p2",
+            "ticksToLive": 1,
+            "spawning": false,
+            "store": {
+              "energy": 1
+            },
+            "storeCapacity": 50
+          },
+          "controller": {
+            "kind": "structure",
+            "structureType": "controller",
+            "id": "kk0000000000000002",
+            "pos": {
+              "x": 1,
+              "y": 1,
+              "roomName": "W2N1"
+            },
+            "level": 4,
+            "progress": 103,
+            "progressTotal": 405000,
+            "ticksToDowngrade": 40000,
+            "safeMode": null,
+            "safeModeAvailable": 0,
+            "safeModeCooldown": null,
+            "reservation": null,
+            "sign": null,
+            "upgradeBlocked": null,
+            "isPowerEnabled": false,
+            "owner": "p2"
+          },
+          "sources": [
+            {
+              "kind": "source",
+              "id": "kk0000000000000006",
+              "pos": {
+                "x": 2,
+                "y": 2,
+                "roomName": "W2N1"
+              },
+              "energy": 2946,
+              "energyCapacity": 3000,
+              "ticksToRegeneration": 220
+            }
+          ]
+        }
+      ]
+    },
+    "window_actions": [
+      {
+        "player": "p1",
+        "executions": 100,
+        "mod_increments": 100,
+        "upgrades": 73,
+        "harvests": 27
+      },
+      {
+        "player": "p2",
+        "executions": 100,
+        "mod_increments": 100,
+        "upgrades": 73,
+        "harvests": 27
+      }
+    ]
+  }
+}

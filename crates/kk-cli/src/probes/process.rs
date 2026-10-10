@@ -91,7 +91,7 @@ fn cpu_ms() -> anyhow::Result<f64> {
 }
 
 #[cfg(target_os = "macos")]
-fn resident_bytes() -> anyhow::Result<u64> {
+pub(super) fn resident_bytes() -> anyhow::Result<u64> {
     let mut usage = std::mem::MaybeUninit::<libc::rusage_info_v2>::uninit();
     // libproc 按 flavor 将 rusage_info_v2 写入 buffer 指向的存储；
     // rusage_info_t* 是其 C 接口的通用缓冲区类型，不是另分配的输出指针。
@@ -109,7 +109,7 @@ fn resident_bytes() -> anyhow::Result<u64> {
 }
 
 #[cfg(target_os = "linux")]
-fn resident_bytes() -> anyhow::Result<u64> {
+pub(super) fn resident_bytes() -> anyhow::Result<u64> {
     let statm = std::fs::read_to_string("/proc/self/statm")?;
     let pages: u64 = statm
         .split_whitespace()
@@ -129,7 +129,7 @@ pub(crate) fn process_usage() -> anyhow::Result<ProcessUsage> {
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-fn resident_bytes() -> anyhow::Result<u64> {
+pub(super) fn resident_bytes() -> anyhow::Result<u64> {
     anyhow::bail!("进程资源采样目前仅支持 macOS/Linux")
 }
 

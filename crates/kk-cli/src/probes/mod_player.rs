@@ -53,6 +53,13 @@ pub(crate) fn run(options: Options) -> i32 {
     }
 }
 
+/// 满员阶梯的网格房名：第 i 个玩家的房 = W{i%20+1}N{i/20+1}（RoomName
+/// 约定 W/N 取负减一，最大坐标 |xx|=21、|yy|=17，远离 ±127 世界边界；
+/// i∈0..320 单射）。
+fn room_name(i: usize) -> String {
+    format!("W{}N{}", i % 20 + 1, i / 20 + 1)
+}
+
 fn player_code(room: &str) -> String {
     format!(
         r#"(function(){{
@@ -214,7 +221,10 @@ fn step(
 }
 
 fn measure(options: &Options) -> anyhow::Result<Value> {
-    ensure!((1..=32).contains(&options.players), "--players 须为 1..32");
+    ensure!(
+        (1..=320).contains(&options.players),
+        "--players 须为 1..320"
+    );
     ensure!(
         (1..=32).contains(&options.concurrency),
         "--concurrency 须为 1..32"
@@ -225,6 +235,11 @@ fn measure(options: &Options) -> anyhow::Result<Value> {
     );
     ensure!(options.warmup <= 50_000, "--warmup 须为 0..50000");
     let total = options.warmup + options.ticks;
+    // 里程碑 RSS：把进程驻留拆成「引擎+世界+N 常驻 isolate/线程」「对象
+    // 放置」「热身执行后的稳态」三层，配合窗口曲线即可归因每玩家边际
+    // 足迹（满员容量评估的输入；绝对值受平台分配器影响，跨平台只比
+    // 边际）。
+    let rss_baseline = super::process::resident_bytes()?;
     let packages = discover_packages(Path::new(&options.fixtures))?;
     ensure!(
         packages.len() == 1 && packages.contains_key("workload"),
@@ -243,11 +258,15 @@ fn measure(options: &Options) -> anyhow::Result<Value> {
             Ok((id.clone(), format!("{:x}", Sha256::digest(bytes))))
         })
         .collect::<anyhow::Result<_>>()?;
+    // 房间按 20 列网格分布：线性 W{n}N1 在大玩家数下越过世界边界（±127）。
+    // 公式支持到 N16 行（约 320 玩家；列固定 20，行到 127 需把上限提到 2540
+    // 并重估列宽）。
+    let room_name = |i: usize| room_name(i);
     let handles: Vec<_> = (1..=options.players).map(|i| format!("p{i}")).collect();
     let rooms: Vec<_> = handles
         .iter()
         .enumerate()
-        .map(|(i, h)| json!({"name":format!("W{}N1",i+1),"rcl":4,"owner":h}))
+        .map(|(i, h)| json!({"name":room_name(i),"rcl":4,"owner":h}))
         .collect();
     let mut engine = EmbedEngine::new();
     engine.set_kkpv_channel(options.kkpv);
@@ -262,10 +281,11 @@ fn measure(options: &Options) -> anyhow::Result<Value> {
             ..Default::default()
         },
     )?;
+    let rss_after_shard = super::process::resident_bytes()?;
     let mut players = Vec::new();
     let mut codes = BTreeMap::new();
     for (i, handle) in handles.into_iter().enumerate() {
-        let room = format!("W{}N1", i + 1);
+        let room = room_name(i);
         let (x, y) = engine
             .get_controller_pos(&room)
             .context("controller 缺失")?;
@@ -326,6 +346,9 @@ fn measure(options: &Options) -> anyhow::Result<Value> {
     }
     let initial_time = engine.get_game_time();
     let initial_generation = engine.engine_generation();
+    // 里程碑先采样再 snapshot：snapshot 的 serde_json 分配会驻留到函数结束，
+    // 先拍快照会把放置里程碑抬高、把热身增长压低（与热身侧顺序一致）。
+    let rss_after_placement = super::process::resident_bytes()?;
     let before = snapshot(&engine, &players);
     for round in 1..=options.warmup {
         step(
@@ -337,6 +360,7 @@ fn measure(options: &Options) -> anyhow::Result<Value> {
             initial_generation,
         )?;
     }
+    let rss_after_warmup = super::process::resident_bytes()?;
     let warmed = snapshot(&engine, &players);
     let actions_before: Vec<_> = players.iter().map(|p| (p.upgrades, p.harvests)).collect();
     engine.perf_reset();
@@ -381,6 +405,20 @@ fn measure(options: &Options) -> anyhow::Result<Value> {
         "player_budget":{"limit":player_budget.cpu_limit,"bucket_cap":player_budget.bucket_cap,
             "initial_bucket":player_budget.initial_bucket,"max_per_tick":player_budget.max_per_tick},
         "player_code_sha256":format!("{:x}",Sha256::digest(serde_json::to_vec(&codes)?)),
+        "memory_milestones": {
+            "rss_bytes_baseline": rss_baseline,
+            "rss_bytes_after_shard": rss_after_shard,
+            "rss_bytes_after_placement": rss_after_placement,
+            "rss_bytes_after_warmup": rss_after_warmup,
+            // after_shard 已含引擎基座+世界+N 玩家线程/isolate；除法把固定
+            // 成本摊进每玩家值，低 N 时显著虚高（2 玩家 ≈22MB vs 300 玩家
+            // ≈8.6MB）——权威每玩家边际用跨规模差分，别直接引用本字段。
+            // 减法用 saturating_sub：Linux 分配器归还页面时热身期 RSS 可能
+            // 净下降，回绕会污染报告。
+            "rss_bytes_per_player_after_shard": rss_after_shard.saturating_sub(rss_baseline)
+                / u64::from(options.players),
+            "rss_bytes_growth_warmup": rss_after_warmup.saturating_sub(rss_after_placement),
+        },
         "process":process,"phases":phases,
         "workload":{"before":before,"warmed":warmed,"after":after,"window_actions":action_counts},
     }))
@@ -389,6 +427,23 @@ fn measure(options: &Options) -> anyhow::Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 网格房名在满量程内唯一且可解析为世界边界内的坐标（±127）。
+    #[test]
+    fn grid_room_names_stay_unique_and_inside_world_bounds() {
+        let mut seen = std::collections::BTreeSet::new();
+        for i in 0..320 {
+            let name = room_name(i);
+            assert!(seen.insert(name.clone()), "房名重复：{name}");
+            let parsed = kk_core::RoomName::parse(&name).expect("房名可解析");
+            assert!(
+                parsed.xx.abs() <= 127 && parsed.yy.abs() <= 127,
+                "{name} 越界：({}, {})",
+                parsed.xx,
+                parsed.yy
+            );
+        }
+    }
 
     fn options() -> Options {
         Options {

@@ -1,0 +1,92 @@
+{
+  "tool": "kkscreeps mod-player-probe",
+  "date": "2026-10-10",
+  "platform": "macOS darwin 24.6.0 arm64 (开发机；绝对 RSS 为本机分配器口径，Linux 验收须复测，边际结构可跨平台参考)",
+  "matrix": "每玩家 1 房 RCL4 + worker/source/Mod counter，合成负载 harvest/upgrade 循环；warmup 30 + ticks 100，concurrency 4",
+  "runs": {
+    "p2-json": {
+      "players": 2,
+      "channel": "json",
+      "warmup": 30,
+      "ticks": 100,
+      "concurrency": 4,
+      "rss_baseline": 3293184,
+      "rss_after_shard": 50036736,
+      "rss_after_warmup": 55115776,
+      "rss_peak": 70909952,
+      "project_p50_ms": 0.049458,
+      "run_p50_ms": 0.082417,
+      "settle_p50_ms": 0.106292,
+      "wall_p50_ms": 0.244125
+    },
+    "p50-json": {
+      "players": 50,
+      "channel": "json",
+      "warmup": 30,
+      "ticks": 100,
+      "concurrency": 4,
+      "rss_baseline": 3227648,
+      "rss_after_shard": 481886208,
+      "rss_after_warmup": 1045381120,
+      "rss_peak": 2051457024,
+      "project_p50_ms": 9.230917,
+      "run_p50_ms": 0.894589,
+      "settle_p50_ms": 2.444833,
+      "wall_p50_ms": 12.635917
+    },
+    "p100-json": {
+      "players": 100,
+      "channel": "json",
+      "warmup": 30,
+      "ticks": 100,
+      "concurrency": 4,
+      "rss_baseline": 3227648,
+      "rss_after_shard": 929742848,
+      "rss_after_warmup": 2943762432,
+      "rss_peak": 4377362432,
+      "project_p50_ms": 32.038243,
+      "run_p50_ms": 2.109585,
+      "settle_p50_ms": 5.032167,
+      "wall_p50_ms": 39.724166999999994
+    },
+    "p300-json": {
+      "players": 300,
+      "channel": "json",
+      "warmup": 30,
+      "ticks": 100,
+      "concurrency": 4,
+      "rss_baseline": 3227648,
+      "rss_after_shard": 2717777920,
+      "rss_after_warmup": 6250807296,
+      "rss_peak": 6727450624,
+      "project_p50_ms": 308.862743,
+      "run_p50_ms": 92.604464,
+      "settle_p50_ms": 17.691958,
+      "wall_p50_ms": 413.491333
+    },
+    "p100-kkpv": {
+      "players": 100,
+      "channel": "kkpv",
+      "warmup": 30,
+      "ticks": 100,
+      "concurrency": 4,
+      "rss_baseline": 3244032,
+      "rss_after_shard": 927170560,
+      "rss_after_warmup": 1797128192,
+      "rss_peak": 2797748224,
+      "project_p50_ms": 23.462621,
+      "run_p50_ms": 1.169085,
+      "settle_p50_ms": 5.134375,
+      "wall_p50_ms": 30.157166999999998
+    }
+  },
+  "findings": {
+    "marginal_structured_rss_per_player": "rss_after_shard 差分 100→300 玩家 = 8.53MiB/玩家（常驻 isolate+线程+世界份额）；线性成立：分段边际 2→50/50→100/100→300 = 9.0/9.0/8.5MiB，波动 <5%",
+    "warmup_growth": "JSON 通道的分配 churn 是 O(玩家×房间)（本夹具房间数=玩家数，即平方；每房地形 [u8;2500]→base64 3336 字符、地形占视图字节约 97%——代码推算（kk-schema room.rs:26 与投影遍历），非本目录报告实测），驱动时序超线性（project 50→100→300 指数 α≈1.8-2.1）与 100 玩家通道差（热身后差 1.07GiB、峰值差 1.47GiB）。RSS 侧增长受 GC/分配器调节非全程超线性：人均热身增长 50/100/300 玩家 = 11.2/20.1/11.7MiB（100→300 亚线性），窗口增长非单调（+987/+1210/+462MiB，300 玩家窗口异常低未解释，疑似内存压力下分配器归还）。归因被通道 A/B 强化：run 相 json p95 31.7ms vs kkpv 6.1ms（GC 压力签名），且 warmup 已吸收首执行物化、验证 churn 通道无关。",
+    "projection_superlinear": "project p50 每玩家成本随规模上升：50/100/300 玩家 ≈ 0.18/0.32/1.03ms（JSON 每视图含全世界地形）",
+    "kkpv_wins_at_scale": "100 玩家下 KKPV project -26.8%/run -44.6%/RSS 峰值 -36.1%（共享地形块摊销）；单玩家下 KKPV 慢是长存批的外部证据（project 0.77→1.39ms/run 2.87→4.11ms，gameplay-tooangel-survival），不在本目录 5 份报告内。",
+    "target_assessment": "2GB/100 玩家目标（口径 9 区块/人均 3 房/总 300 房）当前不达标且判定保守：结构成本 884MiB + JSON 热身增长 1.88GiB 已超 2GiB（未计峰值 4.08GiB）。夹具是 1 房/人——目标口径下 churn 再 ×3（100×300 房 vs 实测 100×100），只会更差。注意 KKPV 100 玩家（单房）峰值 2668MiB（2.60GiB）自身已超 2GiB：三项路径（生产默认 KKPV、JSON 地形嵌入改共享/按需、isolate 生命周期管理）方向有 A/B 与归因支撑，但无量化落点——按报告数据削减需求 ≥0.60GiB（KKPV 峰值口径）至 0.74GiB（JSON 热身口径），保守化整 0.8GiB，未验证够用——容量验收在 Linux 服务形态上复测后再下结论。",
+    "scale_300": "300 玩家可跑（tick wall p50 413ms ≈ 2.4 tick/s，本机口径），非 2GB 场景"
+  },
+  "caveats": "绝对 RSS 为 macOS(darwin 24.6.0 arm64) 分配器口径，Linux 容量验收须复测；窗口 100 拍未见 GC 稳态（json 100p 窗口内仍 +1210MiB 在涨），长窗复测留容量验收；未记录机器总 RAM；字节统计除注明 GiB 外均以 MiB 计（MiB→十进制 GB 换算 ×1.049）。"
+}
