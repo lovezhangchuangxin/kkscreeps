@@ -25,6 +25,7 @@ use crate::domain::room::room_energy;
 use crate::projection::{ext_entries_json, object_exported_for, object_json};
 use crate::world::{ObjId, World};
 
+mod generic_scan;
 mod objects;
 use objects::{RoomBlockMeta, encode_room_block, type_key_cow};
 

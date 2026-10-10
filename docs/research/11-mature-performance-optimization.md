@@ -262,3 +262,35 @@ RSS 采样中位数均值下降 12.09%，峰值均值仅下降 1.80%；首对新
 观察面边界（记录常驻已开同类先例）：对象同一性与玩家自挂非 `_` 属性跨拍保持（官方每拍重建即消失）；跨拍持有的旧引用与当拍包装同体且经 rawData 回查读当拍值（回归锁定）；直接读 `_name` 绕过 getter 在复用后首访前得旧值属病态旁路，棘轮未发现依赖。
 
 【已注册后续】wrapper 同一性稳定后，查询面的两项注册启动条件成立但须先重采样归因：(a) `makeRoomQueries` 逐可见房全量扫描改每拍单次分桶共享；(b) look 注册表/空间索引跨拍增量维护（依赖 id→wrapper 稳定）。两项均等 wrapper 常驻后的新热点证据再动工；`Room.find` 同拍记忆化因官方每次返回新数组、缓存引用会被玩家改写污染，暂不做。
+
+
+## 2026-10-11 补记：共享块编码并行试验撤回（L1a，thread::scope）
+
+【已撤回试验】`build_shared_room_blocks` 用 `std::thread::scope` 按房分块并行编码（先 4 线程、后 2 线程变体，留串行回退），mod_chain 全绿后冻结二进制 ABBA（5+100、并发 4、同 50×6 夹具）。单冷窗极佳：wall 518.1ms、投影段 127.6ms（-59%）、CPU 2161.7 与基线持平——但严格 ABBA 两对相邻样本全部 CPU 违例（公平门"CPU 不劣化"）：
+
+| 变体 | 相邻对 CPU（new vs old） | 均值 |
+|---|---|---|
+| 4 线程 | 2788.5 vs 2160.1、2759.1 vs 2344.8 | 约 +23% |
+| 2 线程 | 2687.4 vs 2342.0、2704.6 vs 2399.4 | 约 +14% |
+
+机理：4P+6E 拓扑上约 330 core-ms 的编码突发集中在 ~85ms×4 线程，P 核功耗/热量密度打满，紧随其后的 V8 run 相实测慢约 40%，每拍总 CPU 反而膨胀——wall 变好但 CPU 变差，是公平门定义拦截的"拿能量换墙钟"。2 线程热机配对有一窗过门（+1.9%），单窗不作依据。实现经 `git checkout` 撤回，未入库；原始报告暂存 `/tmp/kkscreeps-l1a-*.json`、`/tmp/kkscreeps-t2-abba-*.json`（会话产物，未入证据目录）。结论限于本机拓扑；**变体已在 L5 注册重测**：L1b 把投影段砍去约四分之一后突发能量变小，功耗密度耦合可能松动，重测协议为先全机 ABBA、若"CPU 小超 + wall 大赢"再补 2 核亲和窗裁决（用户 2026-10-11 确认的仲裁细则，见部署基准记忆）。
+
+
+## 2026-10-11 补记：Generic 零拷贝提取落地（L1b，现行实现）
+
+【现行实现】`crates/kk-world/src/kkpv/generic_scan.rs` 受限文法扫描器直接从 Generic 不可变 JSON 原文产出借用 `KkpvVal`，跳过 `object_json` 为每对象建而又弃的 serde_json Value 树（成熟服数百房的 rampart/link/tower 等都以 Generic 存储，共享块构建的解析成本集中于此）。`encode_room_block` 的 Generic 臂优先扫描，受限文法外（转义字符串、病态数字如 `-0`/整型溢出/`1e999`、非对象顶层、嵌套超 serde 递归上限 128、尾随内容）一律回退 serde 参考路径，由 serde 复刻全部行为——含无效 JSON 的空记录分支与非对象顶层的 `json_row` 错误文案。等价由 `generic_scan` 单元对照测试锁定（成熟负载形态×effects 有无×ext 裁切矩阵、数值形态、重复键、递归边界 126-130）。
+
+**键序语义的重要修正（preserve_order 发现）**：首版扫描器按 BTreeMap 排序序实现并在 `cargo test -p kk-world` 单独构建下全绿，但完整门禁 `--workspace` 形态下对照失败——`deno_core`（kk-runner 的 V8 宿主）传递开启 `serde_json/preserve_order`，**所有发布二进制里 serde_json::Map 实为 IndexMap（插入序）**；单独构建 kk-world 时无 deno_core 在图内，静默退回 BTreeMap 排序序，投影键序随构建形态漂移。处置：kk-world 的 serde_json 依赖显式加 `preserve_order`（与 float_roundtrip 并列，Cargo.toml 注明线上事实），扫描器改写为 IndexMap 语义——载荷对象按首现位置保留、后写值覆盖；派生键沿用 `object_json` 插入序列（shard→id→room→x→y→pos→effects），已存在键原地换值、新键追加；`json_row` 的 id/ext 过滤后即行字段。此坑提示：**凡依赖 serde_json::Map 迭代序的代码，必须显式钉住 preserve_order，否则构建形态会改变行为**。
+
+最终二进制 ABBA（5+100、并发 4、O,N,N,O，两对相邻样本方向一致）：
+
+| 指标 | new/old 均值 | 相邻对 1（old1→new2） | 相邻对 2（new3→old4） |
+|---|---|---|---|
+| wall P50 | **0.890**（-11.0%） | 0.922 | 1.156（旧更慢） |
+| 投影段 P50 | **0.725**（-27.5%） | 0.755 | 1.342（旧更慢） |
+| CPU core-ms/tick | **0.960**（-4.0%） | 1.007（噪声带） | 1.086（旧更高） |
+| RSS 峰值 | 0.990（-1.0%） | | |
+
+公平门通过且 CPU 均值改善；并行度 2001/609≈3.29× 远低于 xxs 同窗约 6.3×。run 段均值 +3.1%（两次 ABBA 均小幅偏高），疑似编码器内存布局变化的次级影响，整拍 CPU 仍下降——登记待 L4 重采样归因。[摘要与四轮原始报告](../../compat/reports/mature-comparison/2026-10-10/50x6-generic-zero-copy/summary.json)入库；旧二进制与 HEAD release 逐字节一致，新二进制 sha `8818a0fa`。验证链：generic_scan 单测 4、kk-world 101（两种构建形态均过）、mod_chain 493、棘轮 2905/floor 零转红、完整无参数 `pnpm run check`。首轮 ABBA（排序序版扫描器 sha `71dbc44d`）方向相同（wall -9.7%/CPU -2.0%），被最终插入序版取代。
+
+【登记后续】投影串行段从 ~292ms 降至 ~220ms（本机口径）；下一片按队列走 L2 结算房并行（Mod 钩子/全局合并保持有序）与 L3 run/settle 重叠。

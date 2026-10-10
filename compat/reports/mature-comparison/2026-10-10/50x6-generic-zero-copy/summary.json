@@ -1,0 +1,97 @@
+{
+ "order": [
+  "old",
+  "new",
+  "new",
+  "old"
+ ],
+ "warmup": 5,
+ "ticks": 100,
+ "concurrency": 4,
+ "rows": [
+  {
+   "tag": "old1",
+   "version": "old",
+   "wall_p50_ms": 660.584916,
+   "wall_p95_ms": 784.466584,
+   "project_p50_ms": 291.584542,
+   "run_p50_ms": 259.766333,
+   "settle_p50_ms": 106.639291,
+   "cpu_core_ms_per_tick": 1986.68905,
+   "rss_p50": 2948857856,
+   "rss_peak": 3022700544
+  },
+  {
+   "tag": "new2",
+   "version": "new",
+   "wall_p50_ms": 609.13,
+   "wall_p95_ms": 739.580167,
+   "project_p50_ms": 220.375252,
+   "run_p50_ms": 272.747832,
+   "settle_p50_ms": 109.834333,
+   "cpu_core_ms_per_tick": 2001.4607799999999,
+   "rss_p50": 2920398848,
+   "rss_peak": 2949464064
+  },
+  {
+   "tag": "new3",
+   "version": "new",
+   "wall_p50_ms": 725.150583,
+   "wall_p95_ms": 896.219791,
+   "project_p50_ms": 257.66454,
+   "run_p50_ms": 314.669662,
+   "settle_p50_ms": 142.4165,
+   "cpu_core_ms_per_tick": 2215.7244,
+   "rss_p50": 2896117760,
+   "rss_peak": 2937307136
+  },
+  {
+   "tag": "old4",
+   "version": "old",
+   "wall_p50_ms": 838.282917,
+   "wall_p95_ms": 1061.238709,
+   "project_p50_ms": 367.966708,
+   "run_p50_ms": 309.983584,
+   "settle_p50_ms": 148.432042,
+   "cpu_core_ms_per_tick": 2405.4315100000003,
+   "rss_p50": 2875752448,
+   "rss_peak": 2924380160
+  }
+ ],
+ "new_over_old_mean": {
+  "wall_p50_ms": 0.8901922862200753,
+  "wall_p95_ms": 0.8862736452043105,
+  "project_p50_ms": 0.7247955211971776,
+  "run_p50_ms": 1.0310093542321659,
+  "settle_p50_ms": 0.9889423089344188,
+  "cpu_core_ms_per_tick": 0.9601706333853459,
+  "rss_peak": 0.9898589733346924
+ },
+ "adjacent_pairs": {
+  "old1->new2": {
+   "wall_p50_ms": 0.9221070376363241,
+   "wall_p95_ms": 0.9427809700049632,
+   "project_p50_ms": 0.7557850991977483,
+   "run_p50_ms": 1.049973754682059,
+   "settle_p50_ms": 1.029961208200456,
+   "cpu_core_ms_per_tick": 1.0074353507913076,
+   "rss_peak": 0.9757711758297153
+  },
+  "new3->old4": {
+   "wall_p50_ms": 1.1560121947802393,
+   "wall_p95_ms": 1.184127732568673,
+   "project_p50_ms": 1.4280843922101194,
+   "run_p50_ms": 0.9851079447245855,
+   "settle_p50_ms": 1.0422390804436283,
+   "cpu_core_ms_per_tick": 1.0856185498521387,
+   "rss_peak": 0.9955990383703612
+  }
+ },
+ "scope": "same-engine ABBA；L1b Generic 零拷贝提取（受限文法扫描器直出借用 KkpvVal、IndexMap 插入序语义，serde 参考路径保留为回退）vs HEAD 68f8442",
+ "binary_sha256": {
+  "old": "c8a3339281161963a244d2904ccfd7ab9e738e6c0f88a9d880b3e65a20c0680b",
+  "new": "8818a0fa6c758ed5b254acb0ff8b0688a0bd71a0eb7d29f7a4e96cc33888b5ee"
+ },
+ "fixture_sha256_note": "fixture-50.json.gz 与 50x6-wrapper-residency-abba 批次同源（mature-rcl8-v1，50 玩家×6 房）",
+ "notes": "两对相邻样本方向一致：wall P50 -11.0%（均值 0.890）、投影段 P50 -27.5%（0.725，直接目标）、CPU core-ms/tick -4.0%（0.960，公平门通过且均值改善；最差相邻对 +0.7% 在噪声带内）、RSS 峰值 -1.0%。run 段均值 +3.1%（两次 ABBA 均小幅偏高，编码器内存布局变化的次级影响，整拍 CPU 仍下降，登记待重采样归因）。实现要点：deno_core 传递开启 serde_json/preserve_order（线上二进制 Map 实为 IndexMap 插入序），kk-world 显式钉住该特性并把扫描器写为插入序语义（首现位置+后写值、派生键按 object_json 插入序列原地替换或追加），消除单独构建与 workspace 统一构建的键序漂移；等价由 generic_scan 单元对照（含病态载荷回退、递归边界 128/129、-0/溢出/1e999 数值形态）、mod_chain 493、兼容棘轮共同锁定。首轮 ABBA（排序序版扫描器，sha 71dbc44d）数值方向相同（wall -9.7%/CPU -2.0%），被本最终版取代归档。"
+}

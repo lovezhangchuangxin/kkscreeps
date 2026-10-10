@@ -11,5 +11,9 @@ workspace = true
 kk-core.workspace = true
 kk-mod-api.workspace = true
 kk-schema.workspace = true
-serde_json = { workspace = true, features = ["float_roundtrip"] }
+# preserve_order 必须钉住：线上二进制经 kk-runner→deno_core 传递开启该
+# 特性，serde_json::Map 实为 IndexMap（插入序）；不显式声明时单独
+# `cargo test -p kk-world` 会退回 BTreeMap 排序序，投影键序随构建形态
+# 漂移、等价测试失真。float_roundtrip 与 workspace 其余成员一致。
+serde_json = { workspace = true, features = ["preserve_order", "float_roundtrip"] }
 serde.workspace = true

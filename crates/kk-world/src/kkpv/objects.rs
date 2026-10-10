@@ -7,6 +7,7 @@
 
 use std::borrow::Cow;
 
+use super::generic_scan::GenericScan;
 use super::*;
 
 /// 单房私有块的编码身份：块头 tick/generation 与宿主摘要。`private`
@@ -40,7 +41,7 @@ pub(super) fn typed_structure_name(object: &RoomObject) -> Option<&str> {
 /// 结构类型桶键 `builtin:{structureType}`：结构类型集由官方常量冻结，
 /// 静态映射避免逐对象格式化分配；未知类型（Mod 自定义目标结构）回退
 /// 运行时拼装，产物字符串等价。
-fn builtin_structure_key(structure_type: &str) -> Cow<'static, str> {
+pub(super) fn builtin_structure_key(structure_type: &str) -> Cow<'static, str> {
     let key = match structure_type {
         "spawn" => "builtin:spawn",
         "extension" => "builtin:extension",
@@ -133,7 +134,11 @@ fn json_val(value: &Value) -> Result<KkpvVal<'_>, String> {
 
 /// 解析参考记录 → 借用行：`id` 由目录承担跳过；目录 ext 存在时原生
 /// `ext` 键按覆盖语义丢弃，由调用方追加目录版本。
-fn json_row(id: ObjId, record: &Value, ext_replaced: bool) -> Result<KkpvRow<'_>, String> {
+pub(super) fn json_row(
+    id: ObjId,
+    record: &Value,
+    ext_replaced: bool,
+) -> Result<KkpvRow<'_>, String> {
     let fields_src = record.as_object().ok_or("对象记录必须是 JSON 对象")?;
     let mut fields = Vec::with_capacity(fields_src.len());
     for (key, value) in fields_src {
@@ -805,17 +810,23 @@ pub(super) fn encode_room_block(
     catalog: &kk_mod_api::extension::ExtensionCatalog,
     surface: Option<&kk_mod_api::player_surface::PlayerSurface>,
 ) -> Result<Vec<u8>, String> {
-    // 第一遍：门与解析。Generic/Mod 的参考记录先解析保活（行借用其
-    // 内容，owned 数据在本函数存活期内不释放）；ext 对同序预计算。
-    enum Slot {
+    // 第一遍：门与解析。Generic 优先走受限文法零拷贝扫描（语义与参考
+    // 路径逐位一致，见 generic_scan.rs），扫描不收的载荷回退 serde 解析
+    // 保活；Mod 始终走参考记录；ext 对同序预计算。
+    enum Slot<'a> {
         Typed,
         Parsed(usize),
+        Scanned(GenericScan<'a>),
     }
     let mut ids: Vec<ObjId> = Vec::new();
-    let mut slots: Vec<Slot> = Vec::new();
+    let mut slots: Vec<Slot<'_>> = Vec::new();
     let mut parsed: Vec<Value> = Vec::new();
     let mut exts: Vec<Option<serde_json::Map<String, Value>>> = Vec::new();
-    let mut collect = |id: ObjId, object: &RoomObject| {
+    // 闭包只收 id、内部按 state 重取对象：对象借用与 state 同生命周期，
+    // 扫描行的载荷借用才能存进本函数的 slots（收 &RoomObject 参数会把
+    // 借用钉在闭包调用点的更短生命周期上）。
+    let mut collect = |id: ObjId| {
+        let object = &state.objects[&id];
         // Mod 分支先于内建导出门（与 world_json_impl 同序）：
         // mod_record_json 自带完整的对象级/字段级门——OwnerCollection
         // 的归属者集合语义不受房间视野门，若先过 object_exported_for
@@ -841,31 +852,38 @@ pub(super) fn encode_room_block(
         if !object_exported_for(Some(user), room_visible, object) {
             return;
         }
-        // Generic 保持 Value 参考路径：data 本身就是 JSON，解析不可省。
+        // Generic 优先零拷贝扫描；受限文法外（转义、病态数字、非对象
+        // 顶层、超深嵌套）回退 serde 参考路径，行为含错误形态逐位一致。
         let slot = match object {
-            RoomObject::Generic(_) => {
-                let record = object_json(
-                    room,
-                    id,
-                    object,
-                    time,
-                    &state.terrain,
-                    controller,
-                    state.effects.get(&id),
-                )
-                .expect("Mod 对象已在 encode_room_block 上文分流");
-                parsed.push(record);
-                Slot::Parsed(parsed.len() - 1)
+            RoomObject::Generic(g) => {
+                match GenericScan::scan(room, id, g, time, state.effects.get(&id)) {
+                    Some(scan) => Slot::Scanned(scan),
+                    None => {
+                        let record = object_json(
+                            room,
+                            id,
+                            object,
+                            time,
+                            &state.terrain,
+                            controller,
+                            state.effects.get(&id),
+                        )
+                        .expect("Mod 对象已在 encode_room_block 上文分流");
+                        parsed.push(record);
+                        Slot::Parsed(parsed.len() - 1)
+                    }
+                }
             }
             _ => Slot::Typed,
         };
-        // ext 目录按 structureType 登记：Generic 从本对象的参考记录读取
-        // （parsed 尾部即刚推入者），类型化对象的结构名从权威枚举派生
-        // （与 object_json 输出同源）。
+        // ext 目录按 structureType 登记：Generic 从扫描元数据或参考记录
+        // 读取（扫描与 serde 对该键同源），类型化对象的结构名从权威枚举
+        // 派生（与 object_json 输出同源）。
         let structure_type = match &slot {
             Slot::Parsed(_) => parsed
                 .last()
                 .and_then(|record| record.get("structureType").and_then(Value::as_str)),
+            Slot::Scanned(scan) => scan.structure_type(),
             Slot::Typed => None,
         }
         .or_else(|| typed_structure_name(object));
@@ -887,19 +905,20 @@ pub(super) fn encode_room_block(
     };
     match candidates {
         None => {
-            for (id, object) in &state.objects {
-                collect(*id, object);
+            for id in state.objects.keys() {
+                collect(*id);
             }
         }
         Some(candidates) => {
             for id in candidates {
-                collect(*id, &state.objects[id]);
+                collect(*id);
             }
         }
     }
-    // 第二遍：建行（借用第一遍的保活数据）并直写编码。
+    // 第二遍：建行（借用第一遍的保活数据）并直写编码。slots 按值消费
+    //（Scanned 的 into_row 取所有权）。
     let mut rows: Vec<KkpvRow<'_>> = Vec::with_capacity(ids.len());
-    for (i, (id, slot)) in ids.iter().zip(&slots).enumerate() {
+    for (i, (id, slot)) in ids.iter().zip(slots).enumerate() {
         let object = &state.objects[id];
         let ext = exts[i].as_ref();
         let ext_replaced = ext.is_some();
@@ -913,7 +932,8 @@ pub(super) fn encode_room_block(
                 controller,
                 state.effects.get(id),
             ),
-            Slot::Parsed(p) => json_row(*id, &parsed[*p], ext_replaced)?,
+            Slot::Parsed(p) => json_row(*id, &parsed[p], ext_replaced)?,
+            Slot::Scanned(scan) => scan.into_row(ext_replaced),
         };
         if let Some(ext) = ext {
             // ext 以嵌套记录进入块字段，键与值和 JSON 投影的 ext 键一致。
