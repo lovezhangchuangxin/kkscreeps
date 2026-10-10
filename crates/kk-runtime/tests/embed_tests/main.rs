@@ -16,6 +16,7 @@ mod embed_strictness_and_partial_commit;
 mod execution_boundary;
 mod ext_intent_counter;
 mod game_api;
+mod heap_limit_family;
 mod input_log_family;
 mod map;
 mod mod_player_api;
@@ -35,6 +36,7 @@ use dual_room_live_fire::*;
 use embed_roundtrip_contract::*;
 use embed_strictness_and_partial_commit::*;
 use game_api::*;
+use heap_limit_family::*;
 use input_log_family::*;
 use map::*;
 use replay_family::*;
@@ -64,6 +66,10 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     scenarios.run(
         "embed_create_shard_validation_impl",
         embed_create_shard_validation_impl,
+    )?;
+    scenarios.run(
+        "heap_limit_family::heap_limit_family_impl",
+        heap_limit_family_impl,
     )?;
     scenarios.run(
         "embed_shard_input_strictness_impl",
@@ -359,7 +365,7 @@ fn embed_engine_suite() -> anyhow::Result<()> {
         cursor_and_header_pairing_impl,
     )?;
     scenarios.run("resume_and_lifecycle_impl", resume_and_lifecycle_impl)?;
-    scenarios.finish(100)?;
+    scenarios.finish(101)?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
     Ok(())
 }

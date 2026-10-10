@@ -149,6 +149,11 @@ pub(super) fn execute(options: &Options) -> anyhow::Result<Value> {
     let mut engine = EmbedEngine::with_world_seed(scene.seed);
     engine.set_player_concurrency(options.concurrency)?;
     engine.set_kkpv_channel(options.kkpv);
+    if let Some(bytes) = scene.player_heap_limit_bytes {
+        engine.set_player_heap_limit(
+            usize::try_from(bytes).context("player_heap_limit_bytes 溢出")?,
+        )?;
+    }
     if options.mod_trace {
         engine.enable_mod_trace();
     }
@@ -251,6 +256,17 @@ pub(super) fn execute(options: &Options) -> anyhow::Result<Value> {
         // 不吞掉缺少 loop 的错误；loop 的返回值不属于游戏提交状态。
         codes.insert(bot.player.clone(), format!("(() => {{ const bot = require({entry}); if (!bot || typeof bot.loop !== 'function') throw new Error('bot entry must export loop'); bot.loop(); return true; }})()"));
         stats.insert(bot.player.clone(), PlayerStats::default());
+    }
+    // 场景声明的堆上限对续跑是硬约束：工作者身份随检查点恢复，场景值
+    // 无法改写恢复中的工作者；与任一恢复工作者不一致时启动前拒绝，
+    // 不允许配置被静默忽略。
+    if let (Some(expected), Some(value)) = (scene.player_heap_limit_bytes, &loaded_value) {
+        for (name, worker) in value["workers"].as_object().into_iter().flatten() {
+            anyhow::ensure!(
+                worker["heap_limit_bytes"].as_u64() == Some(expected),
+                "场景 player_heap_limit_bytes={expected} 与检查点工作者 {name} 的堆上限不一致"
+            );
+        }
     }
     let initial = if let Some(value) = loaded_value {
         let (saved_aliases, initial) = checkpoint::resume(
@@ -445,6 +461,9 @@ pub(super) fn execute(options: &Options) -> anyhow::Result<Value> {
         "execution_strategy": engine.mod_execution_strategy(),
         "disabled_mods": engine.disabled_mods(),
         "channel": if options.kkpv { "kkpv" } else { "json" }, "concurrency": options.concurrency,
+        "player_heap_limit_bytes": scene
+            .player_heap_limit_bytes
+            .unwrap_or(kk_runner::DEFAULT_HEAP_LIMIT as u64),
         "ticks_requested": options.ticks, "ticks_attempted": attempted, "world_ticks_committed": committed,
         "seed": engine.world_seed(), "start_time": start_time, "end_time": engine.get_game_time(),
         "checkpoint_loaded": options.load_checkpoint,

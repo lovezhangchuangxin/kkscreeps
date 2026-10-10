@@ -21,7 +21,10 @@ use crate::watchdog::Watchdog;
 use serde_json::Value;
 
 /// 默认 V8 堆上限，单位字节；不等于整个玩家线程的内存上限。
-const DEFAULT_HEAP_LIMIT: usize = 256 * 1024 * 1024;
+/// 按小内存服务器满员多玩家的容量目标整卡设定（2 GiB 服务器 50 玩家×6 房）；
+/// 堆懒分配且近堆回调只中断过量分配，正常玩家实际占用远低于此值，
+/// 宿主可按部署形态整体覆盖（kk-runtime 的分片创建入口）。
+pub const DEFAULT_HEAP_LIMIT: usize = 64 * 1024 * 1024;
 
 /// Mod 玩家面安装（mods/player-api.js + 全部玩家模块装载与 install 调用）的墙钟
 /// 期限：作者代码首次执行的总闸——超时中断使沙箱创建失败，不楔死
@@ -734,3 +737,17 @@ use host::*;
 
 #[cfg(test)]
 mod command_deadline_tests;
+
+#[cfg(test)]
+mod default_quota_tests {
+    // 钉住容量目标的整卡默认：改这个值等于改所有未显式配置玩家的
+    // 过量分配保险丝，须连同架构文档（sandbox.md）与场景字段一起复审。
+    #[test]
+    fn default_heap_limit_is_64mib() {
+        assert_eq!(super::DEFAULT_HEAP_LIMIT, 64 * 1024 * 1024);
+        assert_eq!(
+            super::SandboxConfig::default().heap_limit_bytes,
+            super::DEFAULT_HEAP_LIMIT
+        );
+    }
+}

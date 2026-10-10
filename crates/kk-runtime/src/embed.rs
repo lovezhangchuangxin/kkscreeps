@@ -85,6 +85,9 @@ pub struct EmbedEngine {
     last_execution_order: Option<Vec<String>>,
     /// 下次通过输入校验的 `create_shard` 使用的沙箱配置；开始注册前整表取走。
     sandbox_configs_for_test: BTreeMap<String, kk_runner::SandboxConfig>,
+    /// 分片创建时未显式注入配置玩家的堆上限默认值；None 用
+    /// `kk_runner::SandboxConfig` 的整卡默认。见 `set_player_heap_limit`。
+    player_heap_limit: Option<usize>,
     /// 是否经 KKPV 二进制通道向沙箱注入世界数据；默认走 JSON 参考通道。
     /// 两条通道装配出的玩家可见面等价，测试按此锁定。
     kkpv_channel: bool,
@@ -175,6 +178,7 @@ impl EmbedEngine {
             pending: None,
             execution_failure: None,
             player_concurrency: std::thread::available_parallelism().map_or(1, |n| n.get().min(2)),
+            player_heap_limit: None,
             fail_after_player_for_test: None,
             last_console: BTreeMap::new(),
             perf: PerfRecorder::default(),
@@ -208,6 +212,20 @@ impl EmbedEngine {
     }
     pub fn player_concurrency(&self) -> usize {
         self.player_concurrency
+    }
+
+    /// 设置创建分片时未显式注入配置玩家的 V8 堆上限默认值。取值范围与
+    /// 检查点工作者身份域一致（16MiB..=4GiB），失败轮存在时不能修改。
+    /// 值在分片创建时消费：switch 与检查点恢复的重建路径按工作者生效
+    /// 配置回注（显式配置优先于此默认），不重复套用。
+    pub fn set_player_heap_limit(&mut self, limit: usize) -> anyhow::Result<()> {
+        self.no_open_round("set_player_heap_limit")?;
+        anyhow::ensure!(
+            limit >= 16 * 1024 * 1024 && limit as u64 <= 4 * 1024 * 1024 * 1024,
+            "玩家堆上限须为 16MiB..=4GiB"
+        );
+        self.player_heap_limit = Some(limit);
+        Ok(())
     }
 
     /// 在轮次之间替换玩家模块，不推进时间；失败候选未处置时拒绝修改。

@@ -250,6 +250,7 @@ mod buildings;
 mod checkpoint;
 mod damage_policy;
 mod heal_policy;
+mod heap_limit;
 mod mass_policy;
 
 mod combat_ranges;

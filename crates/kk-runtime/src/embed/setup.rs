@@ -439,7 +439,17 @@ impl EmbedEngine {
         // 先取走全部配置，避免注册中途失败后残留配置被下一次创建意外使用。
         let configs = std::mem::take(&mut self.sandbox_configs_for_test);
         for (handle, gcl, power) in handles {
-            let mut config = configs.get(&handle).cloned().unwrap_or_default();
+            // 宿主堆上限默认只补没有显式注入配置的玩家；switch 与检查点
+            // 恢复的重建路径按工作者生效配置回注，显式配置优先于此默认。
+            let mut config = match configs.get(&handle) {
+                Some(config) => config.clone(),
+                None => {
+                    let mut config = kk_runner::SandboxConfig::default();
+                    config.heap_limit_bytes =
+                        self.player_heap_limit.unwrap_or(config.heap_limit_bytes);
+                    config
+                }
+            };
             // link 与仓库容量同步到玩家全局常量。计划是常量的
             // 权威来源，测试配置里的同名覆盖以引擎规则为准。
             config.constant_overrides.insert(

@@ -41,6 +41,7 @@ target/release/kkscreeps sim run --scenario /tmp/my-mods/starter/scenario.json -
 | `mods_switch` | 可省略；提交完第 `after_tick` 个显式推进轮后（不计装配热身拍）在同一 root 上整体替换 configs/selection，见[包切换](mod-switching.md) |
 | `objects` | 可省略；按顺序放置 alias、room、kind、spec，alias 必须非空且唯一 |
 | `assertions` | 可省略；最终状态的 JSON Pointer、op 和 value |
+| `player_heap_limit_bytes` | 可省略（默认 64 MiB）；创建分片时全体玩家的 V8 堆上限，16MiB..=4GiB。只对新建世界生效，续跑以检查点工作者身份为准，声明值与恢复工作者不一致则启动前拒绝（见[沙箱](sandbox.md)） |
 
 模块加载沿用[玩家沙箱](sandbox.md)的模块规则，入口必须是 JS 模块并导出 `loop` 函数；每轮调用一次，返回值不作为断言。此入口不等待 Promise。模块顶层代码在首轮执行，而非场景初始化时执行。
 

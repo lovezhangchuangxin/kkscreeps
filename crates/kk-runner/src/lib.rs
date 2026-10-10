@@ -22,7 +22,9 @@ pub use proto::{
     EvalReport, JobGate, JobToken, PendingJob, PlayerThreads, RunEpoch, RunJob, RunReceipt,
     TickReport,
 };
-pub use sandbox::{Sandbox, SandboxConfig, TickOutcome, lifo_violations, live_sandbox_count};
+pub use sandbox::{
+    DEFAULT_HEAP_LIMIT, Sandbox, SandboxConfig, TickOutcome, lifo_violations, live_sandbox_count,
+};
 pub use shared_bundle::SharedKkpvBundle;
 
 pub use kk_pathfinder::TerrainSet;
