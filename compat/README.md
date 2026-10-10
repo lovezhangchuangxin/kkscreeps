@@ -153,6 +153,18 @@ node compat/scripts/bot-offense.mjs --out /tmp/tooangel-offense
 
 模块身份核验复用 [bot-gameplay.mjs](scripts/bot-gameplay.mjs) 的 prepareModules（观察器以 kk_offense 模块身份部署）；观察器 [observer.js](fixtures/sim-tooangel-offense/observer.js) 包裹 bot 主循环，统计 W2N1 可见性与敌方预留观察、attackunreserve 出生（按 creep 名前缀）、对 reserver 的攻击事件与击杀（按目标 id 归因；EVENT_ATTACK 的伤害字段是 damage）与经济共存指标。默认 `--ticks 2900 --split 2400`（`--ticks` 下限 2200，`--split` 须为 1..ticks-1；实测击杀落在 1861-2135 拍——标定期 debug 与 release 十二段观测，终版入库 release 六段为 1888-2048；玩家 CPU 墙钟计量下有抖动，截点留裕度使前缀段 `/objects/reserver missing` 断言稳定成立）：JSON/KKPV 各一段连跑与一段跨进程冷恢复续跑（前缀段只验通用与 harness 检查，进攻指标在完整窗口段判定），每段 `--verify-replay` 逐位重放并比较完整检查点，观察器与敌方脚本哈希逐段比对。最终断言含场景内 `/objects/reserver missing`（reserver 被击杀）、`/rooms/W1N1/controller/owner == bot` 与 spawn 存活；[入库汇总](reports/gameplay-tooangel-offense/summary.json)记录六段报告与指标。结构计数（offenseBirths/attackEventsOnReserver/reserverDamage/可见拍数）四段全窗口一致，时序类指标随墙钟抖动、阈值均为留裕度下限；引擎结算确定性由每段逐位回放保证。bot 对战、多房扩张运营（claim/预留自有房）与长期存活仍是独立切片，不因本片关闭。
 
+### TooAngel 长期存活与冷恢复
+
+锁定提交的 TooAngel 在 RCL1 自家房从布局锚点自举，跑满 86400 拍（≥72h 等价）验证长窗存活与跨进程冷恢复（43200 截点）。观察器统计全部有界（孵化名字表、采样数组封顶、按角色前缀归类），阈值按 86400 拍全长 debug 探针标定。在仓库根目录执行（输出目录须不存在）：
+
+```bash
+bash scripts/fetch-bots.sh
+cargo build --release -p kk-cli
+node compat/scripts/bot-survival.mjs --out /tmp/tooangel-survival
+```
+
+默认 `--ticks 86400 --split 43200`（`--ticks` 下限 86400，`--split` 须为 1..ticks-1）：JSON/KKPV 各一段连跑与一段跨进程冷恢复续跑，每段 `--verify-replay` 逐位重放并比较完整检查点（v2 日志格式，Memory 以摘要对账），观察器哈希逐段比对。业务断言含控制器等级实际爬升且所有权保持（release 实测 RCL5）、storage 后经济角色上岗、scout 周期出生、采集/升级/建造累计下限、bot Memory 字节远离官方 2MB 上限、零捕获异常零跳帧、公开观察 Memory 跨恢复接续。输入日志 v2（Memory 摘要化）下单段 ~1.5KB/拍、四份日志共约 450MB；86400 拍段 release 实测约 12-14 分钟。[入库汇总](reports/gameplay-tooangel-survival/summary.json)记录六段报告与指标。单房长窗自举不含 bot 对战、多房扩张运营或完整 M2B 验收；KKPV 在单玩家下的通道成本差异见台账 D 切片的双通道 A/B 待办。
+
 Mod 生命周期场景可运行 `target/release/kkscreeps sim run --scenario compat/fixtures/sim-mod-tick/scenario.json --ticks 50 --report /tmp/sim-mod-tick.json`。它显式装载官方原型 clockwork，验证两房对象自主更新、玩家类和查询、Mod state 与真实计划身份；没有玩家意图或按官方包 ID 特殊处理。该场景不含对象增删、生产建筑和内容预设。另有 `sim-mod-objects/scenario.json`，使用相同命令运行至少 53 轮，验证 nursery 双房自主生成/到期删除、玩家类/空间查询；报告 mod_objects 包含全部动态 Mod 对象。两场景的 root 都装载 official 的直接子包，尚不是内容预设或显式包选择。
 
 独立 JS 处理器组合可运行 `target/release/kkscreeps mod inspect --root compat/fixtures/mod-composition --report /tmp/composition.json`，使用 `--disable z-gate` 预览依赖闭包。`sim-mod-composition/scenario.json` 至少运行 100 轮，真实玩家核验链序 trace，报告 composition 与实际装配同源。接口和约束见[组合诊断](../docs/architecture/mod-composition.md)。
