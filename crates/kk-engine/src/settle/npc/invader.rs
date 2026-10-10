@@ -33,10 +33,10 @@ pub(super) fn intents(w: &mut Working) -> Result<UserIntents, SettleError> {
         .filter_map(|(id, o)| {
             let friendly = match o {
                 RoomObject::Creep(c) => c.owner == INVADER_OWNER && !c.spawning,
-                RoomObject::Generic(g) => {
-                    let data: serde_json::Value = serde_json::from_str(&g.data).unwrap_or_default();
-                    data["type"] == "powerCreep" && data["owner"] == INVADER_OWNER
-                }
+                RoomObject::Generic(g) => g.data.identity().is_some_and(|identity| {
+                    identity.type_name.as_deref() == Some("powerCreep")
+                        && identity.owner.as_deref() == Some(INVADER_OWNER)
+                }),
                 _ => false,
             };
             friendly.then_some(*id)

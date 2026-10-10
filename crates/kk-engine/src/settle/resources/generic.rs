@@ -39,7 +39,7 @@ pub(in crate::settle) fn generic_capacity(value: &Value, resource: &str) -> (i64
 /// 实验室装入首种矿物时锁定该槽，取空后恢复空闲矿物容量。
 /// 其他字段原样保留，来源：上游 creeps/{transfer,withdraw}.js。
 pub(in crate::settle) fn change_generic_store(
-    data: &mut String,
+    data: &mut kk_schema::GenericData,
     resource: &str,
     amount: i64,
     stores: &kk_mod_api::builtin::StoreRules,
@@ -61,7 +61,7 @@ pub(in crate::settle) fn change_generic_store(
             value["storeCapacity"] = (stores.lab_energy + stores.lab_mineral).into();
         }
     }
-    *data = value.to_string();
+    *data = value.to_string().into();
 }
 
 /// Mod 对象库存（G09.a）的纯变更：只动 store[resource]，不套用 Generic

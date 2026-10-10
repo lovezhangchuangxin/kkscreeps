@@ -7,7 +7,7 @@ use super::*;
 /// 取代"每玩家每房间重复全服扫描"。语义与逐玩家扫描版完全一致：
 /// `room_visible_to` 等价于 room_owners 查表；`observed_rooms_of` 等价于
 /// observed 查表（observer 的归属读取与目标判定在构建时共用同一次
-/// Generic JSON 解析）。绑定世界 generation 失效——所有内容变更路径
+/// Generic 身份缓存）。绑定世界 generation 失效——所有内容变更路径
 /// 都推进 generation（含 observer 标记清零所在的预意图相）。
 #[derive(Debug)]
 pub(crate) struct VisibilityIndex {
@@ -26,8 +26,8 @@ pub(crate) struct VisibilityIndex {
 }
 
 impl VisibilityIndex {
-    /// 单次扫描构建。Generic 只解析一次 JSON：owner 与 observer 判定
-    /// 共用（逐玩家版里这是两次独立解析）。
+    /// 单次扫描构建。Generic 的 owner 与 observer 判定共用载荷身份缓存，
+    /// 未修改载荷跨代际不再解析；替换载荷后新缓存自然失效。
     pub(crate) fn build(world: &World) -> Self {
         let mut index = Self {
             room_owners: BTreeMap::new(),
@@ -54,10 +54,10 @@ impl VisibilityIndex {
                         index.mod_objects.entry(name.clone()).or_default().push(*id);
                     }
                     RoomObject::Generic(g) => {
-                        let Ok(data) = serde_json::from_str::<Value>(&g.data) else {
+                        let Some(data) = g.data.identity() else {
                             continue;
                         };
-                        let owner = data.get("owner").and_then(Value::as_str);
+                        let owner = data.owner.as_deref();
                         if let Some(owner) = owner {
                             index
                                 .room_owners
@@ -65,8 +65,8 @@ impl VisibilityIndex {
                                 .or_default()
                                 .insert(owner.to_string());
                         }
-                        if data.get("structureType").and_then(Value::as_str) == Some("observer")
-                            && let Some(target) = data.get("observeRoom").and_then(Value::as_str)
+                        if data.structure_type.as_deref() == Some("observer")
+                            && let Some(target) = data.observe_room.as_deref()
                             && let Some(owner) = owner
                             && world.rooms.contains_key(target)
                         {

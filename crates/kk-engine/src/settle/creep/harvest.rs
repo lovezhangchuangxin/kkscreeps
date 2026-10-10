@@ -113,7 +113,7 @@ fn intent_harvest_deposit(w: &mut Working, id: ObjId, target_id: ObjId) {
             + amount as u64;
         v["harvested"] = serde_json::json!(harvested);
         v["decayTime"] = serde_json::json!(w.time + c::DEPOSIT_DECAY_TIME as u64);
-        g.data = v.to_string();
+        g.data = v.to_string().into();
         harvested
     };
     let cooldown = (c::DEPOSIT_EXHAUST_MULTIPLY * (harvested as f64).powf(c::DEPOSIT_EXHAUST_POW))

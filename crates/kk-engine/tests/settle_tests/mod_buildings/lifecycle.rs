@@ -232,7 +232,8 @@ fn building_ticks_after_production_within_object_tick() {
                     "hits":500,"hitsMax":500,"storeCapacity":200,
                     "store":{"energy":0},"bl:heat":7,
                 })
-                .to_string(),
+                .to_string()
+                .into(),
             }),
         )
         .unwrap();

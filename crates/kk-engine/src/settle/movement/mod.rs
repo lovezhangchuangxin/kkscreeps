@@ -657,11 +657,16 @@ pub fn check_obstacle_at_xy(
 pub fn type_name_of(obj: &RoomObject) -> std::borrow::Cow<'static, str> {
     match obj {
         RoomObject::Generic(o) => {
-            let data: serde_json::Value = serde_json::from_str(&o.data).unwrap_or_default();
+            let identity = o.data.identity();
             std::borrow::Cow::Owned(
-                data.get("structureType")
-                    .or_else(|| data.get("type"))
-                    .and_then(|v| v.as_str())
+                identity
+                    .and_then(|identity| {
+                        if identity.has_structure_type {
+                            identity.structure_type.as_deref()
+                        } else {
+                            identity.type_name.as_deref()
+                        }
+                    })
                     .unwrap_or("")
                     .to_string(),
             )

@@ -48,7 +48,8 @@ fn rampart(f: &mut Fixture, x: u8, y: u8, hits: i64) -> ObjId {
                     // 远期时钟防止本例的 rampart 被周期衰减移除。
                     "nextDecayTime": 1_000_000,
                 })
-                .to_string(),
+                .to_string()
+                .into(),
             }),
         )
         .unwrap()

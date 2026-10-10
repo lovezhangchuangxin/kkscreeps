@@ -11,38 +11,29 @@ pub fn decode_fields(data: &str) -> Option<Map<String, Value>> {
 }
 
 /// 读取结构类型；缺失、类型错误和无效 JSON 均返回 None。
-pub fn structure_type(data: &str) -> Option<String> {
-    decode_fields(data)?
-        .get("structureType")?
-        .as_str()
+pub fn structure_type(data: &kk_schema::GenericData) -> Option<String> {
+    data.identity()?
+        .structure_type
+        .as_deref()
         .map(str::to_string)
 }
 
-/// 单次解析同时读取 (type, structureType)；与分别调用
-/// [`type_name`]/[`structure_type`] 等价，供每 tick 的对象分类分派
-/// 使用，避免同一条 data 的多趟完整解析。
-pub fn type_and_structure(data: &str) -> (Option<String>, Option<String>) {
-    let Some(fields) = decode_fields(data) else {
+/// 借用载荷身份缓存中的 (type, structureType)；与分别调用
+/// [`type_name`]/[`structure_type`] 等价，分类分派不再逐拍构造 JSON 树。
+pub fn type_and_structure(data: &kk_schema::GenericData) -> (Option<&str>, Option<&str>) {
+    let Some(identity) = data.identity() else {
         return (None, None);
     };
-    let type_name = fields
-        .get("type")
-        .and_then(Value::as_str)
-        .map(str::to_string);
-    let structure = fields
-        .get("structureType")
-        .and_then(Value::as_str)
-        .map(str::to_string);
-    (type_name, structure)
+    (
+        identity.type_name.as_deref(),
+        identity.structure_type.as_deref(),
+    )
 }
 
 /// 读取对象类别键 `type`（nuke/deposit/powerCreep 等非结构对象）；
 /// 缺失、类型错误和无效 JSON 均返回 None。
-pub fn type_name(data: &str) -> Option<String> {
-    decode_fields(data)?
-        .get("type")?
-        .as_str()
-        .map(str::to_string)
+pub fn type_name(data: &kk_schema::GenericData) -> Option<String> {
+    data.identity()?.type_name.as_deref().map(str::to_string)
 }
 
 /// Generic 仓库通过 store/storeCapacity/storeCapacityResource 字段参与结算，

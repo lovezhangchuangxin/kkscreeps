@@ -112,7 +112,7 @@ impl Working {
         let slot = store.entry(resource.to_string()).or_insert(json!(0));
         let v = slot.as_i64().unwrap_or(0);
         *slot = json!(v.saturating_add(taken));
-        g.data = data.to_string();
+        g.data = data.to_string().into();
         amount - taken
     }
 }

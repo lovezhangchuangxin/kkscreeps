@@ -3,6 +3,63 @@
 use super::*;
 
 #[test]
+fn cached_decay_gate_refreshes_owner_and_clock_without_losing_dynamic_fields() {
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    f.controller(3, Some("p1"));
+    let raw = r#"{ "type":"structure", "structureType":"rampart", "owner":"p1", "hits":5000, "hitsMax":1000000, "nextDecayTime":100, "custom":{"value":7} }"#;
+    let id = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Generic(kk_schema::room::GenericObj {
+                id: 0,
+                x: 12,
+                y: 12,
+                data: raw.into(),
+            }),
+        )
+        .unwrap();
+    f.settle(IntentBatch::default());
+    let Some(RoomObject::Generic(g)) = f.world.get(id).map(|(_, o)| o) else {
+        panic!("应存活")
+    };
+    assert_eq!(g.data.as_str(), raw, "未到期且上限不变时不改写 JSON");
+    assert_eq!(g.data.identity().unwrap().owner.as_deref(), Some("p1"));
+    f.world
+        .edit_object(id, |object| {
+            let RoomObject::Generic(g) = object else {
+                panic!("应为 Generic")
+            };
+            let mut value: Value = serde_json::from_str(&g.data).unwrap();
+            value["owner"] = "p2".into();
+            g.data = value.to_string().into();
+            Ok(())
+        })
+        .unwrap();
+    f.settle(IntentBatch::default());
+    let value = f.world.object_json_by_id(id).unwrap();
+    assert_eq!(value["hitsMax"], 0, "归属变化后未到衰减点也同步上限");
+    assert_eq!(value["hits"], 5000);
+    assert_eq!(value["custom"]["value"], 7);
+    let due = f.world.time() + 1;
+    f.world
+        .edit_object(id, |object| {
+            let RoomObject::Generic(g) = object else {
+                panic!("应为 Generic")
+            };
+            let mut value: Value = serde_json::from_str(&g.data).unwrap();
+            value["nextDecayTime"] = due.into();
+            g.data = value.to_string().into();
+            Ok(())
+        })
+        .unwrap();
+    f.settle(IntentBatch::default());
+    let value = f.world.object_json_by_id(id).unwrap();
+    assert_eq!(value["hits"], 4700, "时钟替换后在正确拍衰减");
+    assert_eq!(value["custom"]["value"], 7);
+}
+
+#[test]
 fn container_decay_drops_store_and_dies() {
     // 本例初始耐久为 5000，一次 CONTAINER_DECAY=5000 恰好使容器消失。
     let mut f = Fixture::new(1, terrain_with(&[]));
@@ -19,7 +76,8 @@ fn container_decay_drops_store_and_dies() {
                     "hits": 5000, "nextDecayTime": 1,
                     "store": {"energy": 50, "U": 30},
                 })
-                .to_string(),
+                .to_string()
+                .into(),
             }),
         )
         .unwrap();
@@ -67,7 +125,8 @@ fn rampart_decay_and_hitsmax_sync() {
                     "owner": "p1", "hits": 5000, "hitsMax": 5000,
                     "nextDecayTime": 1,
                 })
-                .to_string(),
+                .to_string()
+                .into(),
             }),
         )
         .unwrap();
@@ -236,7 +295,8 @@ fn rampart_hitsmax_syncs_before_decay_window() {
                     "owner": "p1", "hits": 5000, "hitsMax": 5000,
                     "nextDecayTime": 1_000_000,
                 })
-                .to_string(),
+                .to_string()
+                .into(),
             }),
         )
         .unwrap();
@@ -373,7 +433,8 @@ fn insert_link(f: &mut Fixture, cooldown: u64) -> ObjId {
                     "hits": kk_core::constants::LINK_HITS,
                     "hitsMax": kk_core::constants::LINK_HITS_MAX,
                 })
-                .to_string(),
+                .to_string()
+                .into(),
             }),
         )
         .unwrap()

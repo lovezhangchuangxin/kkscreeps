@@ -82,7 +82,7 @@ fn storage_with(f: &mut Fixture, store: Value) -> ObjId {
                 let mut data: Value = serde_json::from_str(&g.data).unwrap();
                 data["store"] = store;
                 data["storeCapacity"] = serde_json::json!(kk_core::constants::STORAGE_CAPACITY);
-                g.data = data.to_string();
+                g.data = data.to_string().into();
             }
             Ok(())
         })
@@ -457,7 +457,7 @@ fn market_and_terminal_send_reject_declared_resources() {
                     id: 0,
                     x: 25,
                     y: 25,
-                    data: data.to_string(),
+                    data: data.to_string().into(),
                 }),
             )
             .unwrap();
@@ -523,7 +523,7 @@ fn market_and_terminal_send_reject_declared_resources() {
                 v["send"] = serde_json::json!({
                     "targetRoomName": "W5N1", "resourceType": "resmod:crystal", "amount": 50,
                 });
-                g.data = v.to_string();
+                g.data = v.to_string().into();
             }
             Ok(())
         })

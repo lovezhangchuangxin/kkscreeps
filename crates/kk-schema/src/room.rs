@@ -351,14 +351,15 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
-    /// 以 JSON 字符串保存未定义专用结构体的对象，如 tower、rampart 和 terminal。
+    /// 以共享不可变 JSON 文本保存未定义专用结构体的对象，如 tower、rampart 和 terminal。
     /// 世界层还原 JSON，结算层按 structureType 选择已实现的规则；不是统一跳过结算。
-    /// JSON 对象投影时以外层 id/x/y 覆盖对应键。编码层不验证 data 是有效 JSON。
+    /// JSON 对象投影时以外层 id/x/y 覆盖对应键。载荷替换使身份缓存自然失效；
+    /// 编码仍使用原字符串布局，不保存缓存，也不验证 data 是有效 JSON。
     pub GenericObj {
         (pub id: u64)
         (pub x: u8)
         (pub y: u8)
-        (pub data: str)
+        (pub data: crate::GenericData)
     }
 }
 

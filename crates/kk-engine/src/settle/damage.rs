@@ -713,7 +713,7 @@ pub fn set_structure_hits(w: &mut Working, id: ObjId, hits: i64) {
         Some(RoomObject::Generic(o)) => {
             let mut data: serde_json::Value = serde_json::from_str(&o.data).unwrap_or_default();
             data["hits"] = json!(hits);
-            o.data = data.to_string();
+            o.data = data.to_string().into();
         }
         Some(RoomObject::Mod(o)) => {
             let mut data: serde_json::Value = serde_json::from_str(&o.data).unwrap_or_default();

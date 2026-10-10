@@ -58,6 +58,50 @@
    "equivalent": true,
    "actions_equal": true,
    "note": "V8-side double slice: Memory residency with exact-clean walk (memoryCleanWalk, ratchet 2905 green) and api_probe gating (diagnostic Proxy instrumentation off on measurement surfaces, run -26%/CPU -19% single-run) on same fixture/window; kk/xxs P50 835.7/259.5ms (ratio 3.22x this window; xxs ran 24% faster than prior window, cross-window ratios not comparable), CPU 2403/1704 core-ms (1.41x), RSS peak 2470/3416MiB (0.72x); parallelism 2.88x vs 6.57x (fairness gate holds)"
+  },
+  {
+   "path": "50x6-generic-metadata-before/summary.json",
+   "players": 50,
+   "rooms": 300,
+   "warmup": 5,
+   "ticks": 50,
+   "runs": 1,
+   "equivalent": true,
+   "actions_equal": true,
+   "note": "Generic immutable payload / compact metadata before; short diagnostic, no formal acceptance. Before-repeat used exact baseline binary; unreferenced new generic_data.rs remained on disk and is included in source inventory. After-repeat used frozen optimized binary; final rebuilt release hash verified identical. See research for phase reduction and unresolved aggregate CPU/tail results."
+  },
+  {
+   "path": "50x6-generic-metadata-after/summary.json",
+   "players": 50,
+   "rooms": 300,
+   "warmup": 5,
+   "ticks": 50,
+   "runs": 2,
+   "equivalent": true,
+   "actions_equal": true,
+   "note": "Generic immutable payload / compact metadata after; short diagnostic, no formal acceptance. Before-repeat used exact baseline binary; unreferenced new generic_data.rs remained on disk and is included in source inventory. After-repeat used frozen optimized binary; final rebuilt release hash verified identical. See research for phase reduction and unresolved aggregate CPU/tail results."
+  },
+  {
+   "path": "50x6-generic-metadata-before-repeat/summary.json",
+   "players": 50,
+   "rooms": 300,
+   "warmup": 5,
+   "ticks": 50,
+   "runs": 1,
+   "equivalent": true,
+   "actions_equal": true,
+   "note": "Generic immutable payload / compact metadata before-repeat; short diagnostic, no formal acceptance. Before-repeat used exact baseline binary; unreferenced new generic_data.rs remained on disk and is included in source inventory. After-repeat used frozen optimized binary; final rebuilt release hash verified identical. See research for phase reduction and unresolved aggregate CPU/tail results."
+  },
+  {
+   "path": "50x6-generic-metadata-after-repeat/summary.json",
+   "players": 50,
+   "rooms": 300,
+   "warmup": 5,
+   "ticks": 50,
+   "runs": 1,
+   "equivalent": true,
+   "actions_equal": true,
+   "note": "Generic immutable payload / compact metadata after-repeat; short diagnostic, no formal acceptance. Before-repeat used exact baseline binary; unreferenced new generic_data.rs remained on disk and is included in source inventory. After-repeat used frozen optimized binary; final rebuilt release hash verified identical. See research for phase reduction and unresolved aggregate CPU/tail results."
   }
  ],
  "limits": [
@@ -66,7 +110,7 @@
   "engine benchmark, excludes disk/HTTP/client",
   "synthetic mature roles and Memory parameters; not arbitrary real-bot distribution"
  ],
- "next": "optimize dominant world projection, then rerun same 50x6 workload with longer repeated windows",
+ "next": "retain Generic metadata slice after same-engine ABBA short-window validation; next profile shared room projection/encoding and allocation, then safe pipelining; formal xxs speed/RSS target remains unachieved",
  "files_sha256": {
   "50x6-adjacent/fixture-50.json.gz": "71e0ae6bec783ff7f6fd0e38f79d264e9fe8cfcf3dbeb4e2684c91877be017dc",
   "50x6-adjacent/kkscreeps-50-1.json.gz": "4bb0a25622ce0a6ad90efb66310d8b191d7fa830f410bc7118636c1e934658e7",
@@ -111,7 +155,59 @@
   "50x6-after-v8-residency/provenance.json.gz": "2b18ac6fe30fd6353a5b64b8e146ba8fef67104c69686d157f221b4bdda21051",
   "50x6-after-v8-residency/summary.json": "2fe847199c296e24463fdb89d84fc84de2668c9a97f455d369ba508e09e886ef",
   "50x6-after-v8-residency/xxscreeps-50-1.json.gz": "dda583c2765ec12e3dcc230e1519c915dea8d3ac64a55f81b7139015d3bd2f5c",
-  "50x6-after-v8-residency/xxscreeps-50-1.log.gz": "eb22f14c0ca67a7e9d60d92e31f61e3d9ea79d715d9aeb0cac41f7ab306383c8"
+  "50x6-after-v8-residency/xxscreeps-50-1.log.gz": "eb22f14c0ca67a7e9d60d92e31f61e3d9ea79d715d9aeb0cac41f7ab306383c8",
+  "50x6-generic-metadata-before/fixture-50.json.gz": "71e0ae6bec783ff7f6fd0e38f79d264e9fe8cfcf3dbeb4e2684c91877be017dc",
+  "50x6-generic-metadata-before/kkscreeps-50-1.json.gz": "231a0b6f7e72674fef9b3f21a32930fda08a96e9d02d9e2d2bf3c4cffa628d34",
+  "50x6-generic-metadata-before/kkscreeps-50-1.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "50x6-generic-metadata-before/provenance.json.gz": "a942c8be4af36b69931026e000c90b7c134a471ddafcb64e950dd4abd2deace5",
+  "50x6-generic-metadata-before/summary.json": "77c3e3b339e494166f54a3fc07119bf0a69b34b15b6984e8afae15fc7c53aff8",
+  "50x6-generic-metadata-before/xxscreeps-50-1.json.gz": "5bde0dece1f96bd224d39d6889427ed264d520a3f80909d6e42afbca9b65491c",
+  "50x6-generic-metadata-before/xxscreeps-50-1.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "50x6-generic-metadata-after/fixture-50.json.gz": "71e0ae6bec783ff7f6fd0e38f79d264e9fe8cfcf3dbeb4e2684c91877be017dc",
+  "50x6-generic-metadata-after/kkscreeps-50-1.json.gz": "31e7dff300ea7211e950d45201a207ccfcf15e7ad737974b380e3ddd47ba2bda",
+  "50x6-generic-metadata-after/kkscreeps-50-1.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "50x6-generic-metadata-after/kkscreeps-50-2.json.gz": "da53bbca92d49f7ddcaaf5ccfd500d3134edec90d7f43b85db4d4f995bae8efa",
+  "50x6-generic-metadata-after/kkscreeps-50-2.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "50x6-generic-metadata-after/provenance.json.gz": "0f1f4ab799f3719c085f6eae9ab2b0ee8eaaf272cf103d445bcde8a952c35536",
+  "50x6-generic-metadata-after/summary.json": "78bf23f411208cc394196b239037bb099bf0bf69e65f610d13c7cf4c3ecbc024",
+  "50x6-generic-metadata-after/xxscreeps-50-1.json.gz": "79c8cf45fd05a3e32438e4b00ff6bd3714b20397462b0df635270f3fde1b9cbc",
+  "50x6-generic-metadata-after/xxscreeps-50-1.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "50x6-generic-metadata-after/xxscreeps-50-2.json.gz": "c0c67cf7e0015033700efc9d7a42eca657d382acb14c0f83e5a759e78428c602",
+  "50x6-generic-metadata-after/xxscreeps-50-2.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "50x6-generic-metadata-before-repeat/fixture-50.json.gz": "71e0ae6bec783ff7f6fd0e38f79d264e9fe8cfcf3dbeb4e2684c91877be017dc",
+  "50x6-generic-metadata-before-repeat/kkscreeps-50-1.json.gz": "42cb7d3b4ef1f24f4cd2f4f64d1aedf57a6abf1c79be649a797635dc86f014cd",
+  "50x6-generic-metadata-before-repeat/kkscreeps-50-1.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "50x6-generic-metadata-before-repeat/provenance.json.gz": "c4fe493aff0f7ed10faddab09254661ba267cfd23ddeec504d7a2e28f75e4bec",
+  "50x6-generic-metadata-before-repeat/summary.json": "2cba4674a82e7389500e6166cc10f16e584c8cc117a518fec22c6a20c3a64e14",
+  "50x6-generic-metadata-before-repeat/xxscreeps-50-1.json.gz": "e3fba9a9d3a5c6b11bcdd28bc0f66a2937a81639c4404d50fdd6575ce0586b96",
+  "50x6-generic-metadata-before-repeat/xxscreeps-50-1.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "50x6-generic-metadata-after-repeat/fixture-50.json.gz": "71e0ae6bec783ff7f6fd0e38f79d264e9fe8cfcf3dbeb4e2684c91877be017dc",
+  "50x6-generic-metadata-after-repeat/kkscreeps-50-1.json.gz": "bfc1a4f7f84fa863823afe54f63e366c0fe3ef05587a2a967e22f5707d2c89c9",
+  "50x6-generic-metadata-after-repeat/kkscreeps-50-1.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "50x6-generic-metadata-after-repeat/provenance.json.gz": "123a88885135fb08e48aa7a775c86cdb35df8846054cd020789fffce90a17406",
+  "50x6-generic-metadata-after-repeat/summary.json": "eb562bc4b1909f2fb04dffcaf279b8816e13860c49062672e8f9ad85ff852ece",
+  "50x6-generic-metadata-after-repeat/xxscreeps-50-1.json.gz": "828068d2e138dc04da74d6fee57736ed806df40db8848cd40501e4692c2ee7f3",
+  "50x6-generic-metadata-after-repeat/xxscreeps-50-1.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "50x6-generic-metadata-profile/sample.txt.gz": "8ae56a8565ad1946d0d8e8f132f24b7d6066752df2b798f8f3e79dd355110144",
+  "50x6-generic-metadata-profile/probe.json.gz": "b248aec4c92c03c409e37faa55ecfc9b52def79d859170fbfc3e2962e2983696",
+  "50x6-generic-metadata-profile/full-check.log.gz": "760ceb3b59c03bc885d9e7bb4e43abeed45aa540dc8cdcb652ea9d59ba01cf2b",
+  "50x6-generic-metadata-profile/notes.json": "b1cdae4b70f42b8be696e34928b0ff5debc0d327dc38e0996ffe41102b8be6d1",
+  "50x6-generic-metadata-profile/ratchet.log.gz": "44c27922f4d5d9b3477492873c5a2dd03bdfde85e97538fefb3f1cb3750b6737",
+  "50x6-generic-metadata-abba/1-old.json.gz": "842e58f8502462638919a5cc39ec3c59b82cd7818a189fb9f4dcb5252b680fa4",
+  "50x6-generic-metadata-abba/1-old.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "50x6-generic-metadata-abba/2-new.json.gz": "9413ebc92295cf22214884db252ba38d7e38a186f3d8c0ef52c60baa798131b9",
+  "50x6-generic-metadata-abba/2-new.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "50x6-generic-metadata-abba/3-new.json.gz": "5ff5137899262935078b729bfbf762f08cbb9d2d8be84bedc6462f9a640ba62b",
+  "50x6-generic-metadata-abba/3-new.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "50x6-generic-metadata-abba/4-old.json.gz": "c2712e9c808ef7876b9da883d303d431c56dc9ccbc83845629fcd459c4cd3dba",
+  "50x6-generic-metadata-abba/4-old.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "50x6-generic-metadata-abba/fixture-50.json.gz": "bf9e801ebd5539444edcc26c33e246cfca21386dc17e22abedf753971a727665",
+  "50x6-generic-metadata-abba/progress.json.gz": "78db4a2e7d7ac2174aa4bc4ced60aafbcd059a8d3f43365bf20fc3b329e2b56e",
+  "50x6-generic-metadata-abba/provenance.json.gz": "9ae6d7f673bd7ec9f955f77c3dd04294cc5ecd735fa434494dc2242ff7707622",
+  "50x6-generic-metadata-abba/summary.json": "ab7992f4aac378c5e1dfcabfb45095a26269c3d9eff3de2c9e26aaeff7ec9b85",
+  "50x6-generic-metadata-abba/experiment.py.gz": "702fe0713423a0862fb9be8125599efb6ae9ccd0e5ec34e7793f958299f6738c",
+  "50x6-generic-metadata-abba/implementation.patch.gz": "4415da3b67c13c7242b8aca820c5695deba0639e64340261d129850f5063474e",
+  "50x6-generic-metadata-profile/precommit-full-check.log.gz": "32dee28e50c4606ca2f93b6f42eb3c98dccb3d38f84bcabb0f64da928d39b17e"
  },
  "historical_strict_diagnostics": [
   {
@@ -129,6 +225,27 @@
    "players": 1,
    "rooms": 6,
    "reason": "Game.time=504 read: road(25,24) hits 5000 vs 4900; repair target/route diverge"
+  }
+ ],
+ "same_engine_experiments": [
+  {
+   "path": "50x6-generic-metadata-abba/summary.json",
+   "players": 50,
+   "rooms": 300,
+   "order": [
+    "old",
+    "new",
+    "new",
+    "old"
+   ],
+   "warmup": 30,
+   "ticks": 100,
+   "concurrency": 4,
+   "runs_per_version": 2,
+   "equivalent": true,
+   "actions_equal": true,
+   "formal_acceptance": false,
+   "decision": "retain Generic metadata slice; both adjacent pairs wall P50 ~17% lower and CPU ~3%/~6% lower. Run-percentile means wall -17.1%, CPU -5.0%, RSS median -12.1%; mean peak -1.8% is noisy and not a stable peak reduction claim. No xxscreeps was run in ABBA; goal remains unachieved."
   }
  ]
 }

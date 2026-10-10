@@ -120,7 +120,7 @@ fn working_with_gauge() -> (Working, ObjId) {
             id: id.0,
             x: 10,
             y: 10,
-            data: data.to_string(),
+            data: data.to_string().into(),
         }),
     );
     (w, id)
@@ -210,7 +210,8 @@ fn write_face_rejects_undeclared_and_fieldless_buildings() {
                 "type":"structure","structureType":"link","owner":"p1",
                 "hits":100,"hitsMax":100,"cooldown":0,
             })
-            .to_string(),
+            .to_string()
+            .into(),
         }),
     );
     let err = w
@@ -234,7 +235,8 @@ fn write_face_rejects_undeclared_and_fieldless_buildings() {
                 "type":"structure","structureType": bare.as_str(), "owner":"p1",
                 "hits":500,"hitsMax":500,
             })
-            .to_string(),
+            .to_string()
+            .into(),
         }),
     );
     let err = w
@@ -318,7 +320,8 @@ fn building_record_schema_is_enforced_at_edit_restore_and_publication() {
         x: 10,
         y: 10,
         data: serde_json::json!({"type":"structure", "structureType":"bl:gauge", "bl:heat":7})
-            .to_string(),
+            .to_string()
+            .into(),
     });
     let id = engine.insert_object("W1N1", object).unwrap();
     let before = serde_json::to_value(engine.checkpoint().unwrap()).unwrap();
@@ -329,7 +332,7 @@ fn building_record_schema_is_enforced_at_edit_restore_and_publication() {
             };
             let mut record: Value = serde_json::from_str(&g.data).unwrap();
             record["bl:heat"] = invalid.clone();
-            g.data = record.to_string();
+            g.data = record.to_string().into();
         };
         assert!(
             engine
@@ -339,7 +342,7 @@ fn building_record_schema_is_enforced_at_edit_restore_and_publication() {
                     };
                     let mut record: Value = serde_json::from_str(&g.data).unwrap();
                     record["bl:heat"] = invalid.clone();
-                    g.data = record.to_string();
+                    g.data = record.to_string().into();
                     Ok(())
                 })
                 .is_err()
@@ -370,7 +373,7 @@ fn building_record_schema_is_enforced_at_edit_restore_and_publication() {
                 };
                 let mut record: Value = serde_json::from_str(&g.data).unwrap();
                 record["bl:heat"] = invalid.clone();
-                g.data = record.to_string();
+                g.data = record.to_string().into();
                 Ok(())
             })
             .unwrap();

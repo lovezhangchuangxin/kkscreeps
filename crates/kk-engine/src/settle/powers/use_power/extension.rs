@@ -130,7 +130,7 @@ pub(super) fn cast(w: &mut Working, target_id: ObjId, level: i64) -> bool {
                     .and_then(Value::as_i64)
                     .unwrap_or(0);
                 data["store"]["energy"] = json!(energy - sent);
-                g.data = data.to_string();
+                g.data = data.to_string().into();
             }
         }
         _ => {}

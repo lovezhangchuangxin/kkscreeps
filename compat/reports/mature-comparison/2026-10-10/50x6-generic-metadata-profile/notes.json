@@ -1,0 +1,9 @@
+{
+  "scope": "diagnostic only; actual tick sampling, 50 players x 6 rooms, warmup 5 / 120 probe ticks, concurrency 4; not paired comparison or formal acceptance",
+  "binary_sha256": "a8e68dbcbe4425b2223cb5cf508a5b006a1df43d75b3e70aca147d51705d123e",
+  "fixture_sha256": "bd48a04f9f66c5e1e3c6bb1c8726d26ac80c7000188932937974c68656cbd440",
+  "probe_command": "target/release/kkscreeps compare-probe --fixture /tmp/kkscreeps-wrapper-baseline/fixture-50.json --warmup 5 --ticks 120 --concurrency 4 --report /tmp/kkscreeps-major-cost-profile.json",
+  "sample_command": "sample 48320 10 1 -file /tmp/kkscreeps-major-cost-sample.txt",
+  "main_tick_samples": 7530,
+  "interpretation": "Inclusive nested stacks; counts must not be added as independent percentages. Room clone 66, project_and_execute 2881, run wait 2424, settlement 2130; shared encode subtree 2197. Diagnostic fixture completion marker 55 differs from extended probe length 120; no workload equivalence claim for profile."
+}

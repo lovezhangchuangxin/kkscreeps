@@ -164,7 +164,7 @@ fn place_building(f: &mut Fixture, key: &str, x: u8, y: u8, store: Value) -> Obj
                 id: 0,
                 x,
                 y,
-                data: data.to_string(),
+                data: data.to_string().into(),
             }),
         )
         .unwrap()
@@ -403,7 +403,7 @@ fn mod_building_takes_damage_repairs_and_ruins_on_destroy() {
             if let Some(RoomObject::Generic(g)) = Some(object) {
                 let mut v: Value = serde_json::from_str(&g.data).unwrap();
                 v["hits"] = serde_json::json!(1000);
-                g.data = v.to_string();
+                g.data = v.to_string().into();
             }
             Ok(())
         })

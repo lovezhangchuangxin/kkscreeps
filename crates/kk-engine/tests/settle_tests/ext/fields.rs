@@ -107,7 +107,8 @@ fn place_link(f: &mut Fixture, x: u8, y: u8, energy: i64) -> ObjId {
                     "store": {"energy": energy}, "storeCapacity": 800,
                     "storeCapacityResource": {"energy": 800},
                 })
-                .to_string(),
+                .to_string()
+                .into(),
             }),
         )
         .unwrap()

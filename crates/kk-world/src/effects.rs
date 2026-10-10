@@ -143,7 +143,7 @@ pub(crate) fn extract(
         }
         out.push(entry);
     }
-    g.data = data.to_string();
+    g.data = data.to_string().into();
     Ok(Some(out))
 }
 
@@ -158,7 +158,9 @@ mod tests {
             id: 0,
             x: 20,
             y: 20,
-            data: json!({"type":"structure","structureType":"tower","effects":entries}).to_string(),
+            data: json!({"type":"structure","structureType":"tower","effects":entries})
+                .to_string()
+                .into(),
         })
     }
 
@@ -190,7 +192,7 @@ mod tests {
                 };
                 let mut data: Value = serde_json::from_str(&g.data).unwrap();
                 data["effects"] = json!([{"power":3,"level":5,"endTime":20}]);
-                g.data = data.to_string();
+                g.data = data.to_string().into();
                 Ok(())
             })
             .unwrap();

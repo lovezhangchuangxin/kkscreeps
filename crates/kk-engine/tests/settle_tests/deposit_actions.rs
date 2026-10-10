@@ -12,7 +12,7 @@ fn place_deposit(f: &mut Fixture, x: u8, y: u8, data: Value) -> ObjId {
                 id: 0,
                 x,
                 y,
-                data: data.to_string(),
+                data: data.to_string().into(),
             }),
         )
         .unwrap()

@@ -54,7 +54,7 @@ impl MarketFixture {
                     id: 0,
                     x: 25,
                     y: 25,
-                    data: data.to_string(),
+                    data: data.to_string().into(),
                 }),
             )
             .unwrap()
@@ -72,7 +72,7 @@ impl MarketFixture {
                     "targetRoomName": target, "resourceType": rt,
                     "amount": amount, "description": null,
                 });
-                g.data = v.to_string();
+                g.data = v.to_string().into();
                 Ok(())
             })
             .unwrap();

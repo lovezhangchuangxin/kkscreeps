@@ -32,7 +32,7 @@ fn notify_when_attacked(w: &mut Working, player: &str, id: ObjId, data: &IntentD
             // Generic 将标志保存在 JSON 中，供世界投影读取。
             let mut v: Value = serde_json::from_str(&o.data).unwrap_or_default();
             v["notifyWhenAttacked"] = Value::Bool(enabled);
-            o.data = v.to_string();
+            o.data = v.to_string().into();
         }
         _ => {}
     }
@@ -102,7 +102,7 @@ pub fn settle_room(
                 // 无新意图的观察视野恰一拍后失效。前置 contains 判避免逐
                 // 对象序列化；类型门防 Mod 配方字段名同名被逐拍剥离。
                 v.as_object_mut().unwrap().remove("observeRoom");
-                g.data = v.to_string();
+                g.data = v.to_string().into();
             } else if super::powers::is_power_creep(creep)
                 && let RoomObject::Generic(g) = creep
                 && let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&g.data)
@@ -113,7 +113,7 @@ pub fn settle_room(
                 // falsy 守卫、墓碑遗言分支）下与之等价，且免去每 tick 全量
                 // JSON 序列化。变更时由写入方整体回写。
                 v.as_object_mut().unwrap().remove("actionLog");
-                g.data = v.to_string();
+                g.data = v.to_string().into();
             }
         }
         // 处理指令前，按控制器配额计算 spawn/extension 是否启用。
@@ -236,15 +236,14 @@ pub fn settle_room(
                 Some(RoomObject::Storage(_)) => "storage",
                 Some(RoomObject::Mod(_)) => "mod",
                 Some(RoomObject::Generic(g)) => {
-                    // 单次解析取回 (type, structureType)：分派只需这两个键，
-                    // 不再对同一条 data 逐分支重复完整解析。
+                    // 分派借用不可变载荷的身份缓存；未修改对象跨拍不再解析。
                     let (type_name, structure) =
                         kk_world::domain::generic::type_and_structure(&g.data);
-                    match type_name.as_deref() {
+                    match type_name {
                         Some("nuke") => "nuke",
                         Some("powerCreep") => "powerCreep",
                         Some("deposit") => "deposit",
-                        _ => match structure.as_deref() {
+                        _ => match structure {
                             Some("container" | "rampart") => "decay",
                             Some("powerBank") => "powerBank",
                             Some("portal") => "portal",

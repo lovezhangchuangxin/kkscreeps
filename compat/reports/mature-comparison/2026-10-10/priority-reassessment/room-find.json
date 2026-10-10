@@ -1,0 +1,222 @@
+{
+  "success": true,
+  "equivalent": true,
+  "comparison_policy": "same initial fixture, complete player/room execution and real activity; gameplay divergence disclosed",
+  "strict_equivalence": false,
+  "scope": "engine execution/settlement/commit; no disk or HTTP",
+  "formal_window": false,
+  "provenance": {
+    "payload_manifest": {
+      "binary": "cec87f43bd5d6fdc24ebc86e8e723cfc67a46a8912d632852b0322926178a1ff",
+      "node": "8d66cad090d087ed8fac66d8f7248c8a9a55454680232a6d109f609aa2decf89",
+      "kk_sources": "7b3f85dcb35cd329571655517319b861a377da770c61d9d905892400357a10ab",
+      "cargo_lock": "3deebe9397aef614d249d4c927009044330648470328eff96205ec294031303e",
+      "xxs": "150bbf70f65c7898e77dd6e9c4c30e6732a45bf56c058b4ca5b011ff20792ff7",
+      "lodash": "58ace6bc5f2d226cae785c9039ff492a694483bc7e72f77e5e144e0663fbfdb1",
+      "xxs_lock": "c82429cf9529d9730273f792a2e5c83bba4be908f64940b48a94ed11a8435ecf",
+      "isolated_vm": "2c7d62be3d5803f1aa6bf58d79c0711901a68b766da16519acbf810c37d667cb",
+      "harness": "2a79d3402debd35efeb8b5dd7005fbc3bff8101eaea0653b416d6ade90ea7005",
+      "adapter": "d7883f84db328f03684e91be4de6dc06a0bf2629edc389f48362f179d6689f05",
+      "player": "af03ad7df5f1ba12f173695133ceb8126389844081d6a7ac77b9d865ff29f034",
+      "mature": "a3f1ae51c63c83fe6afaa7b9064640955fb04d3350be9749b529ddb3b2fa2ce0",
+      "mature_player": "b6d050331e0ad6deb09950c3de08b695719c9034bcc055b0c04a8da653a1d40d",
+      "mature_adapter": "410f0789feb0b9cacf2bcabfa41a5de52ac71af433a4691ca006665c963dab32"
+    },
+    "binary_sha256": "cec87f43bd5d6fdc24ebc86e8e723cfc67a46a8912d632852b0322926178a1ff",
+    "xxs_tree_sha256": "150bbf70f65c7898e77dd6e9c4c30e6732a45bf56c058b4ca5b011ff20792ff7",
+    "isolated_vm_sha256": "2c7d62be3d5803f1aa6bf58d79c0711901a68b766da16519acbf810c37d667cb",
+    "node": "v24.11.0",
+    "node_sha256": "8d66cad090d087ed8fac66d8f7248c8a9a55454680232a6d109f609aa2decf89",
+    "machine_model": "Mac16,12",
+    "memory_bytes": 25769803776,
+    "xxs_commit": "5ff0d1a682170f6b5f9c8bac3e703767625988e0",
+    "xxs_status": "?? .python-version\n?? src/",
+    "kk_commit": "9fa9b1295525c52203047be1e3a8db77ca5ead39",
+    "kk_status": "M compat/reports/kkscreeps.json\n M crates/kk-runner/src/prelude/game/kkpv.js\n M crates/kk-runner/src/prelude/game/memory.js\n M crates/kk-runner/src/prelude/game/room/queries.js\n M crates/kk-runner/tests/sandbox_tests/main.rs\n M docs/architecture/sandbox.md\n M docs/plans/mod-next-batches.md\n?? crates/kk-runner/tests/sandbox_tests/residency_regressions.rs\n?? crates/kk-runner/tests/sandbox_tests/room_query_lifetime.rs",
+    "adapter_sha256": "d7883f84db328f03684e91be4de6dc06a0bf2629edc389f48362f179d6689f05",
+    "harness_sha256": "2a79d3402debd35efeb8b5dd7005fbc3bff8101eaea0653b416d6ade90ea7005",
+    "machine": "macOS-15.7.3-arm64-arm-64bit",
+    "processor": "arm",
+    "logical_cpus": 10,
+    "command": [
+      "scripts/benchmark/compare.py",
+      "--xxs-root",
+      "/Users/keqing/Desktop/projects/sources/screeps/xxscreeps",
+      "--players",
+      "50",
+      "--runs",
+      "1",
+      "--warmup",
+      "5",
+      "--ticks",
+      "50",
+      "--concurrency",
+      "4",
+      "--timeout",
+      "1800",
+      "--output",
+      "/tmp/kkscreeps-room-find-after"
+    ],
+    "started_unix": 1791637339.225117,
+    "finished_unix": 1791637429.147678,
+    "xxs_status_after": "?? .python-version\n?? src/"
+  },
+  "summary": [
+    {
+      "profile": "mature",
+      "players": 50,
+      "rooms": 300,
+      "runs": 1,
+      "workload_comparisons": [
+        {
+          "state": {
+            "before": {
+              "equal": true,
+              "first_difference": null,
+              "rooms_with_difference": 0
+            },
+            "after": {
+              "equal": true,
+              "first_difference": null,
+              "rooms_with_difference": 0
+            }
+          },
+          "action_counts_equal": true,
+          "actions": {
+            "factory": {
+              "kkscreeps": 300,
+              "xxscreeps": 300,
+              "delta_percent": 0.0
+            },
+            "harvest": {
+              "kkscreeps": 24600,
+              "xxscreeps": 24600,
+              "delta_percent": 0.0
+            },
+            "link": {
+              "kkscreeps": 1500,
+              "xxscreeps": 1500,
+              "delta_percent": 0.0
+            },
+            "mineral": {
+              "kkscreeps": 2100,
+              "xxscreeps": 2100,
+              "delta_percent": 0.0
+            },
+            "move": {
+              "kkscreeps": 51300,
+              "xxscreeps": 51300,
+              "delta_percent": 0.0
+            },
+            "observe": {
+              "kkscreeps": 15000,
+              "xxscreeps": 15000,
+              "delta_percent": 0.0
+            },
+            "pathSearch": {
+              "kkscreeps": 6900,
+              "xxscreeps": 6900,
+              "delta_percent": 0.0
+            },
+            "power": {
+              "kkscreeps": 300,
+              "xxscreeps": 300,
+              "delta_percent": 0.0
+            },
+            "reaction": {
+              "kkscreeps": 2400,
+              "xxscreeps": 2400,
+              "delta_percent": 0.0
+            },
+            "terminal": {
+              "kkscreeps": 300,
+              "xxscreeps": 300,
+              "delta_percent": 0.0
+            },
+            "transfer": {
+              "kkscreeps": 16500,
+              "xxscreeps": 16500,
+              "delta_percent": 0.0
+            },
+            "upgrade": {
+              "kkscreeps": 8400,
+              "xxscreeps": 8400,
+              "delta_percent": 0.0
+            },
+            "withdraw": {
+              "kkscreeps": 11100,
+              "xxscreeps": 11100,
+              "delta_percent": 0.0
+            }
+          },
+          "equivalent": true
+        }
+      ],
+      "kkscreeps": {
+        "p50_ms": 819.846875,
+        "p95_ms": 1216.653916,
+        "p99_ms": 1704.3701250000001,
+        "cpu_core_ms_per_tick": 2157.7843399999997,
+        "rss_bytes_sampled_p50": 2310864896,
+        "rss_bytes_sampled_peak": 2394849280
+      },
+      "xxscreeps": {
+        "p50_ms": 260.5686249999999,
+        "p95_ms": 396.00795899999866,
+        "p99_ms": 405.2483749999992,
+        "cpu_core_ms_per_tick": 1731.3819,
+        "rss_bytes_sampled_p50": 3454091264,
+        "rss_bytes_sampled_peak": 4013817856
+      },
+      "kkscreeps_over_xxscreeps": {
+        "p50_ms": 3.146376026660924,
+        "p95_ms": 3.0722966252302117,
+        "p99_ms": 4.205742034129078,
+        "cpu_core_ms_per_tick": 1.246278674855039,
+        "rss_bytes_sampled_p50": 0.6690225357056461,
+        "rss_bytes_sampled_peak": 0.5966512098749306
+      },
+      "observed_goal": {
+        "faster_p50": false,
+        "lower_peak_rss": true
+      }
+    }
+  ],
+  "kkscreeps_phase_diagnostics": {
+    "ticks": 50,
+    "phases": {
+      "project": {
+        "count": 50,
+        "p50_ms": 315.349291,
+        "p95_ms": 418.612043,
+        "p99_ms": 545.074794,
+        "max_ms": 545.074794,
+        "total_ms": 16780.735747
+      },
+      "run": {
+        "count": 50,
+        "p50_ms": 246.347746,
+        "p95_ms": 490.98437,
+        "p99_ms": 818.350081,
+        "max_ms": 818.350081,
+        "total_ms": 14374.344003
+      },
+      "settle": {
+        "count": 50,
+        "p50_ms": 239.232,
+        "p95_ms": 339.127958,
+        "p99_ms": 381.557416,
+        "max_ms": 381.557416,
+        "total_ms": 12894.414876999996
+      },
+      "wall": {
+        "count": 50,
+        "p50_ms": 819.846875,
+        "p95_ms": 1216.653916,
+        "p99_ms": 1704.3701250000001,
+        "max_ms": 1704.3701250000001
+      }
+    }
+  },
+  "archive_note": "摘要与阶段统计；未归档完整世界快照。命令、代码及依赖哈希在 provenance，原始诊断输出路径为 /tmp/kkscreeps-room-find-after"
+}

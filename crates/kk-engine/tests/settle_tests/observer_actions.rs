@@ -14,7 +14,8 @@ fn observer(f: &mut Fixture) -> ObjId {
                 data: serde_json::json!({
                     "type": "structure", "structureType": "observer", "owner": "p1"
                 })
-                .to_string(),
+                .to_string()
+                .into(),
             }),
         )
         .unwrap()
@@ -110,7 +111,8 @@ fn observer_settle_rejects_injected_violations() {
                 data: serde_json::json!({
                     "type": "structure", "structureType": "observer"
                 })
-                .to_string(),
+                .to_string()
+                .into(),
             }),
         )
         .unwrap();

@@ -190,7 +190,7 @@ pub(super) fn pc_use_power(w: &mut Working, id: ObjId, d: &IntentData) {
                 // 首次施放永久锁定等级；到期不降级，同级可重新刷新效果。
                 // 来源：power-creeps/usePower.js 的 OPERATE_FACTORY 分支。
                 data["level"] = json!(level);
-                g.data = data.to_string();
+                g.data = data.to_string().into();
             }
             let effects = w.room.effects.entry(target_id).or_default();
             effects.retain(|effect| effect.power != power);
@@ -215,7 +215,7 @@ pub(super) fn pc_use_power(w: &mut Working, id: ObjId, d: &IntentData) {
     let power_key = power.to_string();
     v["powers"][&power_key] = json!({ "level": level, "cooldownTime": w.time + cooldown as u64 });
     if let Some(RoomObject::Generic(o)) = w.room.objects.get_mut(&id) {
-        o.data = v.to_string();
+        o.data = v.to_string().into();
     }
     w.push_event(
         c::EVENT_POWER,

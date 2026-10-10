@@ -13,7 +13,7 @@ fn warehouse(f: &mut Fixture, kind: &str, fields: Value) -> ObjId {
             data.as_object_mut()
                 .unwrap()
                 .extend(fields.as_object().unwrap().clone());
-            g.data = data.to_string();
+            g.data = data.to_string().into();
             Ok(())
         })
         .unwrap();
@@ -163,7 +163,7 @@ fn competing_transfers_share_candidate_capacity_and_private_rampart_blocks_withd
             };
             let mut data: Value = serde_json::from_str(&g.data).unwrap();
             data["owner"] = Value::Null;
-            g.data = data.to_string();
+            g.data = data.to_string().into();
             Ok(())
         })
         .unwrap();
@@ -408,7 +408,7 @@ fn withdraw_respects_private_rampart_and_safe_mode() {
                 if let Some(RoomObject::Generic(g)) = Some(object) {
                     let mut v: Value = serde_json::from_str(&g.data).unwrap();
                     v["isPublic"] = serde_json::json!(rampart_public);
-                    g.data = v.to_string();
+                    g.data = v.to_string().into();
                 }
                 Ok(())
             })

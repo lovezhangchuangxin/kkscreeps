@@ -105,7 +105,7 @@ pub fn launch_nuke(w: &mut Working, id: ObjId, d: &IntentData) {
         && let Ok(mut v) = serde_json::from_str::<Value>(&g.data)
     {
         v["launchNuke"] = json!({ "roomName": target, "x": x, "y": y });
-        g.data = v.to_string();
+        g.data = v.to_string().into();
     }
 }
 
@@ -175,7 +175,7 @@ pub fn settle_launches(
             // 源房 novice/respawn：官方处理器在扣库前丢弃（launch-nuke.js:22-24），
             // 只清标记不消耗库存与冷却。
             if source_protected {
-                g.data = v.to_string();
+                g.data = v.to_string().into();
                 continue;
             }
             // 官方置 0 保留键；不预置 store 键（畸形数据无库时同样清冷却
@@ -185,7 +185,7 @@ pub fn settle_launches(
                 v["store"]["G"] = json!(0);
             }
             v["cooldownTime"] = json!(time + c::NUKER_COOLDOWN as u64);
-            g.data = v.to_string();
+            g.data = v.to_string().into();
             launches.push(Pending {
                 launch_room: name.clone(),
                 target: send
@@ -217,7 +217,7 @@ pub fn settle_launches(
                 id,
                 x: p.x as u8,
                 y: p.y as u8,
-                data: data.to_string(),
+                data: data.to_string().into(),
             }),
         );
     }
@@ -306,7 +306,7 @@ fn impact(w: &mut Working, nuke_id: ObjId, nx: u8, ny: u8) {
                     && let Ok(mut v) = serde_json::from_str::<Value>(&g.data)
                 {
                     v["hits"] = json!(0);
-                    g.data = v.to_string();
+                    g.data = v.to_string().into();
                 }
             }
             _ => {}

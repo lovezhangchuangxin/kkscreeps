@@ -11,6 +11,9 @@
 //! [`macro@kk_room_object!`] 生成对象枚举、访问器和单字节标签编解码。
 //! [`room`] 提供完整快照的魔数、版本及尾部字节检查；业务字段的合法性由调用方检查。
 
+mod generic_data;
+pub use generic_data::{GenericData, GenericIdentity};
+
 /// 二进制读写错误的统一形态。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SchemaError {

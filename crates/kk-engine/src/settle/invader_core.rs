@@ -98,7 +98,7 @@ pub(super) fn tick(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
         }
     }
     if let Some(RoomObject::Generic(core)) = w.room.objects.get_mut(&id) {
-        core.data = data.to_string();
+        core.data = data.to_string().into();
     }
     Ok(())
 }

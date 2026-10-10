@@ -14,6 +14,7 @@ mod kkpv_channel;
 mod mod_player_api;
 mod pathfinder_family;
 mod prelude_forms;
+mod residency_regressions;
 mod resource_host_and_nearheap;
 mod room_forms;
 mod store_spawn_and_viewer;
@@ -24,6 +25,7 @@ use kkpv_channel::*;
 use mod_player_api::*;
 use pathfinder_family::*;
 use prelude_forms::*;
+use residency_regressions::*;
 use resource_host_and_nearheap::*;
 use room_forms::*;
 use store_spawn_and_viewer::*;
@@ -118,6 +120,11 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     scenarios.run("skip_recharge_candidate_impl", skip_recharge_candidate_impl)?;
     scenarios.run("lifo_registry_drains", lifo_registry_drains)?;
     scenarios.run("memory_alias_setters", memory_alias_setters)?;
+    scenarios.run("memory_residency_regressions", memory_residency_regressions)?;
+    scenarios.run(
+        "kkpv_residency_prototype_guard",
+        kkpv_residency_prototype_guard,
+    )?;
     scenarios.run(
         "roomposition_official_semantics",
         roomposition_official_semantics,
@@ -191,7 +198,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
         "movement_codec_capture_and_cache_lifetime",
         movement_codec_capture_and_cache_lifetime,
     )?;
-    scenarios.finish(59)?;
+    scenarios.finish(61)?;
     assert_eq!(kk_runner::lifo_violations(), 0, "全流程 LIFO 纪律零违规");
     Ok(())
 }

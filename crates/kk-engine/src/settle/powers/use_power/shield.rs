@@ -92,7 +92,7 @@ pub(super) fn cast(w: &mut Working, pos: (u8, u8), owner: &str, level: i64) -> b
         id: 0,
         x,
         y,
-        data: data.to_string(),
+        data: data.to_string().into(),
     })) else {
         return false;
     };

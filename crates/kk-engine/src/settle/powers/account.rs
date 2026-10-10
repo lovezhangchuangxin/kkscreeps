@@ -390,7 +390,7 @@ fn upgrade_power_creep(
             .cloned()
             .unwrap_or(Value::Null);
         v["powers"][&key] = json!({ "level": power_level, "cooldownTime": cooldown });
-        o.data = v.to_string();
+        o.data = v.to_string().into();
     }
 }
 
@@ -494,7 +494,7 @@ fn spawn_power_creep(
                 id,
                 x: spawn_obj.x,
                 y: spawn_obj.y,
-                data: data.to_string(),
+                data: data.to_string().into(),
             }),
         );
     }
@@ -580,7 +580,7 @@ fn die_power_creep(
                 *amount -= moved;
                 free -= moved;
             }
-            g.data = cv.to_string();
+            g.data = cv.to_string().into();
         }
     }
     let (store, store_extra) = split_store(&entries);

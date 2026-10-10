@@ -366,7 +366,7 @@ fn complete_construction(
                 id: 0,
                 x: site.x,
                 y: site.y,
-                data: data.to_string(),
+                data: data.to_string().into(),
             })
         }
     };

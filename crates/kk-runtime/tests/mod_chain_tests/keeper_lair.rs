@@ -169,7 +169,7 @@ fn keeper_edge_does_not_cross_rooms_and_invalid_setup_is_atomic() -> anyhow::Res
         };
         let mut data: Value = serde_json::from_str(&g.data)?;
         data["nextSpawnTime"] = json!(u64::MAX);
-        g.data = data.to_string();
+        g.data = data.to_string().into();
         bad["engine"]["world"]["rooms"]["W1N1"]["snapshot"] =
             json!(kk_schema::room::encode_snapshot(&snapshot));
         assert!(e.restore_checkpoint(bad, None).is_err());

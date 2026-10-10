@@ -133,7 +133,7 @@ pub fn normalize(kind: &str, spec: &Value, ctx: &PlaceCtx) -> Result<RoomObject,
                 id: 0,
                 x,
                 y,
-                data: Value::Object(data).to_string(),
+                data: Value::Object(data).to_string().into(),
             }))
         }
         // invaderCore 的归属固定给 Invader NPC；相对键 ticksToDeploy/
@@ -148,7 +148,7 @@ pub fn normalize(kind: &str, spec: &Value, ctx: &PlaceCtx) -> Result<RoomObject,
                 id: 0,
                 x,
                 y,
-                data: Value::Object(data).to_string(),
+                data: Value::Object(data).to_string().into(),
             }))
         }
         // deposit 的冷却与寿命同为绝对权威键（cooldownTime/decayTime），
@@ -176,7 +176,7 @@ pub fn normalize(kind: &str, spec: &Value, ctx: &PlaceCtx) -> Result<RoomObject,
                 id: 0,
                 x,
                 y,
-                data: Value::Object(data).to_string(),
+                data: Value::Object(data).to_string().into(),
             }))
         }
         // powerCreep 的放置是「已生成」形态：等级取 powers 等级和，
@@ -206,7 +206,7 @@ fn normalize_nuke(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> GenericObj {
         id: 0,
         x,
         y,
-        data: Value::Object(data).to_string(),
+        data: Value::Object(data).to_string().into(),
     }
 }
 
@@ -221,7 +221,7 @@ fn normalize_deposit(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<Gener
         id: 0,
         x,
         y,
-        data: Value::Object(data).to_string(),
+        data: Value::Object(data).to_string().into(),
     })
 }
 
@@ -283,7 +283,7 @@ fn normalize_power_bank(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<Ge
         id: 0,
         x,
         y,
-        data: Value::Object(data).to_string(),
+        data: Value::Object(data).to_string().into(),
     })
 }
 
@@ -339,7 +339,7 @@ fn normalize_power_creep(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> GenericO
         id: 0,
         x,
         y,
-        data: data.to_string(),
+        data: data.to_string().into(),
     }
 }
 
@@ -363,7 +363,9 @@ fn generic_from_spec(type_name: &str, spec: &Value, x: u8, y: u8) -> GenericObj 
         id: 0,
         x,
         y,
-        data: Value::Object(generic_fields(type_name, spec)).to_string(),
+        data: Value::Object(generic_fields(type_name, spec))
+            .to_string()
+            .into(),
     }
 }
 

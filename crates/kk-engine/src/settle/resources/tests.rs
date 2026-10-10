@@ -49,7 +49,7 @@ fn generic(w: &mut Working, id: ObjId, data: Value) {
             id: id.0,
             x: 10,
             y: 10,
-            data: data.to_string(),
+            data: data.to_string().into(),
         }),
     );
 }

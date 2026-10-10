@@ -14,6 +14,84 @@ fn energy(amount: u32) -> RoomObject {
 }
 
 #[test]
+fn generic_identity_follows_candidate_commit_rollback_and_checkpoint_restore() {
+    let mut world = World::new(1);
+    for name in ["W1N1", "W2N2", "W3N3"] {
+        world.register_room(name, Terrain::plains()).unwrap();
+    }
+    let id = world.insert("W1N1", RoomObject::Generic(kk_schema::room::GenericObj {
+        id: 0, x: 10, y: 10,
+        data: r#"{"type":"structure","structureType":"observer","owner":"p1","observeRoom":"W2N2","custom":{"value":7}}"#.into(),
+    })).unwrap();
+    assert!(world.visibility_index().room_visible_to("W1N1", "p1"));
+    assert!(
+        world
+            .visibility_index()
+            .observed_rooms_of("p1")
+            .unwrap()
+            .contains("W2N2")
+    );
+    let old = world.clone();
+    let replacement = r#"{"type":"structure","structureType":"observer","owner":"p2","observeRoom":"W3N3","custom":{"value":9}}"#;
+    let replace = |object: &mut RoomObject| {
+        let RoomObject::Generic(g) = object else {
+            panic!("应为 Generic")
+        };
+        g.data = replacement.into();
+        // 候选内也读取新缓存，随后撤销不能污染旧世界的共享载荷。
+        assert_eq!(crate::domain::object_owner(object).as_deref(), Some("p2"));
+    };
+    assert!(
+        world
+            .edit_object(id, |object| {
+                replace(object);
+                Err::<(), _>("撤销候选".into())
+            })
+            .is_err()
+    );
+    assert_eq!(
+        crate::domain::object_owner(world.get(id).unwrap().1).as_deref(),
+        Some("p1")
+    );
+    world
+        .edit_object(id, |object| {
+            replace(object);
+            Ok(())
+        })
+        .unwrap();
+    assert!(!world.visibility_index().room_visible_to("W1N1", "p1"));
+    assert!(world.visibility_index().room_visible_to("W1N1", "p2"));
+    assert!(world.visibility_index().observed_rooms_of("p1").is_none());
+    assert!(
+        world
+            .visibility_index()
+            .observed_rooms_of("p2")
+            .unwrap()
+            .contains("W3N3")
+    );
+    assert_eq!(
+        crate::domain::object_owner(old.get(id).unwrap().1).as_deref(),
+        Some("p1")
+    );
+    let restored = World::from_checkpoint(world.checkpoint()).unwrap();
+    assert_eq!(
+        restored.object_json_by_id(id).unwrap()["custom"]["value"],
+        9
+    );
+    assert_eq!(
+        restored.world_json_for_viewer("p2", 0),
+        world.world_json_for_viewer("p2", 0)
+    );
+    assert!(
+        restored
+            .visibility_index()
+            .observed_rooms_of("p2")
+            .unwrap()
+            .contains("W3N3")
+    );
+}
+
+#[test]
 fn generation_bumps_on_content_changes() {
     let mut world = World::new(1);
     assert_eq!((world.generation(), world.terrain_epoch()), (0, 0));

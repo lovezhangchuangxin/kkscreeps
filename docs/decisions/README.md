@@ -27,6 +27,7 @@
 
 | [ADR-017](ADR-017-background-services.md) | 独立线程的异步后台服务域 | G27.a 首片已交付；耐久任务与 outbox 另有提交边界 |
 | [ADR-018](ADR-018-production-persistence-posture.md) | 生产持久化=周期检查点权威，输入日志为显式审计件 | 技术基座随输入日志 v2 交付；服务侧接线在 G27.b/G28 线 |
+| [ADR-019](ADR-019-generic-payload-metadata.md) | Generic 不可变载荷与紧凑读取元数据 | 减少跨消费者 JSON 分类解析；保留动态载荷与原二进制布局，候选与调度后续独立评估 |
 
 上述记录均已接受，具体修订与范围以各记录正文为准。
 

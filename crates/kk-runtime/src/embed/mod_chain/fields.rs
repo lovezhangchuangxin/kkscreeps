@@ -150,7 +150,7 @@ impl ModChainContext {
         if let Some(kk_schema::room::RoomObject::Generic(object)) =
             self.ctx.borrow_mut().room.objects.get_mut(&self.id)
         {
-            object.data = current.to_string();
+            object.data = current.to_string().into();
             Ok(())
         } else {
             Err("link 目标已失效".into())

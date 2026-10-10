@@ -356,7 +356,7 @@ fn deposit_invalid_placement_is_atomic_and_restore_revalidates_numbers() -> anyh
             };
             let mut data: Value = serde_json::from_str(&g.data)?;
             data[key] = json!(u64::MAX);
-            g.data = data.to_string();
+            g.data = data.to_string().into();
             bad["engine"]["world"]["rooms"]["W1N1"]["snapshot"] =
                 json!(kk_schema::room::encode_snapshot(&snapshot));
             assert!(restored.restore_checkpoint(bad, None).is_err());

@@ -268,7 +268,7 @@ pub fn settle_market(
                 continue;
             };
             v["send"] = serde_json::Value::Null;
-            g.data = v.to_string();
+            g.data = v.to_string().into();
             sends.push(PendingSend {
                 room: ri,
                 id: *id,
@@ -590,7 +590,7 @@ fn write_cooldown(rooms: &mut [(String, RoomState)], ri: usize, id: ObjId, t: u6
         && let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&g.data)
     {
         v["cooldownTime"] = serde_json::json!(t);
-        g.data = v.to_string();
+        g.data = v.to_string().into();
     }
 }
 

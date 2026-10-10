@@ -200,7 +200,7 @@ pub(in crate::settle) fn set_pc_action_log(w: &mut Working, id: ObjId, key: &str
         && let Ok(mut v) = serde_json::from_str::<Value>(&o.data)
     {
         v["actionLog"][key] = value;
-        o.data = v.to_string();
+        o.data = v.to_string().into();
     }
 }
 
@@ -280,7 +280,7 @@ fn pc_renew(w: &mut Working, id: ObjId, d: &IntentData) {
         v["ageTime"] = json!(w.time + c::POWER_CREEP_LIFE_TIME as u64);
         // 官方 renew.js:22：续命成功记 healed（自身坐标的官方怪癖）。
         v["actionLog"]["healed"] = json!({ "x": gx, "y": gy });
-        o.data = v.to_string();
+        o.data = v.to_string().into();
     }
     w.record_action(
         id,
@@ -301,7 +301,7 @@ fn pc_say(w: &mut Working, id: ObjId, d: &IntentData) {
         && let Ok(mut v) = serde_json::from_str::<Value>(&o.data)
     {
         v["actionLog"]["say"] = json!({ "message": message, "isPublic": is_public });
-        o.data = v.to_string();
+        o.data = v.to_string().into();
     }
     // 导出面只记公开 say（官方历史快照 processor.js:436-438 删除非公开）；
     // pc 截断按 Unicode 标量（chars）与 creep 的 UTF-16 口径有已登记差异。
@@ -355,7 +355,7 @@ pub fn process_power(w: &mut Working, id: ObjId) {
     {
         v["store"]["power"] = json!(power - amount);
         v["store"]["energy"] = json!(energy - amount * c::POWER_SPAWN_ENERGY_RATIO);
-        o.data = v.to_string();
+        o.data = v.to_string().into();
     }
     w.state.add_power(&owner, amount);
 }
@@ -415,7 +415,7 @@ pub fn power_creep_tick(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
             && let Ok(mut v) = serde_json::from_str::<Value>(&o.data)
         {
             v["hits"] = json!(next);
-            o.data = v.to_string();
+            o.data = v.to_string().into();
         }
     }
     Ok(())

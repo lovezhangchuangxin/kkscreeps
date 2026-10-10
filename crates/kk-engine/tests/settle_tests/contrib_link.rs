@@ -19,7 +19,7 @@ fn place_generic(f: &mut Fixture, x: u8, y: u8, body: serde_json::Value) -> ObjI
                 id: 0,
                 x,
                 y,
-                data: body.to_string(),
+                data: body.to_string().into(),
             }),
         )
         .unwrap()

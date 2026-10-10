@@ -151,7 +151,7 @@ fn invader_ranged_targets_power_creeps_and_ignores_missing_hits() -> anyhow::Res
                 if missing {
                     data.as_object_mut().unwrap().remove("hits");
                 }
-                g.data = data.to_string();
+                g.data = data.to_string().into();
             })?;
             e.tick(1)?;
             if missing {

@@ -109,7 +109,7 @@ fn invader_melee_same_tile_power_creep_precedes_adjacent_and_missing_hits_stays_
                 if missing {
                     data.as_object_mut().unwrap().remove("hits");
                 }
-                g.data = data.to_string();
+                g.data = data.to_string().into();
             })?;
             e.tick(1)?;
             assert_eq!(

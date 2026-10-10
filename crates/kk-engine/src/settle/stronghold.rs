@@ -172,7 +172,7 @@ fn structure_object(
         id: 0,
         x,
         y,
-        data: data.to_string(),
+        data: data.to_string().into(),
     })
 }
 

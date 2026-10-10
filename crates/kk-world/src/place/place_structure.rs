@@ -334,7 +334,7 @@ pub(super) fn normalize_structure(
                 id: 0,
                 x,
                 y,
-                data: Value::Object(data).to_string(),
+                data: Value::Object(data).to_string().into(),
             }))
         }
     }

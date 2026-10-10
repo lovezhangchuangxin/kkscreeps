@@ -128,6 +128,6 @@ pub fn produce(w: &mut Working, id: ObjId, d: &IntentData) {
         }
         v["store"][&resource] = json!(store_amount(&v, &resource) + recipe.amount);
         v["cooldownTime"] = json!(cooldown_end);
-        g.data = v.to_string();
+        g.data = v.to_string().into();
     }
 }

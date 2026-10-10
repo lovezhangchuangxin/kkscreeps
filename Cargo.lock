@@ -1103,6 +1103,7 @@ name = "kk-schema"
 version = "0.1.0"
 dependencies = [
  "paste",
+ "serde_json",
 ]
 
 [[package]]

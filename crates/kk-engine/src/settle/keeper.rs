@@ -75,7 +75,7 @@ pub(super) fn tick(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
         data["nextSpawnTime"] = Value::Null;
     }
     if let Some(RoomObject::Generic(lair)) = w.room.objects.get_mut(&id) {
-        lair.data = data.to_string();
+        lair.data = data.to_string().into();
     }
     Ok(())
 }

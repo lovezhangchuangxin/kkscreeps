@@ -289,7 +289,7 @@ fn place_generic(f: &mut Fixture, x: u8, y: u8, body: Value) -> ObjId {
                 id: 0,
                 x,
                 y,
-                data: body.to_string(),
+                data: body.to_string().into(),
             }),
         )
         .unwrap()
@@ -297,7 +297,7 @@ fn place_generic(f: &mut Fixture, x: u8, y: u8, body: Value) -> ObjId {
 
 fn link_data(f: &Fixture, id: ObjId) -> String {
     match f.world.get(id).map(|(_, o)| o) {
-        Some(RoomObject::Generic(g)) => g.data.clone(),
+        Some(RoomObject::Generic(g)) => g.data.to_string(),
         other => panic!("link 不存在：{other:?}"),
     }
 }

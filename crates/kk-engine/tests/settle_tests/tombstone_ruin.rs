@@ -90,7 +90,8 @@ fn tombstone_container_deposit_first() {
                     "owner": "p1", "hits": 250000,
                     "store": { "energy": 1900 },
                 })
-                .to_string(),
+                .to_string()
+                .into(),
             }),
         )
         .unwrap();
@@ -327,7 +328,8 @@ fn tombstone_container_cross_resource_competition() {
                     "owner": "p1", "hits": 250000,
                     "store": { "energy": 1990 },
                 })
-                .to_string(),
+                .to_string()
+                .into(),
             }),
         )
         .unwrap();
@@ -429,7 +431,8 @@ fn ruin_inherits_mixed_store_and_dumps_on_decay() {
                     "owner": "p1", "hits": 1,
                     "store": { "energy": 20, "XUHO2": 8 },
                 })
-                .to_string(),
+                .to_string()
+                .into(),
             }),
         )
         .unwrap();

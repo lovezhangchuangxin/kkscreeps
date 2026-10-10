@@ -111,7 +111,7 @@ fn send_description_lt_escaping_in_transaction() {
                     "targetRoomName": "W5N1", "resourceType": "H", "amount": 100,
                     "description": "a<b<c",
                 });
-                g.data = v.to_string();
+                g.data = v.to_string().into();
                 Ok(())
             })
             .unwrap();

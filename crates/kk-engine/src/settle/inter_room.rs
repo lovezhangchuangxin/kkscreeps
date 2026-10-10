@@ -137,7 +137,7 @@ mod tests {
             id: 1,
             x: 0,
             y: 20,
-            data: serde_json::json!({"type":"powerCreep"}).to_string(),
+            data: serde_json::json!({"type":"powerCreep"}).to_string().into(),
         });
         source.insert_with_id(1, object).unwrap();
         let entries = vec![kk_world::EffectEntry {

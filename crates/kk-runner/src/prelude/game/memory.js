@@ -240,20 +240,17 @@
   let residentParsed = undefined;
   let residentString = undefined;
 
-  // Memory 洁度走查：一遍 O(n) 无分配深走，既做官方 JSON 往返的归一化
-  // （数组 undefined 槽转 null、对象 undefined 键删除），又判定对象是否
-  // 与 parse(stringify(obj)) 逐值一致——任何 stringify 丢弃/改写的值形态
-  // 都判脏：函数/Symbol/bigint、NaN/±Infinity/-0、非普通原型（Date/Map/
-  // 类实例——stringify 会把它们变成别的东西）、环（官方 stringify 抛错）、
-  // 不可枚举自有键与 Symbol 键（stringify 不带走）、数组命名键与稀疏洞。
-  // 干净才允许常驻复用；脏则作废常驻对，下一拍走完整 parse（官方同形）。
-  // 已知接受的残余差异（xxscreeps crunch 同样存在、套件无覆盖）：访问器
-  // 属性在走查与 stringify 中各读一次（官方只读一次）。
+  // 洁度检查只查看数据描述符，不执行 getter、不归一化玩家对象。
+  // undefined、稀疏槽、toJSON、访问器及特殊描述符均回退 JSON 往返；
+  // 只有已经与 JSON 往返逐值一致的普通数据树才允许常驻。
   const __numberIsFinite = Number.isFinite;
   const __objectIs = Object.is;
   const __objectGetPrototypeOf = Object.getPrototypeOf;
   const __objectGetOwnPropertyNames = Object.getOwnPropertyNames;
   const __objectGetOwnPropertySymbols = Object.getOwnPropertySymbols;
+  const __objectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+  const __arrayIsArray = Array.isArray;
+  const ARRAY_PROTOTYPE = __Array.prototype;
   const __setHas = Set.prototype.has;
   const __setAdd = Set.prototype.add;
   const OBJECT_PROTOTYPE = __Object.prototype;
@@ -267,28 +264,40 @@
     if (t !== 'object') return false;
     if (__reflectApply(__setHas, seen, [payload])) return false;
     __reflectApply(__setAdd, seen, [payload]);
-    if (__Array.isArray(payload)) {
-      const names = __objectGetOwnPropertyNames(payload);
-      if (names.length !== payload.length) return false;
-      for (let i = 0; i < payload.length; i++) {
-        const slot = payload[i];
-        if (slot === undefined) payload[i] = null;
-        else if (!memoryCleanWalk(slot, seen)) return false;
-      }
-      return true;
-    }
-    if (__objectGetPrototypeOf(payload) !== OBJECT_PROTOTYPE &&
-        __objectGetPrototypeOf(payload) !== null) {
+    const isArray = __arrayIsArray(payload);
+    const proto = __objectGetPrototypeOf(payload);
+    if (isArray ? proto !== ARRAY_PROTOTYPE : proto !== OBJECT_PROTOTYPE && proto !== null) {
       return false;
     }
-    const keys = __objectKeys(payload);
-    if (__objectGetOwnPropertyNames(payload).length !== keys.length) return false;
+    // stringify 会先查继承链上的 toJSON，不能把带有该钩子的树缓存为原对象。
+    if (
+      __objectGetOwnPropertyDescriptor(payload, 'toJSON') !== undefined ||
+      (proto !== null &&
+        __objectGetOwnPropertyDescriptor(OBJECT_PROTOTYPE, 'toJSON') !== undefined) ||
+      (isArray && __objectGetOwnPropertyDescriptor(ARRAY_PROTOTYPE, 'toJSON') !== undefined)
+    ) {
+      return false;
+    }
+    if (isArray && __objectGetPrototypeOf(ARRAY_PROTOTYPE) !== OBJECT_PROTOTYPE) return false;
     if (__objectGetOwnPropertySymbols(payload).length !== 0) return false;
-    for (let i = 0; i < keys.length; i++) {
-      const k = keys[i];
-      const v = payload[k];
-      if (v === undefined) delete payload[k];
-      else if (!memoryCleanWalk(v, seen)) return false;
+    const names = __objectGetOwnPropertyNames(payload);
+    const keys = isArray ? null : __objectKeys(payload);
+    const count = isArray ? payload.length : keys.length;
+    // 数组包含不可枚举的 length；逐索引检查同时拒绝稀疏洞和命名属性。
+    if (names.length !== count + (isArray ? 1 : 0)) return false;
+    for (let i = 0; i < count; i++) {
+      const key = isArray ? '' + i : keys[i];
+      const desc = __objectGetOwnPropertyDescriptor(payload, key);
+      if (
+        desc === undefined ||
+        __objectGetOwnPropertyDescriptor(desc, 'value') === undefined ||
+        !desc.enumerable ||
+        !desc.writable ||
+        !desc.configurable ||
+        !memoryCleanWalk(desc.value, seen)
+      ) {
+        return false;
+      }
     }
     return true;
   }
@@ -462,12 +471,16 @@
     const parsed = RawMemory._parsed;
     if (parsed) {
       try {
-        const clean = memoryCleanWalk(parsed, new __Set());
+        let clean = false;
+        try {
+          clean = memoryCleanWalk(parsed, new __Set());
+        } catch (_) {
+          // Proxy 元操作或过深检查失败只能取消缓存，不能阻止原有 stringify。
+        }
         const s = __jsonStringify(parsed);
         if (typeof s !== 'string') {
           // Memory.toJSON 返回非字符串时 stringify 得 undefined——玩家侧写回失败
           // （官方顶层 throw、无玩家 console 行：错误只在 run 结局信封可见）；
-          // 走查已做的归一化保留（对玩家而言只是无返回值的普通变异）
           residentParsed = undefined;
           return nullEnv({ ok: false, error: 'Memory.toJSON 返回了非字符串' });
         }

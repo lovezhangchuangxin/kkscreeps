@@ -9,6 +9,7 @@
 | 入口 | 子模块职责 |
 |---|---|
 | `kk-schema/src/kkpv.rs` | 公开值模型、限制和错误；`kkpv/wire.rs` 共享布局，`encode.rs` 编码与束校验，`view.rs` 单块校验与字段解码，`merge.rs` 同版本覆盖合并 |
+| `kk-schema/src/generic_data.rs` | Generic 不可变原始 JSON 载荷、共享与紧凑读取元数据；编码仍为原 String 布局，不处理玩法默认值或权限 |
 | `kk-world/src/world/mod.rs` | 世界容器与读入口；`mutation.rs` 管理隔离编辑和发布，`checkpoint.rs` 管理保存恢复 |
 | `kk-world/src/projection/mod.rs` | JSON 玩家投影装配；`visibility.rs` 负责可见性和字段投影，`object.rs` 负责对象编码，`find.rs` 负责查询匹配；旧 `world_json` 路径重导出保留 |
 | `kk-world/src/effects.rs` | 对象效果权威条目、输入归一、有效期与双投影；具体 power 公式在 engine 消费者 |

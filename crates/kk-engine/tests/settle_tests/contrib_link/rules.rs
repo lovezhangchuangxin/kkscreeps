@@ -142,7 +142,7 @@ fn rule_overrides_flow_into_transfer_settlement() {
                     if id == l1 {
                         v["store"]["energy"] = json!(350);
                     }
-                    g.data = v.to_string();
+                    g.data = v.to_string().into();
                 }
                 Ok(())
             })

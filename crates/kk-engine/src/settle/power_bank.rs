@@ -123,7 +123,7 @@ pub fn run_spawner(world: &mut World, random: &mut RaidRandom) -> Result<(), Str
                 id: 0,
                 x,
                 y,
-                data: data.to_string(),
+                data: data.to_string().into(),
             }),
         )?;
         world.set_power_bank_time(&name, Some(time.saturating_add(respawn)))?;

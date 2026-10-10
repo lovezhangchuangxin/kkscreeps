@@ -177,7 +177,7 @@ fn keeper_attack_selects_lowest_hits_and_mass_threshold_is_strict() -> anyhow::R
                 if let kk_schema::room::RoomObject::Generic(g) = object {
                     let mut data: serde_json::Value = serde_json::from_str(&g.data).unwrap();
                     data.as_object_mut().unwrap().remove("hits");
-                    g.data = data.to_string();
+                    g.data = data.to_string().into();
                 }
             })
             .unwrap();

@@ -551,7 +551,8 @@ fn generic_structure(
                     // 0 时钟会立即触发衰减，因此不能省略。
                     "nextDecayTime": 1_000_000,
                 })
-                .to_string(),
+                .to_string()
+                .into(),
             }),
         )
         .unwrap()

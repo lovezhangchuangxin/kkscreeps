@@ -210,7 +210,7 @@ fn terminal_send(w: &mut Working, id: ObjId, d: &IntentData) {
             "amount": amount,
             "description": d.description,
         });
-        g.data = v.to_string();
+        g.data = v.to_string().into();
     }
 }
 
@@ -265,7 +265,7 @@ fn consume_tower_energy(w: &mut Working, id: ObjId) {
             .and_then(Value::as_i64)
             .unwrap_or(0);
         v["store"]["energy"] = json!((energy - c::TOWER_ENERGY_COST).max(0));
-        g.data = v.to_string();
+        g.data = v.to_string().into();
     }
 }
 
@@ -496,14 +496,14 @@ pub(crate) fn link_transfer(w: &mut Working, id: ObjId, d: &IntentData) {
             v["store"]["energy"] = json!((e - loss).max(0));
             let cd = v.get("cooldown").and_then(Value::as_i64).unwrap_or(0);
             v["cooldown"] = json!(cd + w.plane.links.cooldown * range);
-            g.data = v.to_string();
+            g.data = v.to_string().into();
         }
     } else {
         if let Some(RoomObject::Generic(t)) = w.room.objects.get_mut(&target_id)
             && let Ok(mut tv) = serde_json::from_str::<Value>(&t.data)
         {
             tv["store"]["energy"] = json!((target_total + amount - loss).max(0));
-            t.data = tv.to_string();
+            t.data = tv.to_string().into();
         }
         if let Some(RoomObject::Generic(g)) = w.room.objects.get_mut(&id)
             && let Ok(mut v) = serde_json::from_str::<Value>(&g.data)
@@ -511,7 +511,7 @@ pub(crate) fn link_transfer(w: &mut Working, id: ObjId, d: &IntentData) {
             v["store"]["energy"] = json!((energy - amount).max(0));
             let cd = v.get("cooldown").and_then(Value::as_i64).unwrap_or(0);
             v["cooldown"] = json!(cd + w.plane.links.cooldown * range);
-            g.data = v.to_string();
+            g.data = v.to_string().into();
         }
     }
     // 官方 links/transfer.js:48：transferEnergy 记目标 link 坐标。
@@ -539,7 +539,7 @@ fn rampart_set_public(w: &mut Working, id: ObjId, d: &IntentData) {
         && let Ok(mut v) = serde_json::from_str::<Value>(&g.data)
     {
         v["isPublic"] = json!(d.is_public.unwrap_or(false));
-        g.data = v.to_string();
+        g.data = v.to_string().into();
     }
 }
 
@@ -597,7 +597,7 @@ fn observer_observe_room(w: &mut Working, id: ObjId, d: &IntentData) {
     {
         // 与清零分支同款对象守卫：损坏快照注入的非对象 data 不 panic。
         map.insert("observeRoom".into(), json!(target));
-        g.data = data.to_string();
+        g.data = data.to_string().into();
     }
 }
 
@@ -639,11 +639,11 @@ pub(super) fn check_structure_against_controller(
         let RoomObject::Generic(g) = o else {
             continue;
         };
-        let Ok(v) = serde_json::from_str::<Value>(&g.data) else {
+        let Some(identity) = g.data.identity() else {
             continue;
         };
-        if v.get("structureType").and_then(Value::as_str) != Some(view.structure_type.as_str())
-            || v.get("owner").and_then(Value::as_str) != Some(owner)
+        if identity.structure_type.as_deref() != Some(view.structure_type.as_str())
+            || identity.owner.as_deref() != Some(owner)
         {
             continue;
         }

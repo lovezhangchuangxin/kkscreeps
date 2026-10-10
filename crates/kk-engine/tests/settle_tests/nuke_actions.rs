@@ -90,7 +90,7 @@ impl NukeFixture {
                     id: 0,
                     x,
                     y,
-                    data: data.to_string(),
+                    data: data.to_string().into(),
                 }),
             )
             .unwrap()

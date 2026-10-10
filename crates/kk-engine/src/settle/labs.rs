@@ -95,7 +95,7 @@ fn update_lab(w: &mut Working, id: ObjId, f: impl FnOnce(&mut Value)) {
         && let Ok(mut v) = serde_json::from_str::<Value>(&g.data)
     {
         f(&mut v);
-        g.data = v.to_string();
+        g.data = v.to_string().into();
     }
 }
 

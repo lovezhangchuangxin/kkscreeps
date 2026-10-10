@@ -37,6 +37,12 @@
   const __Error = Error;
   const __Uint8Array = Uint8Array;
   const __Set = Set;
+  const __mapGet = Map.prototype.get;
+  const __mapSet = Map.prototype.set;
+  const __mapDelete = Map.prototype.delete;
+  const __mapForEach = Map.prototype.forEach;
+  const __setAdd = Set.prototype.add;
+  const __setHas = Set.prototype.has;
 
   const HEADER_LEN = 160;
   // 2^32 在 double 中精确；i64 取负经补码量值合成（见 readInt）。
@@ -469,15 +475,15 @@
       // 常驻命中：布局签名一致（访问器的字段索引语义不变）就就地更新，
       // 免去每拍重建记录对象；布局变化（字段增删/列类型变/换桶）重建。
       if (resident !== null) {
-        seen.add(id);
-        const existing = resident.get(id);
+        __reflectApply(__setAdd, seen, [id]);
+        const existing = __reflectApply(__mapGet, resident, [id]);
         if (existing !== undefined) {
           if (existing[RESIDENT_SIG] === bucket.sig) {
             updateResident(existing, dv, bucket, row, arenaBase, arenaLen);
             records[records.length] = existing;
             continue;
           }
-          resident.delete(id);
+          __reflectApply(__mapDelete, resident, [id]);
         }
       }
       const rec = {};
@@ -500,7 +506,7 @@
           __defineProperty(rec, field.key, bucket.lazyAccessors[f]);
         }
       }
-      if (resident !== null) resident.set(id, rec);
+      if (resident !== null) __reflectApply(__mapSet, resident, [id, rec]);
       records[records.length] = rec;
     }
   }
@@ -578,9 +584,11 @@
     forEachBlock(dv, total, (start, len) => {
       decodeBlockInto(dv, records, start, len, expectedTick, resident, seen);
     });
-    resident.forEach((_, id) => {
-      if (!seen.has(id)) resident.delete(id);
-    });
+    __reflectApply(__mapForEach, resident, [
+      (_, id) => {
+        if (!__reflectApply(__setHas, seen, [id])) __reflectApply(__mapDelete, resident, [id]);
+      },
+    ]);
     return records;
   }
 

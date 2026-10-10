@@ -141,7 +141,7 @@ pub fn deposit_tick(w: &mut Working, id: ObjId) {
     if let Some(pending) = w.deposit_cooldown_pending.remove(&id) {
         v["cooldownTime"] = json!(w.time + pending);
         if let Some(RoomObject::Generic(g)) = w.room.objects.get_mut(&id) {
-            g.data = v.to_string();
+            g.data = v.to_string().into();
         }
     }
     let expired = v
@@ -181,17 +181,17 @@ pub fn generic_decay_tick(w: &mut Working, id: ObjId) {
     let Some(RoomObject::Generic(g)) = w.room.objects.get(&id) else {
         return;
     };
-    let mut v: Value = serde_json::from_str(&g.data).unwrap_or_default();
-    let st = v
-        .get("structureType")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string();
+    let Some(identity) = g.data.identity() else {
+        return;
+    };
+    let st = identity.structure_type.as_deref().unwrap_or_default();
+    let is_container = st == "container";
     let (x, y) = (g.x, g.y);
-    let next = v.get("nextDecayTime").and_then(Value::as_u64).unwrap_or(0);
+    let next = identity.next_decay_time;
     if st != "container" && st != "rampart" {
         return;
     }
+    let mut hits_max_update = None;
     if st == "rampart" {
         // 官方 ramparts/tick.js:10-17：带 PWR_SHIELD 效果的临时 rampart
         // 不参与 hitsMax 同步与衰减，效果到期（endTime <= time）即删除。
@@ -211,7 +211,7 @@ pub fn generic_decay_tick(w: &mut Working, id: ObjId) {
             return;
         }
         let target = w.controller().map(|ctl| {
-            if v.get("owner").and_then(Value::as_str) == ctl.owner.as_deref() {
+            if identity.owner.as_deref() == ctl.owner.as_deref() {
                 let key = ctl.level.to_string();
                 kk_core::constants::RAMPART_HITS_MAX
                     .iter()
@@ -222,19 +222,24 @@ pub fn generic_decay_tick(w: &mut Working, id: ObjId) {
                 0
             }
         });
-        if let Some(hits_max) = target
-            && hits_max != v.get("hitsMax").and_then(Value::as_i64).unwrap_or(0)
-        {
-            v["hitsMax"] = json!(hits_max);
-            if let Some(RoomObject::Generic(g)) = w.room.objects.get_mut(&id) {
-                g.data = v.to_string();
-            }
-        }
+        hits_max_update = target.filter(|hits_max| *hits_max != identity.hits_max);
     }
-    if next != 0 && w.time < next.saturating_sub(1) {
+    let not_due = next != 0 && w.time < next.saturating_sub(1);
+    if not_due && hits_max_update.is_none() {
         return;
     }
-    let decay = if st == "container" {
+    // 只读身份门已经完成；真正改写时才解析完整动态载荷，保留任意额外字段。
+    let mut v: Value = serde_json::from_str(&g.data).unwrap_or_default();
+    if let Some(hits_max) = hits_max_update {
+        v["hitsMax"] = json!(hits_max);
+        if let Some(RoomObject::Generic(g)) = w.room.objects.get_mut(&id) {
+            g.data = v.to_string().into();
+        }
+    }
+    if not_due {
+        return;
+    }
+    let decay = if is_container {
         kk_core::constants::CONTAINER_DECAY
     } else {
         kk_core::constants::RAMPART_DECAY_AMOUNT
@@ -243,9 +248,9 @@ pub fn generic_decay_tick(w: &mut Working, id: ObjId) {
     if hits <= 0 {
         if let Some(RoomObject::Generic(g)) = w.room.objects.get_mut(&id) {
             v["hits"] = json!(hits);
-            g.data = v.to_string();
+            g.data = v.to_string().into();
         }
-        if st == "container" {
+        if is_container {
             let keys: Vec<(String, i64)> = v
                 .get("store")
                 .and_then(Value::as_object)
@@ -269,7 +274,7 @@ pub fn generic_decay_tick(w: &mut Working, id: ObjId) {
         return;
     }
     v["hits"] = json!(hits);
-    let window = if st == "container" {
+    let window = if is_container {
         match w.controller() {
             Some(ctl) if ctl.level > 0 => kk_core::constants::CONTAINER_DECAY_TIME_OWNED,
             _ => kk_core::constants::CONTAINER_DECAY_TIME,
@@ -279,7 +284,7 @@ pub fn generic_decay_tick(w: &mut Working, id: ObjId) {
     };
     v["nextDecayTime"] = json!(w.time + window as u64);
     if let Some(RoomObject::Generic(g)) = w.room.objects.get_mut(&id) {
-        g.data = v.to_string();
+        g.data = v.to_string().into();
     }
 }
 
@@ -297,7 +302,7 @@ pub fn link_cooldown_tick(w: &mut Working, id: ObjId) {
     }
     v["cooldown"] = json!(cd - 1);
     if let Some(RoomObject::Generic(g)) = w.room.objects.get_mut(&id) {
-        g.data = v.to_string();
+        g.data = v.to_string().into();
     }
 }
 
@@ -328,7 +333,7 @@ pub fn terminal_capacity_tick(w: &mut Working, id: ObjId) {
             return;
         };
         v["storeCapacity"] = json!(want);
-        g.data = v.to_string();
+        g.data = v.to_string().into();
     }
 }
 

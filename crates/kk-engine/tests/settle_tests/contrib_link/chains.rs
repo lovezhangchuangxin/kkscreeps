@@ -136,7 +136,7 @@ fn chained_handlers_execute_in_frozen_order() {
             if let Some(RoomObject::Generic(g)) = ctx.borrow_mut().room.objects.get_mut(&_id) {
                 let mut v: serde_json::Value = serde_json::from_str(&g.data).unwrap();
                 v["store"]["energy"] = json!(250);
-                g.data = v.to_string();
+                g.data = v.to_string().into();
             }
             let result = next.call(_id, _d);
             log_wrap.borrow_mut().push("wrap-exit".into());
@@ -325,7 +325,7 @@ fn replace_supplants_native_transfer() {
                 let mut v: serde_json::Value = serde_json::from_str(&g.data).unwrap();
                 v["store"]["energy"] = json!(src_e / 2);
                 v["cooldown"] = json!(42);
-                g.data = v.to_string();
+                g.data = v.to_string().into();
             }
             Ok(())
         })),

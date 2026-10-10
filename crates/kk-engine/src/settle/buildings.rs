@@ -257,7 +257,7 @@ pub(in crate::settle) fn production_tick(w: &mut Working, id: kk_world::ObjId) {
         store.insert(resource.clone(), json!(next));
     }
     if let Some(RoomObject::Generic(g)) = w.room.objects.get_mut(&id) {
-        g.data = data.to_string();
+        g.data = data.to_string().into();
     }
 }
 
@@ -323,7 +323,7 @@ pub(in crate::settle) fn complete_mod_construction(
         id: 0,
         x: site.x,
         y: site.y,
-        data: data.to_string(),
+        data: data.to_string().into(),
     }));
 }
 
@@ -418,7 +418,7 @@ impl Working {
         merged_object.retain(|key, _| !key.contains(':'));
         merged_object.extend(fields);
         if let Some(RoomObject::Generic(g)) = self.room.objects.get_mut(&id) {
-            g.data = merged.to_string();
+            g.data = merged.to_string().into();
         }
         Ok(())
     }

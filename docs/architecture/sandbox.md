@@ -53,7 +53,7 @@ JavaScript 写入限制采用字符串 `length`，即 UTF-16 码元计数：RawM
 
 当前协调器构造按玩家视野过滤的世界 JSON，再注入沙箱。JavaScript 对象包装器从当前原始对象表读取属性，部分 getter 按对象缓存；缓存条件和跨 tick 行为并不完全相同，不能承诺所有旧引用总能读取最新字段。
 
-首次访问 Memory 时解析 RawMemory，并将结果保存在本轮 `_parsed`；写回可能执行玩家自定义 `toJSON`。序列化 Memory 后才检查 segment 写入与请求，因而 `toJSON` 中的 segment 修改可能在本轮生效。写回结果只是候选，实际提交由协调器负责。
+首次访问 Memory 时解析 RawMemory，并将结果保存在本轮 `_parsed`；写回可能执行玩家自定义 `toJSON`。序列化 Memory 后才检查 segment 写入与请求，因而 `toJSON` 中的 segment 修改可能在本轮生效。写回结果只是候选，实际提交由协调器负责。Memory 常驻复用只接受通过只读数据描述符检查的普通数据树；检查不执行 getter、不修改玩家对象，包含 `toJSON`、特殊描述符、undefined、稀疏数组或额外属性时回退完整 JSON 往返。检查失败只能取消缓存，不能阻止原有序列化。KKPV 常驻表的 Map/Set 方法在加载期捕获，玩家原型补丁不得取得内部记录或缓冲区。
 
 目标是通过有权限的共享快照减少世界物化与复制，但不可变字节句柄、固定偏移 getter、市场增量传输和 Memory 局部重编码尚未完整实现。目标布局与生命周期见[快照契约](snapshot-contract.md)，收益须由[端到端性能验收](performance-acceptance.md)验证。
 

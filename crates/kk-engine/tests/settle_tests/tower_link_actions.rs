@@ -12,7 +12,7 @@ fn place_generic(f: &mut Fixture, x: u8, y: u8, body: serde_json::Value) -> ObjI
                 id: 0,
                 x,
                 y,
-                data: body.to_string(),
+                data: body.to_string().into(),
             }),
         )
         .unwrap()
@@ -569,7 +569,7 @@ fn place_generic_field(f: &mut Fixture, id: ObjId, key: &str, value: i64) {
             if let Some(RoomObject::Generic(g)) = Some(object) {
                 let mut v: Value = serde_json::from_str(&g.data).unwrap();
                 v[key] = json!(value);
-                g.data = v.to_string();
+                g.data = v.to_string().into();
             }
             Ok(())
         })

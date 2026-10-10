@@ -240,7 +240,7 @@ fn change(
 /// 占满安全整数范围；独立槽有余量不代表写后合计仍可表示。副本上的
 /// 检查失败不能扣除来源。
 fn generic_change_and_check(
-    data: &mut String,
+    data: &mut kk_schema::GenericData,
     resource: &str,
     delta: i64,
     stores: &kk_mod_api::builtin::StoreRules,

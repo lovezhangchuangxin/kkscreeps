@@ -169,7 +169,7 @@ mod tests {
                 id: 1,
                 x: 25,
                 y: 25,
-                data: portal_data.to_string(),
+                data: portal_data.to_string().into(),
             }),
         )
         .unwrap();
@@ -368,7 +368,7 @@ mod tests {
                 id: 1,
                 x: 49,
                 y: 25,
-                data: portal.to_string(),
+                data: portal.to_string().into(),
             }),
         )
         .unwrap();

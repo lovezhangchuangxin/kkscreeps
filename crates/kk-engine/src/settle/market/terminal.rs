@@ -174,19 +174,19 @@ pub(super) fn execute_transfer(
         }
         bump_store(&mut v, resource_type, -amount);
         bump_store(&mut v, "energy", -cost);
-        g.data = v.to_string();
+        g.data = v.to_string().into();
     } else {
         if to_user.is_some()
             && let Some(RoomObject::Generic(g)) = rooms[to.0].1.objects.get_mut(&to.1)
         {
             let mut v: serde_json::Value = serde_json::from_str(&g.data).unwrap_or_default();
             bump_store(&mut v, resource_type, amount);
-            g.data = v.to_string();
+            g.data = v.to_string().into();
         }
         if let Some(RoomObject::Generic(g)) = rooms[from.0].1.objects.get_mut(&from.1) {
             let mut v: serde_json::Value = serde_json::from_str(&g.data).unwrap_or_default();
             bump_store(&mut v, resource_type, -amount);
-            g.data = v.to_string();
+            g.data = v.to_string().into();
         }
         let (fee_room, fee_id) = match fee_side {
             FeeSide::From => from,
@@ -195,7 +195,7 @@ pub(super) fn execute_transfer(
         if let Some(RoomObject::Generic(g)) = rooms[fee_room].1.objects.get_mut(&fee_id) {
             let mut v: serde_json::Value = serde_json::from_str(&g.data).unwrap_or_default();
             bump_store(&mut v, "energy", -cost);
-            g.data = v.to_string();
+            g.data = v.to_string().into();
         }
     }
     let tx_id = market.alloc_transaction_id();

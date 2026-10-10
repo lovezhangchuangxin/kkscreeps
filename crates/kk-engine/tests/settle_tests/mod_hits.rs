@@ -373,7 +373,8 @@ fn tower_attack_hits_mod_durability_target() {
                     "store": {"energy": 100}, "storeCapacity": 1000,
                     "storeCapacityResource": {"energy": 1000},
                 })
-                .to_string(),
+                .to_string()
+                .into(),
             }),
         )
         .unwrap();
@@ -493,7 +494,8 @@ fn declared_retaliation_counters_tower_attacker_immediately() {
                     "store": {"energy": 100}, "storeCapacity": 1000,
                     "storeCapacityResource": {"energy": 1000},
                 })
-                .to_string(),
+                .to_string()
+                .into(),
             }),
         )
         .unwrap();
@@ -650,7 +652,8 @@ fn retaliation_destroys_tower_attacker() {
                     "store": {"energy": 100}, "storeCapacity": 1000,
                     "storeCapacityResource": {"energy": 1000},
                 })
-                .to_string(),
+                .to_string()
+                .into(),
             }),
         )
         .unwrap();

@@ -21,7 +21,7 @@ fn regen_mineral_gate_treats_zero_clock_as_unset() {
                     y: 10,
                     data: format!(
                         r#"{{"type":"powerCreep","owner":"p1","name":"{name}","powers":{{"14":{{"level":1}}}},"store":{{"ops":300}}}}"#
-                    ),
+                    ).into(),
                 }),
             )
             .unwrap()

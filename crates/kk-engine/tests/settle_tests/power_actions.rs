@@ -77,7 +77,7 @@ impl PowerFixture {
                     id: 0,
                     x,
                     y,
-                    data: data.to_string(),
+                    data: data.to_string().into(),
                 }),
             )
             .unwrap()
@@ -522,7 +522,7 @@ fn ttl_death_creates_tombstone_and_cooldown() {
             if let RoomObject::Generic(g) = o {
                 let mut v: Value = serde_json::from_str(&g.data).unwrap();
                 v["ageTime"] = json!(next);
-                g.data = v.to_string();
+                g.data = v.to_string().into();
             }
             Ok(())
         })
@@ -583,7 +583,7 @@ fn process_power_double_deducts_and_accumulates_account() {
             if let RoomObject::Generic(g) = o {
                 let mut v: Value = serde_json::from_str(&g.data).unwrap();
                 v["store"]["power"] = json!(0);
-                g.data = v.to_string();
+                g.data = v.to_string().into();
             }
             Ok(())
         })
@@ -613,7 +613,7 @@ fn generate_ops_effect_and_overflow_drop() {
             if let RoomObject::Generic(g) = o {
                 let mut v: Value = serde_json::from_str(&g.data).unwrap();
                 v["store"]["ops"] = json!(597);
-                g.data = v.to_string();
+                g.data = v.to_string().into();
             }
             Ok(())
         })
@@ -735,7 +735,7 @@ fn renew_resets_ttl_and_requires_adjacency() {
                 if let RoomObject::Generic(g) = o {
                     let mut v: Value = serde_json::from_str(&g.data).unwrap();
                     v["ageTime"] = json!(time + 100);
-                    g.data = v.to_string();
+                    g.data = v.to_string().into();
                 }
                 Ok(())
             })
