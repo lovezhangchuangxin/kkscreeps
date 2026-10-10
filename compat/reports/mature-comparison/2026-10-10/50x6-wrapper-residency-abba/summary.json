@@ -1,0 +1,81 @@
+{
+  "order": [
+    "old",
+    "new",
+    "new",
+    "old"
+  ],
+  "warmup": 5,
+  "ticks": 100,
+  "concurrency": 4,
+  "rows": [
+    {
+      "order": 1,
+      "version": "old",
+      "wall_p50_ms": 891.175125,
+      "wall_p95_ms": 1080.959208,
+      "wall_p99_ms": 1149.1589159999999,
+      "project_p50_ms": 393.259627,
+      "run_p50_ms": 339.639747,
+      "settle_p50_ms": 149.896083,
+      "cpu_core_ms_per_tick": 2489.1065,
+      "rss_p50": 2831073280,
+      "rss_peak": 2890072064
+    },
+    {
+      "order": 2,
+      "version": "new",
+      "wall_p50_ms": 764.575917,
+      "wall_p95_ms": 919.384042,
+      "wall_p99_ms": 1102.856708,
+      "project_p50_ms": 339.103414,
+      "run_p50_ms": 287.00379,
+      "settle_p50_ms": 126.238375,
+      "cpu_core_ms_per_tick": 2164.84711,
+      "rss_p50": 2899263488,
+      "rss_peak": 2936127488
+    },
+    {
+      "order": 3,
+      "version": "new",
+      "wall_p50_ms": 847.8775840000001,
+      "wall_p95_ms": 1032.733083,
+      "wall_p99_ms": 1173.710834,
+      "project_p50_ms": 375.387877,
+      "run_p50_ms": 322.783625,
+      "settle_p50_ms": 142.798917,
+      "cpu_core_ms_per_tick": 2429.10114,
+      "rss_p50": 2849898496,
+      "rss_peak": 2937503744
+    },
+    {
+      "order": 4,
+      "version": "old",
+      "wall_p50_ms": 872.0115000000001,
+      "wall_p95_ms": 1083.24125,
+      "wall_p99_ms": 1128.7544999999998,
+      "project_p50_ms": 377.712334,
+      "run_p50_ms": 335.933039,
+      "settle_p50_ms": 145.926125,
+      "cpu_core_ms_per_tick": 2478.2205099999996,
+      "rss_p50": 2906423296,
+      "rss_peak": 2940338176
+    }
+  ],
+  "new_over_old_mean": {
+    "wall_p50_ms": 0.9145109644873809,
+    "wall_p95_ms": 0.9020038406257467,
+    "wall_p99_ms": 0.9994091636712149,
+    "project_p50_ms": 0.926740954461248,
+    "run_p50_ms": 0.9026228226428292,
+    "settle_p50_ms": 0.9094560338079822,
+    "cpu_core_ms_per_tick": 0.9248330622791031,
+    "rss_peak": 1.0074130275951216
+  },
+  "scope": "same-engine ABBA；wrapper 常驻 v3（复用 + 复用点急清 `_` 记忆，getter 保持官方原形）vs HEAD 9228ca47",
+  "binary_sha256": {
+    "old": "45c6961fbd43ceb1f38915680956d9fd43c1b1bdb7bd44ce138073dda0139bcb",
+    "new": "c8a3339281161963a244d2904ccfd7ab9e738e6c0f88a9d880b3e65a20c0680b"
+  },
+  "notes": "两对相邻样本方向一致：wall P50 -8.5%、P95 -9.8%、CPU -7.5%、run 相 -9.7%、RSS 峰值 +0.7%（噪声级）。设计迭代：v1 字段级懒戳因 wrapper 级共享戳只清自己字段漏清旧值（mod_chain 两例打回，回归锁定后废弃）；v2 getter 内 for-in 整包清 ABBA +3.0% wall/+3.5% CPU（每读热路径开销）撤回；v3 清空移到复用点（Object.keys 只看自有键）后胜出。"
+}

@@ -55,6 +55,8 @@ JavaScript 写入限制采用字符串 `length`，即 UTF-16 码元计数：RawM
 
 首次访问 Memory 时解析 RawMemory，并将结果保存在本轮 `_parsed`；写回可能执行玩家自定义 `toJSON`。序列化 Memory 后才检查 segment 写入与请求，因而 `toJSON` 中的 segment 修改可能在本轮生效。写回结果只是候选，实际提交由协调器负责。Memory 常驻复用只接受通过只读数据描述符检查的普通数据树；检查不执行 getter、不修改玩家对象，包含 `toJSON`、特殊描述符、undefined、稀疏数组或额外属性时回退完整 JSON 往返。检查失败只能取消缓存，不能阻止原有序列化。KKPV 常驻表的 Map/Set 方法在加载期捕获，玩家原型补丁不得取得内部记录或缓冲区。
 
+游戏对象包装同享常驻语义：`wrapObjectResident` 按 id 复用包装实例（type/structureType 不变即复用，Mod 对象除外），复用点急清全部 `_` 前缀记忆并把失效检查保持在装配路径——字段 getter 与官方原形一致，每次读取零额外开销。数据面字段仍经 `rawData` 按拍回查；pos 仅在移动时重建（跨拍持有的旧 pos 引用保持旧快照），effects 与 flag 定格字段按当拍记录刷新，消亡 id 出表。观察面边界：对象同一性与玩家自挂非 `_` 属性跨拍保持（官方每拍重建即消失），跨拍旧引用与当拍包装同体且读当拍值。
+
 目标是通过有权限的共享快照减少世界物化与复制，但不可变字节句柄、固定偏移 getter、市场增量传输和 Memory 局部重编码尚未完整实现。目标布局与生命周期见[快照契约](snapshot-contract.md)，收益须由[端到端性能验收](performance-acceptance.md)验证。
 
 ## 模块加载与原生调用

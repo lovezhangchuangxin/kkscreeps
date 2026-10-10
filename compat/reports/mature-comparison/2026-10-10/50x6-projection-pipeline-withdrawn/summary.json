@@ -1,0 +1,81 @@
+{
+  "order": [
+    "old",
+    "new",
+    "new",
+    "old"
+  ],
+  "warmup": 5,
+  "ticks": 100,
+  "concurrency": 4,
+  "rows": [
+    {
+      "order": 1,
+      "version": "old",
+      "wall_p50_ms": 849.276792,
+      "wall_p95_ms": 1031.681542,
+      "wall_p99_ms": 1124.8207080000002,
+      "project_p50_ms": 368.43958,
+      "run_p50_ms": 331.248043,
+      "settle_p50_ms": 139.518458,
+      "cpu_core_ms_per_tick": 2426.71918,
+      "rss_p50": 2909945856,
+      "rss_peak": 2962145280
+    },
+    {
+      "order": 2,
+      "version": "new",
+      "wall_p50_ms": 898.579459,
+      "wall_p95_ms": 1126.8275,
+      "wall_p99_ms": 1200.643166,
+      "project_p50_ms": 400.864122,
+      "run_p50_ms": 336.780459,
+      "settle_p50_ms": 153.070209,
+      "cpu_core_ms_per_tick": 2549.8954199999994,
+      "rss_p50": 2864152576,
+      "rss_peak": 2887712768
+    },
+    {
+      "order": 3,
+      "version": "new",
+      "wall_p50_ms": 899.583875,
+      "wall_p95_ms": 1107.23525,
+      "wall_p99_ms": 1195.5047080000002,
+      "project_p50_ms": 393.068167,
+      "run_p50_ms": 345.1355,
+      "settle_p50_ms": 151.351667,
+      "cpu_core_ms_per_tick": 2561.4399000000003,
+      "rss_p50": 2872541184,
+      "rss_peak": 2907127808
+    },
+    {
+      "order": 4,
+      "version": "old",
+      "wall_p50_ms": 907.982042,
+      "wall_p95_ms": 1111.009333,
+      "wall_p99_ms": 1546.9650829999998,
+      "project_p50_ms": 394.98271,
+      "run_p50_ms": 346.967959,
+      "settle_p50_ms": 150.60425,
+      "cpu_core_ms_per_tick": 2567.13738,
+      "rss_p50": 2911764480,
+      "rss_peak": 2952200192
+    }
+  ],
+  "new_over_old_mean": {
+    "wall_p50_ms": 1.023277447356398,
+    "wall_p95_ms": 1.0426435171148987,
+    "wall_p99_ms": 0.8968338263013093,
+    "project_p50_ms": 1.039964773624831,
+    "run_p50_ms": 1.0054554256889974,
+    "settle_p50_ms": 1.04928662116307,
+    "cpu_core_ms_per_tick": 1.0235246564631004,
+    "rss_peak": 0.9797940623242646
+  },
+  "scope": "same-engine ABBA；试验：共享块按房懒构建 + 执行窗口投影预取（无稳定收益，已撤回，实现未保留）",
+  "binary_sha256": {
+    "old": "45c6961fbd43ceb1f38915680956d9fd43c1b1bdb7bd44ce138073dda0139bcb",
+    "new": "（试验二进制，实现已撤回，哈希仅供溯源）ba0233b0ac1f5087d962a5dd0d00ef06e2e18f0176d3c7080e5889e6a3f5c1a"
+  },
+  "notes": "两对相邻样本方向均不利：wall P50 +2.3%、CPU +2.4%，撤回。机理：4P+6E 上把主线程 ~330ms 编码挪进 4 个 V8 线程的执行窗口形成第 5 个 P 核竞争者；串行投影段原本独占缓存/带宽。不限预取深度单窗 870ms 更差（连建期间槽位空转）；同实现下 conc=6/8 复测 wall 持平/更差且 CPU +17%/+46%、RSS 峰值反超对照——E 核惩罚不因预取消失。"
+}

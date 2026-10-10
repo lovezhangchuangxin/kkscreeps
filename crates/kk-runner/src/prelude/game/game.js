@@ -81,7 +81,9 @@
     const worldObjs = gw.world.objects || [];
     for (let i = 0; i < worldObjs.length; i++) {
       const o = worldObjs[i];
-      const w = gw.wrapObject(o, gw.world.time);
+      // wrapper 常驻：id 存续且类型不变则复用包装（自有数据面已刷新），
+      // 数据字段仍经 rawById 按拍回查。
+      const w = gw.wrapObjectResident(o, gw.world.time);
       w.room = undefined;
       __reflectApply(__mapSet, gw.objectsById, [o.id, w]);
       const mine = o.owner === gw.viewerName;
@@ -144,6 +146,8 @@
       const w = __reflectApply(__mapGet, gw.objectsById, [o.id]);
       if (w && rooms[o.room]) w.room = rooms[o.room];
     }
+    // 常驻表清扫：消亡对象出表（rawById 已是本拍权威集合）。
+    gw.sweepResidentWrappers();
 
     const cpu = gw.world.cpu || {
       limit: 20,

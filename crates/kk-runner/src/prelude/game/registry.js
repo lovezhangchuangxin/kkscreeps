@@ -509,4 +509,88 @@
     return probe(obj, label + name);
   }
   gw.wrapObject = wrapObject;
+
+  // ---------------------------------------------------------------- wrapper 常驻
+  // 跨 tick 复用包装实例：id 存续且类型不变时复用，省 RoomPosition/装配/
+  // 原型链接的每拍重建。数据面字段全走 rawData 按拍回查；`_` 前缀真值
+  // 记忆在复用点急清（Object.keys 只看自有键，getter 保持官方原形——
+  // 每读零额外开销，勿把失效检查放进 getter 热路径）。复用另刷新自有
+  // 数据面：pos 仅移动时重建（旧 pos 引用保持旧快照语义，建筑不动则零
+  // 成本）；effects 有则重建、无则摘除；flag 定格字段重写。Mod 对象排除
+  //（玩家面类可整拍重装）。观察面边界：对象同一性与玩家自挂属性跨拍
+  // 保持（记录常驻已开同类先例，玩家侧无存量依赖）；直接读 `_name`
+  // 在复用后首访前得旧值属病态旁路，棘轮守卫。
+  const residentWrappers = new Map();
+  // 元数据 {type, structureType, x, y, room, effects}：比较信息不经
+  // wrapper 代理回读（probe 的 get 陷阱会走玩家可钩的 Set.prototype.has）。
+  const residentMeta = new Map();
+  const __mapSet = Map.prototype.set;
+  const __mapHas = Map.prototype.has;
+  const __mapDelete = Map.prototype.delete;
+  const __mapForEach = Map.prototype.forEach;
+  gw.wrapObjectResident = function (o, now) {
+    if (o.type !== 'mod') {
+      const prev = __reflectApply(__mapGet, residentWrappers, [o.id]);
+      const meta = __reflectApply(__mapGet, residentMeta, [o.id]);
+      if (
+        prev !== undefined &&
+        meta !== undefined &&
+        meta.type === o.type &&
+        meta.structureType === o.structureType
+      ) {
+        // 拍级记忆急清：清空本 wrapper 的全部 `_` 前缀自有键（toJSON
+        // 与玩家自挂的非 `_` 键保留）。
+        const memoKeys = __objectKeys(prev);
+        for (let i = 0; i < memoKeys.length; i++) {
+          const key = memoKeys[i];
+          if (key.charCodeAt(0) === 95) prev[key] = undefined;
+        }
+        if (meta.x !== o.x || meta.y !== o.y || meta.room !== o.room) {
+          prev.pos = new gw.RoomPosition(o.x, o.y, o.room);
+          meta.x = o.x;
+          meta.y = o.y;
+          meta.room = o.room;
+        }
+        if (o.effects) {
+          initEffects.call(prev, o.effects);
+        } else if (meta.effects) {
+          delete prev.effects;
+        }
+        meta.effects = !!o.effects;
+        if (o.type === 'flag') {
+          prev.name = o.name;
+          prev.color = o.color || 10;
+          prev.secondaryColor = o.secondaryColor || o.color || 10;
+        }
+        return prev;
+      }
+    }
+    const w = wrapObject(o, now);
+    if (o.type !== 'mod') {
+      __reflectApply(__mapSet, residentWrappers, [o.id, w]);
+      __reflectApply(__mapSet, residentMeta, [
+        o.id,
+        {
+          type: o.type,
+          structureType: o.structureType,
+          x: o.x,
+          y: o.y,
+          room: o.room,
+          effects: !!o.effects,
+        },
+      ]);
+    }
+    return w;
+  };
+  gw.sweepResidentWrappers = function () {
+    // 对象消亡出表：rawById 缺席的 id 移除，防常驻表无界增长；Map 遍历
+    // 中删除已访问项是安全语义。
+    __reflectApply(__mapForEach, residentWrappers, [
+      (_, id) => {
+        if (!__reflectApply(__mapHas, gw.rawById, [id])) {
+          __reflectApply(__mapDelete, residentWrappers, [id]);
+        }
+      },
+    ]);
+  };
 })();

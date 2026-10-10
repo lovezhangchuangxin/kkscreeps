@@ -39,7 +39,7 @@ A/B/C 已有默认 50×6 短窗和部分 Mod/双通道回归证据，不能据�
 
 【实测】2026-10-10 记录常驻（V8 第二子片）：重采样确认 GC（标记/清除）是 V8 最大采样桶、JSON 仅 99 样本（Memory 片量级判断被证实）。实现：变长字段共享访问器改为**按字段索引**工作（字段元数据含列偏移随块布局逐 tick 变化，改从 DECODE_CTX 按索引取，访问器终身有效）；`decodeBundleResident` 以沙箱生命周期存活的 id→记录 Map 就地更新——布局签名（字段键+列类型有序串，每桶一次）一致才复用，变化即重建；目录外 id 清扫。mod_chain 491 全过。实测 run 279→265ms、CPU 2429→2242（-7.7%）、RSS 峰值一轮 -194MiB（峰值采样噪声大，CPU/run 为稳定信号）。记录对象跨 tick 同一性（已接受类）。**坑**：脚本化替换静默未命中曾使索引制访问器配上缺 `fields` 的旧 ctx（变量字段首读即炸，265 例转红）——大段替换后必须核对锚点真的命中再构建。
 
-【设计】wrapper 常驻（记录常驻已落地，本段为剩余半片）：字段 getter 全部经 `gw.rawById` 按 id 回查、`_name` 真值记忆在实例内——因此 `wrappersById` 常驻：id 存续且类型不变则复用 wrapper（省 RoomPosition/probe/装配/原型链接），`_` 前缀记忆属性按 wrapper **懒失效**（首拍访问时清，未触达的 wrapper 免清扫）；Room/Game 树仍每拍重建（廉价纯对象）。观察面边界：对象同一性跨拍保持（已接受）；主要风险是记忆失效遗漏导致陈旧字段值——由 mod_chain、双通道状态等价与棘轮锁定。probe 门控已消掉最大单项后，此片预期收益需重新采样评估再动工。
+【设计】wrapper 常驻（记录常驻已落地，本段为剩余半片）：字段 getter 全部经 `gw.rawById` 按 id 回查、`_name` 真值记忆在实例内——因此 `wrappersById` 常驻：id 存续且类型不变则复用 wrapper（省 RoomPosition/probe/装配/原型链接），`_` 前缀记忆属性按 wrapper **懒失效**（首拍访问时清，未触达的 wrapper 免清扫）；Room/Game 树仍每拍重建（廉价纯对象）。观察面边界：对象同一性跨拍保持（已接受）；主要风险是记忆失效遗漏导致陈旧字段值——由 mod_chain、双通道状态等价与棘轮锁定。probe 门控已消掉最大单项后，此片预期收益需重新采样评估再动工。（2026-10-10 已落地为 v3 并 ABBA 保留，v1/v2 的失败教训见下方补记。）
 
 【实测】2026-10-10 类型化直写编码器片（同夹具同窗 conc 4、release、与上表口径一致）：`project` P50 548.28→334.40ms（-39%）、wall P50 1176.15→1018.41ms（-13.4%）、CPU 3237.91→3285.22 core-ms/tick（+1.5%，噪声内）、RSS 峰值 2729→2620MiB（-109MiB）。实现：`KkpvVal<'a>`/`KkpvRow<'a>`/`KkpvBlockRef<'a>` 借用值模型 + `encode_ref` 单一编码核心（owned 入口经 `KkpvValue::as_val` 桥接委托，字节同源）；世界侧 `encode_room_block` 单房直写（Generic/Mod 解析保活后借用），删除 `kkpv_object_of`/`record_to_kkpv` 的第二套构造器；字段秩映射 + 行主序填列取代逐字段 find_map 的 O(字段数²) 重扫；变长载荷直接追加 arena。字节等价锁：`encode_ref_matches_owned_entry`（合成全值域块）、共享装配 vs 全 fresh 逐房编码、mod_chain 491 双通道。JSON 参考通道未动；未改玩家 API 行为，兼容性棘轮未重跑。
 
@@ -240,3 +240,25 @@ RSS 采样中位数均值下降 12.09%，峰值均值仅下降 1.80%；首对新
 **决定：保留本片。** 理由是本次交替顺序对照的两对样本均有端到端约 17% 的 wall 收益、CPU 同向下降，而非仅仅结算阶段变快。结论限于同机相同负载的短窗；今后改造继续同时检查整体 wall、CPU、尾部与 RSS，若长窗显示收益消失或内存不利，应重新评估。没有新增实现或 SDK/保存协议变化，不为验证叠加其他优化。
 
 最终 release SHA-256 仍为 `45c6961fbd43ceb1f38915680956d9fd43c1b1bdb7bd44ce138073dda0139bcb`，本轮 Rust 实现与上一轮完整门禁及 2905/9/0 棘轮验证的源码逐字节一致；本轮只新增实验记录和文档检查，不把先前检查冒充本轮复跑。下一主要优先级仍是共享房间投影装配、编码和临时分配，安全流水线/并行其次；保持 Mod 动态路径与候选原子性约束。
+
+
+## 2026-10-10 补记：投影流水线试验与撤回（懒共享块 + 执行窗口预取）
+
+【已撤回试验】采样证明主线程投影（`kkpv_bundle_for_viewer`，44%）中 ~290ms 是首个玩家触发 `build_shared_room_blocks` 全服一次性构建、阻塞首派发；run 窗口主线程空等 ~37%。据此实施两半：共享块按房懒构建（`RoomBlockCacheEntry` 按房条目，(generation, plan) 失效）+ 派发循环投影预取（槽位满后、等待前预建至并发深度，回执即派发）。mod_chain 491 绿后冻结二进制 ABBA（5+100、并发 4、同夹具）：
+
+两对相邻样本方向均不利——wall P50 +2.3%（878.6→899.1ms 均值）、CPU +2.4%，实现整体撤回。[摘要与四轮原始报告](../../compat/reports/mature-comparison/2026-10-10/50x6-projection-pipeline-withdrawn/summary.json)入库。机理归因：4P+6E 上旧结构的串行投影段独占 P 核与缓存带宽，把主线程编码挪进 4 个 V8 线程的执行窗口制造第 5 个 P 核竞争者，两边同拖慢——重叠在本机不是免费资源。补充测量：预取深度放开到不限（全预取）单窗 870ms 更差（预取连建期间槽位整批空转）；同实现下 conc=6/8 复测 wall 持平/更差且 CPU +17%/+46%、RSS 峰值反超对照，E 核惩罚不因预取消失。结论限于本机拓扑；核数受限的部署机上"总 CPU + 串行段"仍是正确优化面，本试验不改变该判断。
+
+同窗口采样另证：玩家线程 96% 时间在等信号量，忙碌部分 `begin_tick_plan`（世界注入）≈57%、`run_expr`（玩家 JS）≈43%——执行相瓶颈在每玩家的世界树重建，由此启动 wrapper 常驻（下节）。
+
+
+## 2026-10-10 补记：wrapper 常驻落地（v3）
+
+【现行实现】`registry.js` 模块级 `residentWrappers`/`residentMeta` 表：id 存续且 type/structureType 不变则复用包装实例，省 RoomPosition/装配/原型链接每拍重建；复用点急清全部 `_` 前缀自有键（`Object.keys` 只看自有键，getter 保持官方原形），另刷新自有数据面（pos 仅移动时重建、effects 有则重建无则摘除、flag 定格字段重写）；Mod 对象排除。消亡 id 由 `sweepResidentWrappers` 按 rawById 清扫。设计迭代三次：
+
+- v1（字段级懒戳）：getter 内比较 `_kkMemoTick` 纪元、只清自己字段。共享戳是 wrapper 级的——首访字段推进戳后，后访问字段看到已当前的戳漏清旧值（invaderCore/shield 两例打回，[回归](../../crates/kk-runtime/tests/mod_chain_tests/wrapper_residency.rs)锁定后废弃）。
+- v2（getter 内整包 for-in 清）：正确但 ABBA wall +3.0%/CPU +3.5%——每次字段读都过失效检查、for-in 走含原型链的慢路径；bot 每拍读数百万次字段，热路径开销吃掉全部收益，撤回。
+- v3（复用点急清，现行）：清空移出 getter；`mod_chain` 493（含两个新回归：多字段记忆失效、跨拍引用同体且读当拍值）、kk-runner 沙箱全绿、棘轮 2905/9/0 零转红。冻结二进制 ABBA（5+100、并发 4）：两对相邻样本方向一致，wall P50 881.6→806.2ms（-8.5%）、P95 -9.8%、CPU 2483.7→2297.0（-7.5%）、run 相 -9.7%、RSS 峰值 +0.7%（噪声级）。[摘要与四轮原始报告](../../compat/reports/mature-comparison/2026-10-10/50x6-wrapper-residency-abba/summary.json)入库；旧二进制与 HEAD release 逐字节一致。
+
+观察面边界（记录常驻已开同类先例）：对象同一性与玩家自挂非 `_` 属性跨拍保持（官方每拍重建即消失）；跨拍持有的旧引用与当拍包装同体且经 rawData 回查读当拍值（回归锁定）；直接读 `_name` 绕过 getter 在复用后首访前得旧值属病态旁路，棘轮未发现依赖。
+
+【已注册后续】wrapper 同一性稳定后，查询面的两项注册启动条件成立但须先重采样归因：(a) `makeRoomQueries` 逐可见房全量扫描改每拍单次分桶共享；(b) look 注册表/空间索引跨拍增量维护（依赖 id→wrapper 稳定）。两项均等 wrapper 常驻后的新热点证据再动工；`Room.find` 同拍记忆化因官方每次返回新数组、缓存引用会被玩家改写污染，暂不做。
