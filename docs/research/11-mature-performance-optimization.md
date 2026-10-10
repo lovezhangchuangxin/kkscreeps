@@ -311,3 +311,10 @@ RSS 采样中位数均值下降 12.09%，峰值均值仅下降 1.80%；首对新
 冻结二进制 ABBA（O,N,N,O、5+100、并发 4，旧=HEAD 38f75e48，新 sha `d644327f`）：两对相邻样本 wall 方向一致（new 快 4.4%/14.9%），均值 wall P50 **-10.4%**、投影段 **-22.2%**、CPU **-5.5%**（公平门通过且均值改善，最差对 +1.9% 在噪声带）、RSS 峰值 -2.0%；run/settle 亦小幅改善（-4.6%/-4.1%，分配压力下降次级效应）。[摘要与四轮原始报告](../../compat/reports/mature-comparison/2026-10-10/50x6-encoder-scratch/summary.json)入库。验证链：kk-schema 33、kk-world 101、mod_chain 493、棘轮 2905/floor 零转红、完整无参数 `pnpm run check`。
 
 【登记后续】投影串行段旅程：~297ms（L1b 前）→ ~215ms（L1b 后）→ ~178-201ms（本片后，本机口径）。剩余：信封/视野每查看者 ~33ms（`ExtensionCatalog::type_for` 逐对象哈希查 4.9ms 可静态预表）、`checked_job_receipt` ~9.7ms、KkpvRow 树 drop ~15ms。settle 侧 commit/adopt 的 BTreeMap 重建与 drop ~22ms 登记 L3'/L4 前采样复核。
+
+
+## 2026-10-11 补记：目标标尺读数与 xxs 对照环境恢复
+
+【标尺读数】L1b+L2' 后首个同机同窗 xxs 对照（compare.py、50×6、5+100、并发 4、非正式窗，[原始输出](../../compat/reports/mature-comparison/2026-10-11/)暂存 /tmp/kkscreeps-goal-window2）：kk/xxs wall P50 **555.8/237.0ms（2.35×）**、P95 2.28×、CPU **1.30×**（1927 vs 1483 core-ms）、**RSS 峰值 0.59×（2.96 vs 5.03GiB，低 41%）**。并行度 kk 3.47× vs xxs 6.26×（公平门①宽裕；CPU 1.30× 是 ②侧的真实差距）。旅程：23.4×→3.68×→3.17×→3.22×→**2.35×**。达标（0.9×=213ms）需 run 相 ~295ms（V8 聚合 ~660 core-ms/拍，50 线程池并发 4、96.7% 时间等信号量）、投影 ~190ms、结算 ~110ms 三者同时大幅压缩或重叠——L3/L4 是必经之路。
+
+【xxs 对照环境恢复方法（本机 11 天运行后构建产物被清）】git 版 xxscreeps 需要 **node v26**（README："v24 是 npm 版、v26 是 git 版"——node 24 下预编译 pathfinder 报 `HandleScope::DeleteExtensions` 符号缺失是版本错配而非需重编）：`nvm install 26` 后 pathfinder 预编译直接可用；isolated-vm 与 ivm-inspect 需以 node 26 头文件各跑一次 `npx node-gyp rebuild`（isolated-vm 另补 `out/isolated_vm.node` 软链到 compare.py 期望路径）；首次成功启动会在 packages/xxscreeps/dist 下生成 webpack 产物使 tree_digest 中途变化触发 "executable payload changed"——重跑一次即稳定。CMake 构建 pathfinder 的路线（llvm/boost/ninja）不需要，勿再入坑。
