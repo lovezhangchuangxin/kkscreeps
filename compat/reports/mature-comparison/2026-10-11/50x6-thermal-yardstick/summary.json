@@ -1,0 +1,60 @@
+{
+  "date": "2026-10-11",
+  "profile": "mature-rcl8-v1",
+  "players": 50,
+  "warmup": 5,
+  "ticks": 100,
+  "concurrency": 4,
+  "protocol": "丢弃窗热协议：先整跑一轮丢弃再采集（冷首窗伪影 30%，两侧引擎均须预热）",
+  "conclusion": "热稳态比值 ~1.83-1.85×（两独立窗复现）；冷机晨读 2.35× 系 xxs 热敏感性（+50%）远高于 kk（+18%）——冷窗给 xxs 放水。CPU 热稳态已达平价（1.00-1.06×）、RSS 0.69-0.70×。等价性分歧（structures 517/518、move +0.34%）与晨窗同签名，系既有登记项非本批引入。",
+  "rows": [
+    {
+      "window": "kkscreeps-goal-window2",
+      "kk": {
+        "wall_p50": 555.8,
+        "cpu": 1926.9,
+        "rss_gb": 2.76
+      },
+      "xxs": {
+        "wall_p50": 237.0,
+        "cpu": 1482.6,
+        "rss_gb": 4.69
+      },
+      "wall_ratio": 2.35,
+      "cpu_ratio": 1.3,
+      "rss_ratio": 0.59
+    },
+    {
+      "window": "kk-yard-steady",
+      "kk": {
+        "wall_p50": 657.4,
+        "cpu": 2114.0,
+        "rss_gb": 2.79
+      },
+      "xxs": {
+        "wall_p50": 354.9,
+        "cpu": 2108.4,
+        "rss_gb": 4.05
+      },
+      "wall_ratio": 1.85,
+      "cpu_ratio": 1.0,
+      "rss_ratio": 0.69
+    },
+    {
+      "window": "kk-yard-steady2",
+      "kk": {
+        "wall_p50": 515.5,
+        "cpu": 1784.6,
+        "rss_gb": 2.81
+      },
+      "xxs": {
+        "wall_p50": 281.0,
+        "cpu": 1685.6,
+        "rss_gb": 3.99
+      },
+      "wall_ratio": 1.83,
+      "cpu_ratio": 1.06,
+      "rss_ratio": 0.7
+    }
+  ]
+}
