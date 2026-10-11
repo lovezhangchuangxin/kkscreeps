@@ -5,6 +5,7 @@
 | 当前计划 | 用途 |
 |---|---|
 | [完整 Mod 玩法](mod-complete-gameplay.md) | 长期目标、领域范围与最终验收 |
+| [常驻、耐久命令与客户端三批](service-playable-batches.md) | 当前功能方向的目标方案，S1–S3 接口/恢复语义/子片与验收；尚未实现 |
 | [性能重构与验收](performance-rearchitecture.md) | R00–R12 依赖和 B0 验收口径；切片交付状态仍只维护在任务台账 |
 | [贡献平面方向](mod-plane-batches.md) | ADR-014 后续方向；具体执行以任务台账为准 |
 
