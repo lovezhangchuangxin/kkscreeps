@@ -1,0 +1,106 @@
+{
+ "phases": {
+  "ticks": 100,
+  "phases": {
+   "project": {
+    "count": 100,
+    "p50_ms": 52.736958,
+    "p95_ms": 59.799004,
+    "p99_ms": 74.700664,
+    "max_ms": 170.521749,
+    "total_ms": 5309.164396
+   },
+   "run": {
+    "count": 100,
+    "p50_ms": 127.751039,
+    "p95_ms": 234.976498,
+    "p99_ms": 278.243832,
+    "max_ms": 305.972501,
+    "total_ms": 14006.460932999998
+   },
+   "settle": {
+    "count": 100,
+    "p50_ms": 60.13775,
+    "p95_ms": 65.067375,
+    "p99_ms": 82.329584,
+    "max_ms": 111.085167,
+    "total_ms": 5904.953044999999
+   },
+   "wall": {
+    "count": 100,
+    "p50_ms": 246.646167,
+    "p95_ms": 359.937834,
+    "p99_ms": 402.43062499999996,
+    "max_ms": 407.204208
+   }
+  }
+ },
+ "settle_diag": {
+  "ticks": 106,
+  "segments_p50_ms": {
+   "prepare": {
+    "p50_ms": 3.521709
+   },
+   "clone": {
+    "p50_ms": 11.980117
+   },
+   "settle": {
+    "p50_ms": 64.561541
+   },
+   "hook": {
+    "p50_ms": 10.284958
+   },
+   "interroom": {
+    "p50_ms": 5.079125
+   },
+   "nukes": {
+    "p50_ms": 5.557875
+   },
+   "market": {
+    "p50_ms": 5.220458
+   },
+   "power": {
+    "p50_ms": 5.075625
+   },
+   "writeback": {
+    "p50_ms": 0.01625
+   },
+   "validate": {
+    "p50_ms": 3.192334
+   },
+   "into_prepared": {
+    "p50_ms": 0.468917
+   },
+   "commit": {
+    "p50_ms": 9.346375
+   }
+  },
+  "counters_total": {
+   "id_allocs": 0,
+   "id_restores": 0,
+   "claim_calls": 0,
+   "gcl_adds": 23400,
+   "power_adds": 600,
+   "parallel_room_ticks": 106,
+   "interroom_moves": 0,
+   "portal_moves": 0,
+   "events": 138900,
+   "rooms": 31800
+  }
+ },
+ "process": {
+  "scope": "current_process_all_threads",
+  "window": "after_warmup_through_collection_loop",
+  "wall_ms": 25389.753458000003,
+  "cpu_core_ms": 120408.21100000001,
+  "cpu_core_ms_per_tick": 1204.08211,
+  "rss_bytes_after": 3173597184,
+  "rss_bytes_sampled_peak": 3395518464,
+  "rss_bytes_sampled_p50": 3156115456,
+  "rss_observations": 101,
+  "rss_retained_samples": 101,
+  "rss_sampling_wall_ms": 2.40704,
+  "includes_sampling_and_workload_checks": true,
+  "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+ }
+}

@@ -24,13 +24,17 @@ pub fn literal_gate(data: &str, literal: &str) -> bool {
 /// Generic 写入门与发布校验共用的前置子串门：effects 键或五个域校验器
 /// 的类型门（deposit/keeperLair/invaderCore/powerBank/portal）任一可能
 /// 命中（含转义藏匿，见 [`literal_gate`]）时才需要完整解析。
+/// 转义门每串只查一次：六个 literal_gate 的 `\\u` 子扫是同一结果，
+/// 逐门重扫曾是 commit 段热点（2026-10-12 sample 取证，12 趟子串扫
+/// 降为 7 趟，布尔结果逐位等价）。
 pub(crate) fn domain_validate_markers_present(data: &str) -> bool {
-    literal_gate(data, "\"effects\"")
-        || literal_gate(data, "\"deposit\"")
-        || literal_gate(data, "\"keeperLair\"")
-        || literal_gate(data, "\"invaderCore\"")
-        || literal_gate(data, "\"powerBank\"")
-        || literal_gate(data, "\"portal\"")
+    data.contains("\\u")
+        || data.contains("\"effects\"")
+        || data.contains("\"deposit\"")
+        || data.contains("\"keeperLair\"")
+        || data.contains("\"invaderCore\"")
+        || data.contains("\"powerBank\"")
+        || data.contains("\"portal\"")
 }
 
 pub mod portal;
