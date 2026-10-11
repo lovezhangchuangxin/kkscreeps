@@ -121,6 +121,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     scenarios.run("lifo_registry_drains", lifo_registry_drains)?;
     scenarios.run("memory_alias_setters", memory_alias_setters)?;
     scenarios.run("memory_residency_regressions", memory_residency_regressions)?;
+    scenarios.run("field_dirty_reuse_counters", field_dirty_reuse_counters)?;
     scenarios.run(
         "kkpv_residency_prototype_guard",
         kkpv_residency_prototype_guard,
@@ -199,7 +200,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
         "movement_codec_capture_and_cache_lifetime",
         movement_codec_capture_and_cache_lifetime,
     )?;
-    scenarios.finish(62)?;
+    scenarios.finish(63)?;
     assert_eq!(kk_runner::lifo_violations(), 0, "全流程 LIFO 纪律零违规");
     Ok(())
 }

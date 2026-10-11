@@ -431,3 +431,13 @@ RSS 采样中位数均值下降 12.09%，峰值均值仅下降 1.80%；首对新
 【读数】compare.py 同窗配对（50×6、5+100、并发 4，丢弃轮+测量轮，二进制 670c730d）：**测量窗比值 1.1550（kk 343.1 vs xxs 297.0），自 L1a 后静默窗 1.397×**；丢弃窗（较冷）1.4137（kk 294.9/xxs 208.6）——kk 热敏 +16%、xxs +42%，热窗比值反而更低（与既往"比值随热态 1.40-1.63 摆动"方向相反的窗口对，印证单窗不可判、多窗取中枢）。CPU 比 0.749、RSS 峰值比 0.609（公平门大幅富余）。分相 project 63.4/run 138.0/settle 139.1——run 与 settle 并列最大。[证据](../../compat/reports/mature-comparison/2026-10-11/50x6-p2-first-cut-yardstick/README.md)。
 
 【settle 复采样】主线程 sample（300 tick 长窗中段）：settle_world_with_writebacks 内 engine::settle 主导，可辨识叶 settle_room ~15%/publish_tick ~16%/commit_tick_rooms ~6%，其余散布（校验/分配/drop/迭代）——与 settle 搬切证伪时的"成本分散"结论一致，无单一 ≥40ms 杠杆。结构性压缩（相位重叠/房间依赖调度）归 P4/R03 底座按重构方案放行。下一片：remat 字段级复用（run 侧）。
+
+## 2026-10-11 补记：remat 字段级复用——脏行内未变字段物化值跨拍保留（现行实现）
+
+【机理】行脏位让干净行整体跳过，但脏行（120/3210）仍全量重物化全部变长字段（store/body/actionLog/effects 等，中位 6.4 个/行，计 768 次/拍/玩家）。本片把脏粒度下推到字段：编码端（kk-schema dirty.rs DirtyMaps）逐桶逐 kind≥5 字段发位图，新 flags 位 FLAG_FIELD_DIRTY=4（携带前提 FLAG_DIRTY，束内位于行脏位段之后，尾位按桶行数归一）；Rust 解码端 view.rs 同源校验段长与尾位；JS 解码端 updateResident 增加 trusted 路径——脏行内字段位干净的保留已物化值（含惰性访问器 ctx 已指旧值的情形只跳过重装），varIdx 全分支推进防错位。玩家面语义不变：值由编码端逐格比对保证等价，观察面（wrapper/记录/Room 同一性）不动。
+
+【ABBA（冻结 release、2 丢弃+O,N,N,O、5+100、并发 4、同 l1b 夹具；旧基线与 P2 提交 2d5a872a 逐字节一致）】new/old：**wall P50 0.944（−5.6%）、run 0.861（−13.9%）、CPU 0.929（−7.1%）**、settle 1.005（持平，符合 decode 侧定位）、project 0.986；相邻对方向一致（0.943 / old4 比 new3 慢 5.8%）。**RSS 峰 +4.4%（~+140MB）记录在案未单独归因**（对 xxs RSS 门 0.609× 余量大）。KKDIAG：**remat 768→60（−92%）**，dirty/rows 口径不变，priv 1.5→2.0ms（字段位图查表，亚毫秒级）。棘轮 2905/9/0 转红 0（束格式变化零玩家可见差异）。[证据](../../compat/reports/mature-comparison/2026-10-11/50x6-remat-field-reuse/README.md)。
+
+【测试面】sandbox 计数器测试（field_dirty_reuse_counters）：定宽字段变化拍断言 dirty=1/remat=0、变长字段变化拍 remat=1——粒度语义由计数器直接锁定；kk-schema 42（尾位归一/逐字段跟踪新增）、kk-runner 63、kk-runtime 495、kk-cli sim 106 全绿。mod_chain 侧的字段级同一性断言被证伪删除：`store` getter 每拍 `makeStore` 重建（`_` 记忆无条件清空语义），玩家可见对象身份本就不跨拍，字段复用只在记录层成立。
+
+【对目标的含义】标尺窗（P2 后 1.155×，kk 343.1）锚点再让 ~5.6% ≈ −19ms → ~324ms（~1.09× 热态口径，未复测）。距 0.9×（~267ms）仍差 ~57ms。run 相经 P2+remat 两刀已显著压缩（方向性对照，跨日窗口不可比绝对值：L1a 后 w5 窗 run 185ms → 本片 ABBA 新窗 117-122ms，其中含 P2 首刀 −21.5% 与本片 −13.9% 的同机交错裁定），**下一杠杆在 settle（139ms，成本分散无单点）与 project（63ms）——结构性相位重叠归 P4/R03 重构底座**；队列再评估小片（分类表构建复用、可见房循环窄化）是否够得着剩余差距。

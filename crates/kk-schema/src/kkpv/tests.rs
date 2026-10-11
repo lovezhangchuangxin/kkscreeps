@@ -439,8 +439,14 @@ fn decode_rejects_header_mutation() {
     put_u16(&mut v2, OFF_VERSION, 2);
     assert_eq!(dec_err(&v2), KkpvError::UnsupportedVersion(2));
     let mut flags = base.clone();
-    put_u16(&mut flags, OFF_FLAGS, 4);
-    assert_eq!(dec_err(&flags), KkpvError::UnknownFlags(4));
+    put_u16(&mut flags, OFF_FLAGS, 8);
+    assert_eq!(dec_err(&flags), KkpvError::UnknownFlags(8));
+    let mut field_only = base.clone();
+    put_u16(&mut field_only, OFF_FLAGS, 4);
+    assert_eq!(
+        dec_err(&field_only),
+        KkpvError::Malformed("字段脏位段不得脱离行脏位段单独携带".into())
+    );
     let mut byte_len = base.clone();
     put_u32(&mut byte_len, OFF_BYTE_LEN, base.len() as u32 + 1);
     assert!(matches!(dec_err(&byte_len), KkpvError::ByteLen { .. }));

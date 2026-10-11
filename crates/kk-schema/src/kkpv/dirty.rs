@@ -161,9 +161,19 @@ pub(super) fn build_index(
     }
 }
 
-/// 逐格比对当前编码值与上一拍块字节，返回逐桶行脏位图（脏行置位；
-/// 无配对桶的桶全脏）。正确性不依赖两拍相邻：比对以字节内容为准，
-/// 基准拍号交给解码端衔接校验。
+/// 脏位段的全部位图：逐桶行位图（脏行置位）与逐桶变长字段位图
+/// （字段变格置位，仅 kind≥5 字段、按字段序）。两列位图由
+/// [`compute`] 同一次逐格比对产出，行脏 = 任一字段脏或结构性脏
+/// （ID 未对位、桶无配对、prev-only 字段存在等——此时该行全部
+/// 变长字段置位，解码端按全量重装）。
+pub(crate) struct DirtyMaps {
+    pub(super) rows: Vec<Vec<u8>>,
+    pub(super) fields: Vec<Vec<Vec<u8>>>,
+}
+
+/// 逐格比对当前编码值与上一拍块字节，返回逐桶行脏位图与变长字段
+/// 脏位图（脏行置位/变格置位；无配对桶的桶全脏全变）。正确性不依赖
+/// 两拍相邻：比对以字节内容为准，基准拍号交给解码端衔接校验。
 #[allow(clippy::too_many_arguments)]
 pub(super) fn compute<'o>(
     prev: &PrevBlockIndex,
@@ -176,11 +186,24 @@ pub(super) fn compute<'o>(
     arena: &[u8],
     order: &[usize],
     row_bucket: &[u32],
-) -> Vec<Vec<u8>> {
-    let mut bitmaps = plans
-        .iter()
-        .map(|plan| vec![0u8; bitmap_bytes(plan.rows)])
-        .collect::<Vec<_>>();
+) -> DirtyMaps {
+    let mut maps = DirtyMaps {
+        rows: plans
+            .iter()
+            .map(|plan| vec![0u8; bitmap_bytes(plan.rows)])
+            .collect::<Vec<_>>(),
+        fields: plans
+            .iter()
+            .map(|plan| {
+                let bm = vec![0xFF; bitmap_bytes(plan.rows)];
+                plan.fields
+                    .iter()
+                    .filter(|field| is_variable(field.kind))
+                    .map(|_| bm.clone())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>(),
+    };
     // 逐桶配对上一拍桶（type_key 相同）并预配对字段（键与列类型均
     // 同才可比较）；配对只做一次，行循环内全部走整数偏移。
     let mut prev_bucket_of: Vec<Option<usize>> = Vec::with_capacity(plans.len());
@@ -233,48 +256,60 @@ pub(super) fn compute<'o>(
                         break;
                     }
                 }
-                if dirty {
-                    // prev-only 已判脏，跳过逐格比对（保持保守）。
-                } else {
+                if !dirty {
+                    // 变长字段位图的本桶列（秩→位图索引）：当前桶内第
+                    // var_idx 个 kind≥5 字段对应 fields[rank][var_idx]。
+                    let mut var_idx = 0usize;
                     for (fr, pairing) in pairs.iter().enumerate() {
                         let field = &plan.fields[fr];
                         let value = columns_all[field.col_base + row as usize];
-                        match pairing {
-                            Some(pf) => {
-                                if !cell_clean(
-                                    value,
-                                    field,
-                                    row,
-                                    cells_all,
-                                    arena,
-                                    prev_bytes,
-                                    prev.arena_off as usize,
-                                    &prev_fields[*pf],
-                                    prev_row as usize,
-                                ) {
-                                    dirty = true;
-                                    break;
-                                }
-                            }
+                        let cell_dirty = match pairing {
+                            Some(pf) => !cell_clean(
+                                value,
+                                field,
+                                row,
+                                cells_all,
+                                arena,
+                                prev_bytes,
+                                prev.arena_off as usize,
+                                &prev_fields[*pf],
+                                prev_row as usize,
+                            ),
                             // 字段无配对（新增键/列类型变化）：当前缺失则与
                             // 上一拍"无该属性"同形、可算干净，其余判脏。
-                            None => {
-                                if value.is_some() {
-                                    dirty = true;
-                                    break;
-                                }
+                            None => value.is_some(),
+                        };
+                        if cell_dirty {
+                            dirty = true;
+                        }
+                        if is_variable(field.kind) {
+                            let bitmap = &mut maps.fields[rank][var_idx];
+                            if !cell_dirty {
+                                bitmap[row as usize / 8] &= !(1 << (row % 8));
                             }
+                            var_idx += 1;
                         }
                     }
                 }
             }
         }
         if dirty {
-            let bitmap = &mut bitmaps[rank];
+            let bitmap = &mut maps.rows[rank];
             bitmap[row as usize / 8] |= 1 << (row % 8);
         }
     }
-    bitmaps
+    // 字段位图尾位规范化：越行位保持 1 会违反位图规范形（尾位须零），
+    // 与缺失/null/行位图同一纪律。
+    for (rank, bucket) in maps.fields.iter_mut().enumerate() {
+        let rows = plans[rank].rows;
+        if !rows.is_multiple_of(8) {
+            for bitmap in bucket {
+                let last = bitmap.len() - 1;
+                bitmap[last] &= (1u8 << (rows % 8)) - 1;
+            }
+        }
+    }
+    maps
 }
 
 /// 字段配对：两侧字段均按键升序，双指针推进；返回 (cur 字段秩 →
@@ -436,22 +471,33 @@ mod tests {
         u16::from_le_bytes([data[OFF_FLAGS], data[OFF_FLAGS + 1]])
     }
 
-    /// 按目录读逐行脏位（id → 是否脏）。走查与解码端同源推进。
+    /// 按目录读逐行脏位（id → 是否脏）。走查与解码端同源推进；携带
+    /// 字段位图时一并消费（字段小节在行位图之后按桶序拼接）。
     fn dirty_by_id(data: &[u8]) -> std::collections::HashMap<u64, bool> {
         assert_ne!(flags_of(data) & FLAG_DIRTY, 0, "块未携带脏位段");
         let buckets_off = read_u32_at(data, OFF_BUCKETS) as usize;
         let type_count = read_u32_at(data, OFF_TYPE_COUNT) as usize;
         let dirty_off = read_u32_at(data, OFF_DIRTY) as usize;
+        let dirty_len = read_u32_at(data, OFF_DIRTY + 4) as usize;
         let mut walk = buckets_off;
         let mut bm_at = Vec::with_capacity(type_count);
+        let mut rows_of = Vec::with_capacity(type_count);
+        let mut var_counts = Vec::with_capacity(type_count);
         let mut dirty_cursor = dirty_off;
         for _ in 0..type_count {
             let rows = read_u32_at(data, walk + 8);
             let field_count = read_u32_at(data, walk + 12) as usize;
             let bm = bitmap_bytes(rows);
             bm_at.push(dirty_cursor);
+            rows_of.push(rows);
             dirty_cursor += bm;
             let fields_at = walk + BUCKET_HEADER;
+            let mut variables = 0usize;
+            for f in 0..field_count {
+                let kind = data[fields_at + f * FIELD_ENTRY + 8];
+                variables += usize::from(is_variable(kind));
+            }
+            var_counts.push(variables);
             walk += BUCKET_HEADER + field_count * FIELD_ENTRY + field_count * bm * 2;
             let mut columns = 0usize;
             for f in 0..field_count {
@@ -460,10 +506,17 @@ mod tests {
             }
             walk += columns;
         }
+        let field_base = dirty_cursor;
+        if flags_of(data) & FLAG_FIELD_DIRTY != 0 {
+            dirty_cursor = field_base;
+            for t in 0..type_count {
+                dirty_cursor += var_counts[t] * bitmap_bytes(rows_of[t]);
+            }
+        }
         assert_eq!(
             dirty_cursor,
-            dirty_off + read_u32_at(data, OFF_DIRTY + 4) as usize,
-            "脏位段长度与桶行数精确一致"
+            dirty_off + dirty_len,
+            "脏位段长度与桶行数（含字段小节）精确一致"
         );
         let dir_off = read_u32_at(data, OFF_DIRECTORY) as usize;
         let mut out = std::collections::HashMap::new();
@@ -476,6 +529,81 @@ mod tests {
             out.insert(id, data[base + row as usize / 8] & (1 << (row % 8)) != 0);
         }
         out
+    }
+
+    /// 读某 id 在某字段键上的字段脏位（携带字段小节时）。返回 None 表示
+    /// 该字段非变长或不携带字段小节。
+    fn field_dirty_of(data: &[u8], id: u64, key: &str) -> Option<bool> {
+        if flags_of(data) & FLAG_FIELD_DIRTY == 0 {
+            return None;
+        }
+        let buckets_off = read_u32_at(data, OFF_BUCKETS) as usize;
+        let type_count = read_u32_at(data, OFF_TYPE_COUNT) as usize;
+        let dirty_off = read_u32_at(data, OFF_DIRTY) as usize;
+        let dirty_len = read_u32_at(data, OFF_DIRTY + 4) as usize;
+        let arena_off = read_u32_at(data, OFF_ARENA) as usize;
+        // 桶走查收集行位图偏移、行数与变长字段键序（含 arena 键读取）。
+        let mut walk = buckets_off;
+        let mut rows_at = Vec::with_capacity(type_count);
+        let mut rows_of = Vec::with_capacity(type_count);
+        let mut var_keys_at = Vec::with_capacity(type_count);
+        let mut dirty_cursor = dirty_off;
+        let mut row_bm_total = 0usize;
+        for _ in 0..type_count {
+            let rows = read_u32_at(data, walk + 8);
+            let field_count = read_u32_at(data, walk + 12) as usize;
+            let bm = bitmap_bytes(rows);
+            rows_at.push(dirty_cursor);
+            rows_of.push(rows);
+            row_bm_total += bm;
+            dirty_cursor += bm;
+            let fields_at = walk + BUCKET_HEADER;
+            let mut var_offsets = Vec::new();
+            for f in 0..field_count {
+                let kind = data[fields_at + f * FIELD_ENTRY + 8];
+                if is_variable(kind) {
+                    var_offsets.push(fields_at + f * FIELD_ENTRY);
+                }
+            }
+            var_keys_at.push(var_offsets);
+            walk += BUCKET_HEADER + field_count * FIELD_ENTRY + field_count * bm * 2;
+            let mut columns = 0usize;
+            for f in 0..field_count {
+                let kind = data[fields_at + f * FIELD_ENTRY + 8];
+                columns += column_width(kind) * rows as usize;
+            }
+            walk += columns;
+        }
+        let dir_off = read_u32_at(data, OFF_DIRECTORY) as usize;
+        for i in 0..read_u32_at(data, OFF_OBJECT_COUNT) as usize {
+            let at = dir_off + i * DIRECTORY_ENTRY;
+            if read_u64_at(data, at) != id {
+                continue;
+            }
+            let handle = read_u32_at(data, at + 8) as usize;
+            let row = read_u32_at(data, at + 12) as usize;
+            // 在该桶变长字段序中定位键。
+            let mut cursor = dirty_off + row_bm_total;
+            for t in 0..handle {
+                cursor += var_keys_at[t].len() * bitmap_bytes(rows_of[t]);
+            }
+            for (vi, field_at) in var_keys_at[handle].iter().enumerate() {
+                let key_off = read_u32_at(data, *field_at) as usize;
+                let key_len = read_u32_at(data, *field_at + 4) as usize;
+                let name =
+                    std::str::from_utf8(&data[arena_off + key_off..arena_off + key_off + key_len])
+                        .unwrap();
+                let bm = bitmap_bytes(rows_of[handle]);
+                if name == key {
+                    return Some(data[cursor + vi * bm + row / 8] & (1 << (row % 8)) != 0);
+                }
+            }
+            cursor += var_keys_at[handle].len() * bitmap_bytes(rows_of[handle]);
+            let _ = cursor;
+            return None;
+        }
+        let _ = dirty_len;
+        None
     }
 
     /// 索引偏移交叉验证：build_index 的桶布局偏移必须与按解码端同源
@@ -612,6 +740,130 @@ mod tests {
             Some(&first),
         );
         assert!(dirty_by_id(changed.bytes())[&1], "同长度异内容脏");
+    }
+
+    /// 字段级脏位：脏行内未变的变长字段位清零（解码端保留物化值）、
+    /// 变格字段置位；定宽字段不占位图；结构性脏（新增行）全部置位。
+    #[test]
+    fn field_dirty_bits_track_per_variable_field() {
+        let first = encode_again(
+            &block(
+                vec![obj(
+                    1,
+                    "t:a",
+                    vec![
+                        ("k", KkpvValue::Int(5)),
+                        ("s", KkpvValue::Str("aa".into())),
+                        ("arr", KkpvValue::Array(vec![KkpvValue::Int(1)])),
+                    ],
+                )],
+                1,
+            ),
+            None,
+        );
+        // 定宽变化、两个变长未变：行脏，两个变长字段位清零。
+        let second = encode_again(
+            &block(
+                vec![obj(
+                    1,
+                    "t:a",
+                    vec![
+                        ("k", KkpvValue::Int(6)),
+                        ("s", KkpvValue::Str("aa".into())),
+                        ("arr", KkpvValue::Array(vec![KkpvValue::Int(1)])),
+                    ],
+                )],
+                2,
+            ),
+            Some(&first),
+        );
+        assert_eq!(
+            flags_of(second.bytes()) & FLAG_FIELD_DIRTY,
+            FLAG_FIELD_DIRTY
+        );
+        assert!(dirty_by_id(second.bytes())[&1], "定宽变化行脏");
+        assert_eq!(
+            field_dirty_of(second.bytes(), 1, "s"),
+            Some(false),
+            "未变字符串字段位清零"
+        );
+        assert_eq!(
+            field_dirty_of(second.bytes(), 1, "arr"),
+            Some(false),
+            "未变数组字段位清零"
+        );
+        assert_eq!(
+            field_dirty_of(second.bytes(), 1, "k"),
+            None,
+            "定宽字段不占位图"
+        );
+        KkpvView::decode(second.bytes(), &KkpvLimits::default()).unwrap();
+        // 变长变格：行脏且该字段置位，另一变长保持清零。
+        let third = encode_again(
+            &block(
+                vec![obj(
+                    1,
+                    "t:a",
+                    vec![
+                        ("k", KkpvValue::Int(6)),
+                        ("s", KkpvValue::Str("aa".into())),
+                        ("arr", KkpvValue::Array(vec![KkpvValue::Int(2)])),
+                    ],
+                )],
+                3,
+            ),
+            Some(&second),
+        );
+        assert_eq!(field_dirty_of(third.bytes(), 1, "arr"), Some(true));
+        assert_eq!(field_dirty_of(third.bytes(), 1, "s"), Some(false));
+        KkpvView::decode(third.bytes(), &KkpvLimits::default()).unwrap();
+        // 新增行（结构性脏）：全部变长字段置位。
+        let grown = encode_again(
+            &block(
+                vec![
+                    obj(
+                        1,
+                        "t:a",
+                        vec![
+                            ("k", KkpvValue::Int(6)),
+                            ("s", KkpvValue::Str("aa".into())),
+                            ("arr", KkpvValue::Array(vec![KkpvValue::Int(2)])),
+                        ],
+                    ),
+                    obj(
+                        2,
+                        "t:a",
+                        vec![("k", KkpvValue::Int(1)), ("s", KkpvValue::Str("zz".into()))],
+                    ),
+                ],
+                4,
+            ),
+            Some(&third),
+        );
+        assert!(dirty_by_id(grown.bytes())[&2], "新增行脏");
+        assert_eq!(field_dirty_of(grown.bytes(), 2, "s"), Some(true));
+        assert_eq!(
+            field_dirty_of(grown.bytes(), 2, "arr"),
+            Some(true),
+            "新增行无基准可比，全部变长字段置位"
+        );
+        KkpvView::decode(grown.bytes(), &KkpvLimits::default()).unwrap();
+    }
+
+    /// 字段位图尾位规范形：行数非 8 倍数的桶，字段位图越行尾位为零
+    /// （Rust 解码端 BitmapTailBits 校验通过）。
+    #[test]
+    fn field_dirty_tail_bits_normalized() {
+        let objects: Vec<_> = (0..5)
+            .map(|i| obj(i, "t:a", vec![("s", KkpvValue::Str(format!("v{i}")))]))
+            .collect();
+        let first = encode_again(&block(objects.clone(), 1), None);
+        let second = encode_again(&block(objects, 2), Some(&first));
+        assert_eq!(
+            flags_of(second.bytes()) & FLAG_FIELD_DIRTY,
+            FLAG_FIELD_DIRTY
+        );
+        KkpvView::decode(second.bytes(), &KkpvLimits::default()).unwrap();
     }
 
     #[test]

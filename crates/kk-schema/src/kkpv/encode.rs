@@ -382,7 +382,7 @@ fn encode_impl(
     let type_keys: Vec<&str> = buckets.iter().map(|b| syms.name(b.type_sym)).collect();
     let (dirty_maps, dirty_base_tick) = match prev.and_then(PrevEncodedBlock::parts) {
         Some((index, bytes)) => (
-            dirty::compute(
+            Some(dirty::compute(
                 index,
                 bytes,
                 input,
@@ -393,12 +393,23 @@ fn encode_impl(
                 &arena.bytes,
                 &order,
                 &row_bucket,
-            ),
+            )),
             Some(index.tick),
         ),
-        _ => (Vec::new(), None),
+        _ => (None, None),
     };
-    let dirty_len: usize = dirty_maps.iter().map(Vec::len).sum();
+    // 脏位段两小节：行位图（桶秩序拼接）+ 字段位图（逐桶逐变长字段）。
+    let dirty_len = dirty_maps
+        .as_ref()
+        .map(|maps| {
+            maps.rows.iter().map(Vec::len).sum::<usize>()
+                + maps
+                    .fields
+                    .iter()
+                    .map(|bucket| bucket.iter().map(Vec::len).sum::<usize>())
+                    .sum::<usize>()
+        })
+        .unwrap_or(0);
 
     let directory_len = order.len() * DIRECTORY_ENTRY;
     let mut bucket_bytes = Vec::new();
@@ -517,7 +528,7 @@ fn encode_impl(
     let dirty_present = dirty_len > 0;
     let mut flags = u16::from(input.private) * FLAG_PRIVATE;
     if dirty_present {
-        flags |= FLAG_DIRTY;
+        flags |= FLAG_DIRTY | FLAG_FIELD_DIRTY;
     }
     out[OFF_FLAGS..OFF_FLAGS + 2].copy_from_slice(&flags.to_le_bytes());
     out[OFF_BYTE_LEN..OFF_BYTE_LEN + 4].copy_from_slice(&fits(total)?.to_le_bytes());
@@ -546,8 +557,9 @@ fn encode_impl(
     let (arena_o, arena_l) = seg_pair(arena_off, arena.bytes.len())?;
     out[OFF_ARENA..OFF_ARENA + 4].copy_from_slice(&arena_o.to_le_bytes());
     out[OFF_ARENA + 4..OFF_ARENA + 8].copy_from_slice(&arena_l.to_le_bytes());
-    // 脏位段（第五段，桶秩序拼接的逐桶行位图）与基准拍号只在
-    // FLAG_DIRTY 置位时携带；其余情形保留区保持零，与无脏位产物一致。
+    // 脏位段（第五段）只在 FLAG_DIRTY 置位时携带；布局两小节：先逐桶
+    // 行位图（桶秩序拼接），再逐桶变长字段位图（FLAG_FIELD_DIRTY）。
+    // 基准拍号随段携带；无基准时保留区保持零，与无脏位产物一致。
     let (dirty_o, dirty_l) = seg_pair(dirty_off, dirty_len)?;
     out[OFF_DIRTY..OFF_DIRTY + 4].copy_from_slice(&dirty_o.to_le_bytes());
     out[OFF_DIRTY + 4..OFF_DIRTY + 8].copy_from_slice(&dirty_l.to_le_bytes());
@@ -569,9 +581,18 @@ fn encode_impl(
     out[buckets_off..buckets_off + bucket_bytes.len()].copy_from_slice(&bucket_bytes);
     out[arena_off..arena_off + arena.bytes.len()].copy_from_slice(&arena.bytes);
     let mut dirty_cursor = dirty_off;
-    for bitmap in &dirty_maps {
-        out[dirty_cursor..dirty_cursor + bitmap.len()].copy_from_slice(bitmap);
-        dirty_cursor += bitmap.len();
+    if let Some(maps) = &dirty_maps {
+        for bitmap in &maps.rows {
+            out[dirty_cursor..dirty_cursor + bitmap.len()].copy_from_slice(bitmap);
+            dirty_cursor += bitmap.len();
+        }
+        for bucket in &maps.fields {
+            for bitmap in bucket {
+                out[dirty_cursor..dirty_cursor + bitmap.len()].copy_from_slice(bitmap);
+                dirty_cursor += bitmap.len();
+            }
+        }
+        debug_assert_eq!(dirty_cursor, dirty_off + dirty_len);
     }
     let index = want_index.then(|| {
         dirty::build_index(

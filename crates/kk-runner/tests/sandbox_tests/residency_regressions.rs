@@ -127,3 +127,110 @@ pub(super) fn kkpv_residency_prototype_guard() -> anyhow::Result<()> {
     );
     Ok(())
 }
+
+/// 字段级复用（FLAG_FIELD_DIRTY）：双拍手搓束精确断言 KKDIAG remat——
+/// 定宽变化拍变长字段零重物化（旧实现等于该行全部变长字段数），单个
+/// 变长字段变格拍恰 1 次重物化。
+pub(super) fn field_dirty_reuse_counters() -> anyhow::Result<()> {
+    use kk_schema::kkpv::{KkpvBlockRef, KkpvLimits, KkpvRow, KkpvVal, encode_with_dirty};
+    let limits = KkpvLimits::default();
+    let block = |tick: u64, hits: i64, store_energy: i64| KkpvBlockRef {
+        private: true,
+        tick,
+        generation: 0,
+        plan_hash: [0; 32],
+        audience_hash: [0; 32],
+        room_name: "W1N1",
+        terrain: None,
+        rows: vec![KkpvRow {
+            id: 1,
+            type_key: std::borrow::Cow::Borrowed("creep"),
+            fields: vec![
+                ("type", KkpvVal::Str("creep")),
+                ("room", KkpvVal::Str("W1N1")),
+                ("x", KkpvVal::Int(10)),
+                ("y", KkpvVal::Int(10)),
+                ("hits", KkpvVal::Int(hits)),
+                ("owner", KkpvVal::Str("p1")),
+                ("name", KkpvVal::Str("m1")),
+                ("body", KkpvVal::Array(vec![KkpvVal::Str("move")])),
+                (
+                    "store",
+                    KkpvVal::Object(vec![("energy", KkpvVal::Int(store_energy))]),
+                ),
+            ],
+        }],
+    };
+    // 束框架：u32 块数 + 逐块 u32 长度 + 块字节（与 forEachBlock 同源）。
+    fn frame(block_bytes: &[u8]) -> Vec<u8> {
+        let mut out = 1u32.to_le_bytes().to_vec();
+        out.extend((block_bytes.len() as u32).to_le_bytes());
+        out.extend(block_bytes);
+        out
+    }
+    let world = |time: u64| {
+        serde_json::json!({
+            "time": time, "user": "p1",
+            "cpu": {"limit": 20, "tickLimit": 500, "bucket": 10000},
+            "rooms": {"W1N1": {"name": "W1N1", "terrain": vec![0u8; 2500]}},
+            "objects": [],
+        })
+    };
+    let mut sb = Sandbox::new(SandboxConfig {
+        run_diag: true,
+        ..SandboxConfig::default()
+    })?;
+    let begin = |sb: &mut Sandbox, time: u64, bundle: Vec<u8>| -> anyhow::Result<()> {
+        // 公开束块头带 tick，须与信封同拍重建。
+        let public =
+            kk_world::kkpv::kkpv_public_bundle_from_world_json(&world(time), [0; 32], [0; 32])
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
+        sb.begin_tick_kkpv(
+            &kk_world::kkpv::kkpv_envelope_from_world_json(&world(time)),
+            &kk_runner::SharedKkpvBundle::from_vec(public),
+            &kk_runner::SharedKkpvBundle::from_vec(bundle),
+        )?;
+        Ok(())
+    };
+    // 首拍：物化全部变长字段（读取触发惰性首解码）。
+    let first =
+        encode_with_dirty(&block(1, 100, 5), &limits, None).map_err(|e| anyhow::anyhow!("{e}"))?;
+    begin(&mut sb, 1, frame(first.bytes()))?;
+    let r = sb.run_expr("Game.getObjectById('kk0000000000000001') !== null")?;
+    assert_eq!(r["value"], true, "对象在首拍可见");
+    sb.end_tick()?;
+    sb.settle_bill();
+    // 次拍：仅定宽 hits 变化（行脏、全部变长字段位清零）——remat 必须为 0。
+    let second = encode_with_dirty(&block(2, 99, 5), &limits, Some(&first))
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    begin(&mut sb, 2, frame(second.bytes()))?;
+    let r = sb.run_expr("Game.getObjectById('kk0000000000000001').hits")?;
+    assert_eq!(r["value"], 99, "定宽变化读到新值: {r}");
+    sb.end_tick()?;
+    sb.settle_bill();
+    let remat = sb
+        .drain_console()
+        .iter()
+        .filter_map(|line| line.text.strip_prefix("KKDIAG "))
+        .next_back()
+        .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
+        .and_then(|d| d["remat"].as_i64());
+    assert_eq!(remat, Some(0), "定宽变化拍的变长字段零重物化");
+    // 第三拍：仅 store 变格（其余变长字段仍清零）——remat 恰 1。
+    let third = encode_with_dirty(&block(3, 99, 6), &limits, Some(&second))
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    begin(&mut sb, 3, frame(third.bytes()))?;
+    let r = sb.run_expr("Game.getObjectById('kk0000000000000001').store.energy")?;
+    assert_eq!(r["value"], 6, "变格字段读到新值");
+    sb.end_tick()?;
+    sb.settle_bill();
+    let remat = sb
+        .drain_console()
+        .iter()
+        .filter_map(|line| line.text.strip_prefix("KKDIAG "))
+        .next_back()
+        .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
+        .and_then(|d| d["remat"].as_i64());
+    assert_eq!(remat, Some(1), "单个变长字段变格恰 1 次重物化");
+    Ok(())
+}

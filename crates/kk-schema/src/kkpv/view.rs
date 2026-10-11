@@ -203,8 +203,13 @@ impl<'a> KkpvView<'a> {
             return Err(KkpvError::UnsupportedVersion(version));
         }
         let flags = u16::from_le_bytes([data[OFF_FLAGS], data[OFF_FLAGS + 1]]);
-        if flags & !(FLAG_PRIVATE | FLAG_DIRTY) != 0 {
+        if flags & !(FLAG_PRIVATE | FLAG_DIRTY | FLAG_FIELD_DIRTY) != 0 {
             return Err(KkpvError::UnknownFlags(flags));
+        }
+        if flags & FLAG_FIELD_DIRTY != 0 && flags & FLAG_DIRTY == 0 {
+            return Err(KkpvError::Malformed(
+                "字段脏位段不得脱离行脏位段单独携带".into(),
+            ));
         }
         let declared_len = read_u32_at(data, OFF_BYTE_LEN);
         if declared_len as usize != data.len() {
@@ -504,8 +509,10 @@ impl<'a> KkpvView<'a> {
                 segment: buckets_len,
             });
         }
-        // 脏位段内容：长度须精确等于逐桶位图之和（桶秩序拼接），每桶
-        // 越行尾位为零——与缺失/null 位图同一规范形。
+        // 脏位段内容：行位图小节长度须精确等于逐桶位图之和（桶秩序
+        // 拼接），每桶越行尾位为零——与缺失/null 位图同一规范形；
+        // FLAG_FIELD_DIRTY 置位时随后的字段位图小节按桶序为每桶每个
+        // kind≥5 字段各一行位图，尾位同规范，总长须精确消费。
         let mut dirty_bitmaps = Vec::new();
         if dirty_len > 0 {
             let mut cursor = dirty_off;
@@ -522,6 +529,29 @@ impl<'a> KkpvView<'a> {
                 }
                 dirty_bitmaps.push(slice);
                 cursor += bm;
+            }
+            if flags & FLAG_FIELD_DIRTY != 0 {
+                for bucket in &buckets {
+                    let bm = bitmap_bytes(bucket.rows);
+                    for field in &bucket.fields {
+                        if !is_variable(field.kind) {
+                            continue;
+                        }
+                        if cursor + bm > dirty_off + dirty_len {
+                            return Err(KkpvError::Malformed("字段脏位段长度不足".into()));
+                        }
+                        let slice = &data[cursor..cursor + bm];
+                        let valid_bits: u8 = if bucket.rows.is_multiple_of(8) {
+                            0xFF
+                        } else {
+                            (1u8 << (bucket.rows % 8)) - 1
+                        };
+                        if slice[bm - 1] & !valid_bits != 0 {
+                            return Err(KkpvError::BitmapTailBits);
+                        }
+                        cursor += bm;
+                    }
+                }
             }
             if cursor != dirty_off + dirty_len {
                 return Err(KkpvError::Malformed("脏位段长度与桶行数不符".into()));

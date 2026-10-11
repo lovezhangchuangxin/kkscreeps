@@ -339,7 +339,10 @@
     if (u32(dv, start) !== 0x56504b4b) fail('魔数不符');
     if (u16(dv, start + 4) !== 1) fail('版本不支持');
     const flags = u16(dv, start + 6);
-    if ((flags & ~3) !== 0) fail('未知 flags 位');
+    if ((flags & ~7) !== 0) fail('未知 flags 位');
+    if ((flags & 4) !== 0 && (flags & 2) === 0) {
+      fail('字段脏位段不得脱离行脏位段单独携带');
+    }
     if (u32(dv, start + 8) !== len) fail('byte_len 不符');
     if (u32(dv, start + 12) !== HEADER_LEN) fail('header_len 不符');
     // 保留区 144..160 承载行脏位段对（FLAG_DIRTY 置位时为块内第五段，
@@ -499,7 +502,27 @@
       bucketList[bucketList.length] = { rows, fields, lazyAccessors, sig, dirtyAt };
     }
     if (cur !== bucketsEnd) fail('桶段消费不符');
-    if (h.dirty[1] > 0 && dirtyCursor !== start + h.dirty[0] + h.dirty[1]) {
+    // 字段脏位小节（FLAG_FIELD_DIRTY）：行位图小节之后按桶序为每桶
+    // 每个 kind≥5 字段各一行位图；记录每桶偏移数组供 updateResident
+    // 按字段序对位（变长字段枚举序与编码端同源）。总长须精确消费。
+    if ((h.flags & 4) !== 0) {
+      let fieldCursor = dirtyCursor;
+      for (let t = 0; t < bucketList.length; t++) {
+        const bucket = bucketList[t];
+        const bmLen = (bucket.rows >>> 3) + ((bucket.rows & 7) !== 0 ? 1 : 0);
+        const offs = [];
+        for (let f = 0; f < bucket.fields.length; f++) {
+          if (bucket.fields[f].kind < 5) continue;
+          offs[offs.length] = fieldCursor;
+          fieldCursor += bmLen;
+        }
+        bucket.fieldDirtyAt = offs;
+      }
+      if (fieldCursor !== start + h.dirty[0] + h.dirty[1]) {
+        fail('字段脏位段长度与桶变长字段数不符');
+      }
+    } else if (h.dirty[1] > 0 && dirtyCursor !== start + h.dirty[0] + h.dirty[1]) {
+      // 无字段小节时行位图小节即整段（旧形态块），长度精确校验。
       fail('脏位段长度与桶行数不符');
     }
 
@@ -560,7 +583,7 @@
               rePointCtx(existing, dv, row, arenaBase, arenaLen, bucket.fields);
             }
           } else {
-            updateResident(existing, dv, bucket, row, arenaBase, arenaLen);
+            updateResident(existing, dv, bucket, row, arenaBase, arenaLen, cleanEnabled);
           }
           records[records.length] = existing;
           his[his.length] = hi;
@@ -581,7 +604,7 @@
                 rePointCtx(found, dv, row, arenaBase, arenaLen, bucket.fields);
               }
             } else {
-              updateResident(found, dv, bucket, row, arenaBase, arenaLen);
+              updateResident(found, dv, bucket, row, arenaBase, arenaLen, cleanEnabled);
             }
             records[records.length] = found;
             his[his.length] = hi;
@@ -650,24 +673,36 @@
   // 重写、缺失字段删除残留，变长字段重装共享访问器（顶掉已物化的旧值）。
   // 调用前已由布局签名保证字段集、顺序与列类型不变。就地更新即数据变更
   // ——打变更戳供装配主环差分（干净行不打）。
-  function updateResident(rec, dv, bucket, row, arenaBase, arenaLen) {
+  function updateResident(rec, dv, bucket, row, arenaBase, arenaLen, trusted) {
     DIAG.dirty++;
     rec[CHANGED_TICK] = updateStamp;
     if (bucket.lazyAccessors !== null) {
       rePointCtx(rec, dv, row, arenaBase, arenaLen, bucket.fields);
     }
     const fields = bucket.fields;
+    // 变长字段按字段脏位条件跳过（基准衔接时才可信任——错位轮编码端
+    // 的"与基准等值"不代表解码端常驻状态）：位清零表示该格与基准拍
+    // 逐格等值，已物化值保持、未物化经重指的 ctx 惰性首读等值字节，
+    // 两者都不需要重装访问器；位图缺省（无字段小节）按全量重装。
+    const fieldDirtyAt = trusted ? bucket.fieldDirtyAt : null;
+    let varIdx = 0;
     for (let f = 0; f < fields.length; f++) {
       const field = fields[f];
+      const isVar = field.kind >= 5;
       if (bitAt(dv, field.missingAt, row)) {
+        // 缺失也占一个字段位图槽（枚举序与编码端同源按字段序）。
         delete rec[field.key];
-      } else if (field.kind < 5) {
+      } else if (!isVar) {
         rec[field.key] = readField(dv, field, row, arenaBase, arenaLen);
-      } else {
-        // 变长字段重物化（P2 目标面）：值未变也会重新安装访问器。
+      } else if (
+        fieldDirtyAt === null ||
+        fieldDirtyAt === undefined ||
+        bitAt(dv, fieldDirtyAt[varIdx], row)
+      ) {
         DIAG.remat++;
         __defineProperty(rec, field.key, bucket.lazyAccessors[f]);
       }
+      if (isVar) varIdx++;
     }
   }
 
