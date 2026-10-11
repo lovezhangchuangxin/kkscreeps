@@ -18,7 +18,7 @@ use kk_schema::kkpv::{
 };
 use kk_schema::room::RoomObject;
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use crate::domain::room::room_energy;
@@ -46,6 +46,143 @@ pub(crate) struct SharedRoomBlock {
     pub(crate) empty: Option<Arc<Vec<u8>>>,
 }
 
+/// 单房共享资格扫描（与全服构建口径一致）。
+pub(crate) struct SharedRoomScan {
+    pub(crate) eligible: bool,
+    pub(crate) has_owned_site: bool,
+}
+
+pub(crate) fn scan_shared_room(state: &crate::world::RoomState) -> SharedRoomScan {
+    let (mut has_owned_flag, mut has_mod, mut has_owned_site) = (false, false, false);
+    for object in state.objects.values() {
+        match object {
+            RoomObject::Flag(f) if f.owner.is_some() => has_owned_flag = true,
+            RoomObject::ConstructionSite(cs) if cs.owner.is_some() => has_owned_site = true,
+            RoomObject::Mod(_) => has_mod = true,
+            _ => {}
+        }
+    }
+    SharedRoomScan {
+        eligible: !has_owned_flag && !has_mod && state.extensions.is_empty(),
+        has_owned_site,
+    }
+}
+
+/// 即时编码单房的共享块对（full 走行级脏位，prev 给出上一拍保留）。
+/// 共享构建失败返回 None——调用方（全服构建）按回退逐查看者处理。
+pub(crate) fn encode_shared_room_pair(
+    name: &str,
+    state: &crate::world::RoomState,
+    meta: RoomBlockMeta,
+    scan: SharedRoomScan,
+    prev: Option<&PrevEncodedBlock>,
+) -> (
+    std::sync::Arc<PrevEncodedBlock>,
+    Option<std::sync::Arc<Vec<u8>>>,
+) {
+    let empty_catalog = kk_mod_api::extension::ExtensionCatalog::default();
+    let controller = state.controller();
+    let full = encode_room_block(
+        name,
+        state,
+        controller,
+        meta.tick,
+        meta,
+        "",
+        true,
+        None,
+        &empty_catalog,
+        None,
+        prev,
+        true,
+    )
+    .expect("预编码槽未命中路径与原全服构建同源，失败由调用方逐房回退处理前不应到达");
+    let empty = if scan.has_owned_site {
+        None
+    } else {
+        encode_room_block(
+            name,
+            state,
+            controller,
+            meta.tick,
+            meta,
+            "",
+            false,
+            None,
+            &empty_catalog,
+            None,
+            None,
+            false,
+        )
+        .ok()
+        .map(|block| std::sync::Arc::new(block.into_bytes()))
+    };
+    (std::sync::Arc::new(full), empty)
+}
+
+/// 共享结果地图：编码线程写入、世界共享构建逐房取走即删（懒消费，
+/// 无阻塞等待）。类型落在 kk-world 以免 runtime 反向可见。
+pub type PreencodeMap = std::sync::Mutex<HashMap<String, Arc<PreencodedSharedRoom>>>;
+
+/// 结算窗内对候选房的只读预编码产物：编码线程直接写入共享结果地图，
+/// 下一拍共享构建逐房取用，命中且 `source`（编码时的候选快照）与
+/// 当前世界房深比较一致才复用——跨房移动、市场等晚期变异由此兜底。
+pub struct PreencodedSharedRoom {
+    pub(crate) tick: u64,
+    pub(crate) generation: u64,
+    pub(crate) plan_hash: [u8; 32],
+    pub full: Arc<PrevEncodedBlock>,
+    pub empty: Option<Arc<Vec<u8>>>,
+    /// 编码所用的候选快照（消费点一致性校验）。
+    pub source: Arc<crate::world::RoomState>,
+}
+
+impl std::fmt::Debug for PreencodedSharedRoom {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "PreencodedSharedRoom(tick={})", self.tick)
+    }
+}
+
+impl PreencodedSharedRoom {
+    fn matches(&self, tick: u64, generation: u64, plan_hash: [u8; 32]) -> bool {
+        self.tick == tick && self.generation == generation && self.plan_hash == plan_hash
+    }
+}
+
+/// 对候选房做共享块预编码（不可共享返回 None）。输入与全服构建同源
+/// （空扩展目录、空 user、可见口径、无候选），产物与发布后即时编码
+/// 逐字节一致。
+/// `state` 是调用方（编码线程）持有的快照 Arc；`source` 原样复用
+/// 同一 Arc，不做额外深克隆。
+pub fn preencode_shared_room(
+    name: &str,
+    state: &Arc<crate::world::RoomState>,
+    tick: u64,
+    generation: u64,
+    plan_hash: [u8; 32],
+    prev: Option<&PrevEncodedBlock>,
+) -> Option<PreencodedSharedRoom> {
+    let scan = scan_shared_room(state);
+    if !scan.eligible {
+        return None;
+    }
+    let meta = RoomBlockMeta {
+        tick,
+        generation,
+        plan_hash,
+        audience_hash: [0u8; 32],
+    };
+    let (full, empty) = encode_shared_room_pair(name, state, meta, scan, prev);
+    Some(PreencodedSharedRoom {
+        tick,
+        generation,
+        plan_hash,
+        full,
+        empty,
+        source: Arc::clone(state),
+    })
+}
+
 impl World {
     /// 取当前 (generation, plan_hash) 的可共享房间块缓存；过期则单次
     /// 重建。只含可共享房，缺失即回退逐查看者编码。
@@ -67,8 +204,20 @@ impl World {
     /// 扫描全服构建可共享块。共享条件见 [`SharedRoomBlock`]；构建用
     /// 空 user 与空目录——可共享房内 user 只作用于旗/Mod/ext 裁切，
     /// 这些对象类型已被共享条件排除，输出与任意真实查看者一致。
+    /// 挂接共享结果地图（编码线程写、共享构建消费）。幂等；受控编辑
+    /// 与下一轮 Begin 各自清空，条目按房取走即删。
+    pub fn install_preencode_source(&self, map: Arc<PreencodeMap>) {
+        *self.preencode_source.borrow_mut() = Some(map);
+    }
+
+    /// 行级脏位保留表的快照（预编码线程取上一拍保留块用）。
+    pub fn kkpv_retention_snapshot(
+        &self,
+    ) -> HashMap<String, Arc<kk_schema::kkpv::PrevEncodedBlock>> {
+        self.room_block_dirty.borrow().clone()
+    }
+
     fn build_shared_room_blocks(&self, plan_hash: [u8; 32]) -> BTreeMap<String, SharedRoomBlock> {
-        let empty_catalog = kk_mod_api::extension::ExtensionCatalog::default();
         let meta = RoomBlockMeta {
             tick: self.time,
             generation: self.generation(),
@@ -77,69 +226,44 @@ impl World {
         };
         let mut map = BTreeMap::new();
         for (name, state) in &self.rooms {
-            let (mut has_owned_flag, mut has_mod, mut has_owned_site) = (false, false, false);
-            for object in state.objects.values() {
-                match object {
-                    RoomObject::Flag(f) if f.owner.is_some() => has_owned_flag = true,
-                    RoomObject::ConstructionSite(cs) if cs.owner.is_some() => has_owned_site = true,
-                    RoomObject::Mod(_) => has_mod = true,
-                    _ => {}
-                }
-            }
-            if has_owned_flag || has_mod || !state.extensions.is_empty() {
+            let scan = scan_shared_room(state);
+            if !scan.eligible {
                 continue;
             }
-            let controller = state.controller();
-            // full 块走行级脏位：与上一拍保留块逐格比对，并把本拍块
-            // 存回保留表（同源字节即各查看者上一拍所收字节，基准拍号
-            // 由解码端校验衔接）。共享构建失败不缓存半成品：该房回退
-            // 逐查看者路径，由真实调用方报出原始错误。
-            let prev = self.room_block_dirty.borrow().get(name).cloned();
-            let Ok(full) = encode_room_block(
-                name,
-                state,
-                controller,
-                self.time,
-                meta,
-                "",
-                true,
-                None,
-                &empty_catalog,
-                None,
-                prev.as_deref(),
-                true,
-            ) else {
-                continue;
+            // 预编码地图命中（结算窗内对候选只读编码）且源快照与当前
+            // 世界房一致才复用字节，并顺带推进脏位保留；未命中或晚期
+            // 变异（跨房/市场阶段改过候选）回退即时编码。两条路径产物
+            // 逐字节一致。
+            let preencoded = self
+                .preencode_source
+                .borrow()
+                .as_ref()
+                .and_then(|map| match map.lock() {
+                    Ok(mut guard) => guard.remove(name),
+                    Err(_) => None,
+                })
+                .filter(|entry| {
+                    entry.matches(self.time, self.generation(), plan_hash)
+                        && *entry.source == *state
+                });
+            let (full, empty) = match preencoded {
+                Some(entry) => (entry.full.clone(), entry.empty.clone()),
+                None => encode_shared_room_pair(
+                    name,
+                    state,
+                    meta,
+                    scan,
+                    self.room_block_dirty
+                        .borrow()
+                        .get(name)
+                        .map(|arc| arc.as_ref()),
+                ),
             };
             // 保留表与共享缓存共用同一 Arc：保留字节即各查看者本拍所收
             // 字节，下一拍脏位比对与解码端基准校验同源。
-            let full = Arc::new(full);
             self.room_block_dirty
                 .borrow_mut()
                 .insert(name.clone(), full.clone());
-            // 不可见查看者的空块：无归属工地即可共享（空 user 下导出门
-            // 排除全部对象，产物是零行块）；失败同样回退逐查看者路径。
-            // 空块零行无脏位可发，走纯编码。
-            let empty = if has_owned_site {
-                None
-            } else {
-                encode_room_block(
-                    name,
-                    state,
-                    controller,
-                    self.time,
-                    meta,
-                    "",
-                    false,
-                    None,
-                    &empty_catalog,
-                    None,
-                    None,
-                    false,
-                )
-                .ok()
-                .map(|block| Arc::new(block.into_bytes()))
-            };
             map.insert(name.clone(), SharedRoomBlock { full, empty });
         }
         map

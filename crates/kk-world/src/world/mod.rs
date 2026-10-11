@@ -35,7 +35,9 @@ impl ObjId {
 }
 
 /// 单个房间的状态。id 分配在 [`World`] 层（跨房间唯一）。
-#[derive(Debug, Clone)]
+/// PartialEq 用于预编码安装时校验候选快照与已提交房一致（晚期跨房/
+/// 市场阶段变异即弃用预编码产物）。
+#[derive(Debug, Clone, PartialEq)]
 pub struct RoomState {
     pub name: String,
     pub(crate) terrain: Terrain,
@@ -235,6 +237,12 @@ pub struct World {
     /// 不产脏段、在解码端由基准拍号校验兜底，至多退化为全量更新，
     /// 因此无需随代际主动失效；条目量以房间数为上界。
     pub(crate) room_block_dirty: RefCell<HashMap<String, Arc<kk_schema::kkpv::PrevEncodedBlock>>>,
+    /// 结算窗内预编码、发布后待消费的共享块（房名 → 产物）。命中即免
+    /// 下一拍即时编码；未命中或过期（tick/世代/计划不符、候选被晚期
+    /// 阶段改动）自动回退即时编码。清空口径同脏位保留。
+    /// 预编码共享结果地图的挂接点（懒消费；克隆体不携带——快照/存档
+    /// 读面不消费产物，避免与原世界的编码线程交叉取用）。
+    pub(crate) preencode_source: RefCell<Option<Arc<crate::kkpv::PreencodeMap>>>,
 }
 
 // 独立副本拥有新身份；受控编辑发布时 adopt_edit 保留原世界身份。
@@ -255,6 +263,7 @@ impl Clone for World {
             visibility_cache: self.visibility_cache.clone(),
             room_block_cache: self.room_block_cache.clone(),
             room_block_dirty: self.room_block_dirty.clone(),
+            preencode_source: RefCell::new(None),
         }
     }
 }
@@ -310,6 +319,7 @@ impl World {
             visibility_cache: RefCell::new(None),
             room_block_cache: RefCell::new(None),
             room_block_dirty: RefCell::new(HashMap::new()),
+            preencode_source: RefCell::new(None),
         }
     }
 

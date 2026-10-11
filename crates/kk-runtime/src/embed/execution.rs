@@ -158,6 +158,45 @@ impl EmbedEngine {
         }
     }
 
+    /// 武装本轮预编码：KKPV 通道下惰性创建服务、安装引擎回调并把共享
+    /// 结果地图挂到世界（引擎重建后重新挂接），下发预测元（提交后
+    /// time/generation 各 +1）与脏位保留快照。
+    fn arm_preencode_round(&mut self) {
+        if !self.kkpv_channel
+            || !crate::embed::PREENCODE_SWITCH.load(std::sync::atomic::Ordering::Relaxed)
+        {
+            return;
+        }
+        if self.preencode.is_none() {
+            let (service, handle) = preencode::PreencodeService::spawn();
+            self.engine
+                .set_room_settled_hook(Some(std::sync::Arc::new(move |name, state| {
+                    handle.job(name, state);
+                })));
+            self.preencode = Some(service);
+        }
+        let Some(service) = &self.preencode else {
+            return;
+        };
+        let world = self.engine.world();
+        world.install_preencode_source(service.map());
+        service.begin_round(
+            world.time() + 1,
+            world.generation() + 1,
+            self.engine.plan_hash().bytes(),
+            world.kkpv_retention_snapshot(),
+        );
+    }
+
+    /// 结算返回后处理预编码：产物由编码线程直写共享地图、下一拍共享
+    /// 构建逐房懒消费，成功轮无事可做；失败轮停止派发（残留产物无人
+    /// 消费，下一轮 Begin 清空）。
+    fn finish_preencode_round(&mut self, committed: bool) {
+        if !committed && let Some(service) = &self.preencode {
+            service.abort();
+        }
+    }
+
     /// 执行世界结算并消费测试故障钩子。重试的 `input` 来自失败轮缓存。
     pub(super) fn settle_world(
         &mut self,
@@ -198,10 +237,14 @@ impl EmbedEngine {
                 .begin_settlement()
                 .map_err(anyhow::Error::msg)?;
         }
+        // L1a 重叠：结算窗前武装逐房预编码（预测提交后 time/generation
+        // 均为 +1；失败轮不安装，预测失准无副作用）。
+        self.arm_preencode_round();
         let mut settled = self
             .engine
             .tick_with_writebacks(batch, input, writebacks)
             .map_err(|e| anyhow::anyhow!("{e}"));
+        self.finish_preencode_round(settled.is_ok());
         if fail_room.is_some() {
             self.engine.set_fail_room_for_test(None);
         }

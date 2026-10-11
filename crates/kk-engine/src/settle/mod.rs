@@ -80,6 +80,9 @@ pub fn controller_allowed(structure_type: &str, rcl: i64) -> i64 {
     table[structure_type][rcl.to_string()].as_i64().unwrap_or(0)
 }
 
+/// 逐房结算回调的统一签名（type_complexity 收敛）。
+pub type RoomSettledHook = std::sync::Arc<dyn Fn(&str, &kk_world::RoomState) + Send + Sync>;
+
 /// 规则结算错误。Engine 丢弃候选；直接调用 settle_room 的调用方须自行丢弃副本。
 #[derive(Debug, Clone)]
 pub struct SettleError(pub String);
@@ -283,6 +286,10 @@ pub struct Engine {
     /// 当前生效的冻结计划（默认含 link 与仓库容量规则）。扩展意图描述符与
     /// Mod 类型目录从此解析；规则/处理链/扩展目录是它的派生物。
     plan: std::sync::Arc<kk_mod_api::ContributionPlan>,
+    /// 逐房结算后回调（候选房已定、跨房与市场等晚期阶段未应用）：宿主
+    /// 借此把只读投影编码重叠进结算串行窗。回调必须非阻塞（自行异步）。
+    /// 回调收到的房与最终候选可能因晚期阶段不同——消费侧深比较兜底。
+    pub room_settled_hook: Option<RoomSettledHook>,
 }
 
 /// 内置 link 与仓库容量的冻结计划；无 Mod 引擎的默认贡献平面。
@@ -336,6 +343,7 @@ impl Engine {
             extensions: Rc::new(kk_mod_api::extension::ExtensionCatalog::default()),
             mod_states: BTreeMap::new(),
             plan: builtin_plan(),
+            room_settled_hook: None,
         }
     }
 
@@ -356,6 +364,12 @@ impl Engine {
         }
         let handle = self.plan.projection().resolve(&key)?;
         Some(&self.plan.projection().get(handle)?.descriptor)
+    }
+
+    /// 安装/卸下逐房结算回调（见字段注释）。宿主在结算调用前设置一次，
+    /// 回调内部自行异步派发。
+    pub fn set_room_settled_hook(&mut self, hook: Option<RoomSettledHook>) {
+        self.room_settled_hook = hook;
     }
 
     /// 设置处理器随机源（tick({random}) 注入期间生效；调用方负责在调用

@@ -58,6 +58,10 @@ pub(crate) enum Command {
         ticks: u32,
         #[arg(long, default_value_t = 2)]
         concurrency: usize,
+        /// 进程内交替 A/B：每 N tick 切换预编码开关，按模式归桶上报相位
+        /// 与 CPU，消除窗口级机器状态漂移。0（默认）关闭。
+        #[arg(long, default_value_t = 0)]
+        interleave: u32,
         #[arg(long)]
         report: String,
     },

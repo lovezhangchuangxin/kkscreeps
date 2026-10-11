@@ -39,6 +39,7 @@ fn main() {
             warmup,
             ticks,
             concurrency,
+            interleave,
             report,
         } => {
             std::process::exit(probes::run_comparison(
@@ -46,6 +47,7 @@ fn main() {
                 warmup,
                 ticks,
                 concurrency,
+                interleave,
                 &report,
             ));
         }

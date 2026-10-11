@@ -112,10 +112,16 @@ pub struct EmbedEngine {
     player_surface: Option<std::sync::Arc<kk_mod_api::player_surface::PlayerSurface>>,
     /// 注入玩家沙箱的 Mod 玩家面安装清单（模块集 + 查询常量 + emit 目录）。
     mod_player_api: Option<std::sync::Arc<kk_runner::ModPlayerApi>>,
+    /// L1a 房间级编码-结算重叠服务（仅 KKPV 通道，首次结算前惰性创建）。
+    preencode: Option<preencode::PreencodeService>,
 }
 
 /// 记录成功调用的投影、执行、结算和整次调用耗时。失败尝试不记录；
 /// 重试成功时投影与执行耗时为零。达到容量上限后忽略新样本。
+/// 预编码总开关（进程级，compare-probe 进程内交替 A/B 用）：默认开启。
+pub static PREENCODE_SWITCH: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(true);
+
 #[derive(Default)]
 struct PerfRecorder {
     /// 每次成功调用的 [project_ms, run_ms, settle_ms, wall_ms]，单位为毫秒。
@@ -196,6 +202,7 @@ impl EmbedEngine {
             player_surface: None,
             mod_player_api: None,
             kkpv_channel: false,
+            preencode: None,
             pathfinder_terrain: None,
             kkpv_public_store: crate::kkpv_store::KkpvBlockStore::new(),
         }
@@ -394,6 +401,21 @@ impl EmbedEngine {
     /// 清空耗时样本，常用于排除预热调用。
     pub fn perf_reset(&mut self) {
         self.perf.ticks.clear();
+    }
+
+    /// 逐 tick 相位样本副本（[project, run, settle, wall] 毫秒），供探针
+    /// 按外部开关状态归桶对比。
+    pub fn perf_tick_samples(&self) -> Vec<[f64; 4]> {
+        self.perf.ticks.clone()
+    }
+
+    /// 进程级预编码开关（compare-probe 交替 A/B 用）。关闭时停止派发
+    /// 新任务；已完成的产物在下一拍照常消费。
+    pub fn set_preencode_enabled(&mut self, on: bool) {
+        PREENCODE_SWITCH.store(on, std::sync::atomic::Ordering::Relaxed);
+        if !on && let Some(service) = &self.preencode {
+            service.abort();
+        }
     }
 
     /// 让下一次进入结算入口的调用返回错误，不改变引擎运行状态。
@@ -772,6 +794,7 @@ mod input_log_scan;
 mod mod_chain;
 mod placement;
 mod power_bank_admin;
+mod preencode;
 mod projection;
 mod raid_admin;
 mod replay;

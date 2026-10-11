@@ -236,6 +236,13 @@ impl World {
         // 脏位保留随受控编辑清空：旧保留不再可能对上编辑后的世界，
         // 留着只会钉住字节（正确性另由基准拍号兜底）。
         draft.room_block_dirty.borrow_mut().clear();
+        // 预编码产物的源快照对编辑后的世界失效；消费点深比较本可兜底，
+        // 这里提前清空以避免无谓的比对与钉留。
+        if let Some(map) = draft.preencode_source.borrow().as_ref()
+            && let Ok(mut guard) = map.lock()
+        {
+            guard.clear();
+        }
         draft.instance = self.instance.clone();
         *self = draft;
         Ok(())

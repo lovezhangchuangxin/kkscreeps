@@ -5,7 +5,14 @@ use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
 /// 对照入口直接读取共享夹具，不复用旧 perf-probe 的隐式地形和对象默认值。
-pub(crate) fn run(fixture: &str, warmup: u32, ticks: u32, concurrency: usize, report: &str) -> i32 {
+pub(crate) fn run(
+    fixture: &str,
+    warmup: u32,
+    ticks: u32,
+    concurrency: usize,
+    interleave: u32,
+    report: &str,
+) -> i32 {
     let run = || -> anyhow::Result<()> {
         anyhow::ensure!(ticks > 0 && ticks <= 50_000, "采集 ticks 须为 1..=50000");
         anyhow::ensure!(warmup <= 50_000, "预热 ticks 不得超过 50000");
@@ -134,10 +141,25 @@ pub(crate) fn run(fixture: &str, warmup: u32, ticks: u32, concurrency: usize, re
         e.perf_reset();
         let mut process = process::ProcessProbe::start()?;
         let mut wall = Vec::with_capacity(ticks as usize);
-        for _ in 0..ticks {
+        // 交替 A/B：每 interleave tick 切换预编码开关，逐 tick 记录模式、
+        // 相位与累计 CPU 差分，机器状态对两种模式同权。
+        let inter = interleave.max(1) as usize;
+        let mut ab_modes = Vec::with_capacity(ticks as usize);
+        let mut ab_cpu = Vec::with_capacity(ticks as usize);
+        let mut cpu_prev = process::cpu_core_ms_now().unwrap_or(0.0);
+        for i in 0..ticks {
+            if interleave > 0 {
+                e.set_preencode_enabled((i as usize / inter).is_multiple_of(2));
+            }
             let start = std::time::Instant::now();
             step(&mut e)?;
             wall.push(start.elapsed().as_secs_f64() * 1000.0);
+            if interleave > 0 {
+                ab_modes.push((i as usize / inter).is_multiple_of(2));
+                let cpu_now = process::cpu_core_ms_now().unwrap_or(cpu_prev);
+                ab_cpu.push((cpu_now - cpu_prev).max(0.0));
+                cpu_prev = cpu_now;
+            }
             process.observe()?;
         }
         let process = process.finish(ticks)?;
@@ -147,6 +169,45 @@ pub(crate) fn run(fixture: &str, warmup: u32, ticks: u32, concurrency: usize, re
         let engine_wall = phases["phases"]["wall"].clone();
         phases["phases"]["wall"] = json!({"count":wall.len(),"p50_ms":quantile(0.5),
             "p95_ms":quantile(0.95),"p99_ms":quantile(0.99),"max_ms":wall.last()});
+        let interleave_ab = if interleave > 0 {
+            let samples = e.perf_tick_samples();
+            let bucket = |on: bool, idx: usize| -> Vec<f64> {
+                samples
+                    .iter()
+                    .zip(&ab_modes)
+                    .filter(|(_, m)| **m == on)
+                    .map(|(s, _)| s[idx])
+                    .collect()
+            };
+            let cpu_bucket = |on: bool| -> Vec<f64> {
+                ab_cpu
+                    .iter()
+                    .zip(&ab_modes)
+                    .filter(|(_, m)| **m == on)
+                    .map(|(c, _)| *c)
+                    .collect()
+            };
+            let stat = |mut v: Vec<f64>| -> Value {
+                if v.is_empty() {
+                    return json!({"count": 0});
+                }
+                v.sort_by(f64::total_cmp);
+                let q = |x: f64| v[((v.len() - 1) as f64 * x).round() as usize];
+                json!({"count":v.len(),"p50_ms":q(0.5),"p95_ms":q(0.95),"mean_ms":
+                    v.iter().sum::<f64>() / v.len() as f64})
+            };
+            json!({
+                "block_ticks": interleave,
+                "on": {"project":stat(bucket(true,0)),"run":stat(bucket(true,1)),
+                       "settle":stat(bucket(true,2)),"wall":stat(bucket(true,3)),
+                       "cpu":stat(cpu_bucket(true))},
+                "off": {"project":stat(bucket(false,0)),"run":stat(bucket(false,1)),
+                        "settle":stat(bucket(false,2)),"wall":stat(bucket(false,3)),
+                        "cpu":stat(cpu_bucket(false))},
+            })
+        } else {
+            Value::Null
+        };
         let after = observe(&e)?;
         for (a, b) in before.iter().zip(&after).filter(|_| !mature) {
             anyhow::ensure!(
@@ -162,7 +223,8 @@ pub(crate) fn run(fixture: &str, warmup: u32, ticks: u32, concurrency: usize, re
                 "channel":if fixture["kkpv"].as_bool().unwrap_or(false) { "kkpv" } else { "json" },"players":players.len(),"warmup":warmup,"ticks":ticks,
                 "concurrency":e.player_concurrency(),"metadata":metadata(),"process":process,
                 "cpu_budget":{"limit":cpu_limit,"bucket":10000,"tick_limit":500},
-                "phases":phases,"embed_engine_wall":engine_wall,"initial":initial,"before":before,"after":after,
+                "phases":phases,"embed_engine_wall":engine_wall,"interleave_ab":interleave_ab,
+                "initial":initial,"before":before,"after":after,
                 "completion":players.iter().filter_map(Value::as_str).map(|id| (id.to_string(),e.capture_console_logs(id))).collect::<BTreeMap<_,_>>()
             }))?,
         )?;
@@ -199,6 +261,7 @@ mod tests {
             0,
             10,
             2,
+            0,
             &report_path.to_string_lossy(),
         );
         assert_eq!(status, 0);
@@ -225,7 +288,14 @@ mod tests {
         )?;
         let report = path.with_extension("report.json");
         assert_eq!(
-            run(&path.to_string_lossy(), 0, 1, 2, &report.to_string_lossy()),
+            run(
+                &path.to_string_lossy(),
+                0,
+                1,
+                2,
+                0,
+                &report.to_string_lossy()
+            ),
             1
         );
         assert!(!report.exists());

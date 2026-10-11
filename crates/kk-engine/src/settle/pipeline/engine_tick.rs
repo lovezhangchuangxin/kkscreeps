@@ -171,6 +171,9 @@ impl Engine {
                 &txn.batch,
                 &plane,
             )?;
+            if let Some(hook) = &self.room_settled_hook {
+                hook(name, &room);
+            }
             inter_room_moves.append(&mut moves);
             fresh_age.append(&mut fresh);
             txn.rooms.push((name.clone(), room));

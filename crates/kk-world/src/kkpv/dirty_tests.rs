@@ -3,7 +3,7 @@
 use super::*;
 use kk_core::Terrain;
 use kk_schema::kkpv::KkpvView;
-use kk_schema::room::{ControllerObj, RoadObj, RoomObject};
+use kk_schema::room::{ControllerObj, RoomObject};
 
 #[test]
 fn dirty_shared_blocks_match_fresh_semantics_on_second_tick() {

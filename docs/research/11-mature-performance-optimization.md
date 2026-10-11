@@ -395,3 +395,17 @@ RSS 采样中位数均值下降 12.09%，峰值均值仅下降 1.80%；首对新
 【教训】settle 相的采样归因必须以"改动→ABBA 复验"闭环，子树样本占比≠墙钟可回收量（分配器成本被重复计入多个子树）。
 
 【下一主片：L1a 房间级编码-结算重叠（设计定型）】当前三相串行 wall ≈ project 190（其中共享 full 块编码 ~100-140 + 信封/装配/回退 ~50-90）+ run 175（worker 吞吐约束，主线程 44% 等待）+ settle 117（settle_room 本体为主，切分证伪后不可再压）。重叠方案：staged_body 的 settle_rooms_stage 逐房结算完成即把**候选房**（txn.rooms 已结算元素，不可变）交给空闲工作线程编码共享 full 块——编码对候选只读、产物与发布后编码逐字节一致（含 row-dirty：prev 保留块以 Arc 快照随任务下发，线程内不触共享 RefCell）；主线程继续结算后续房间。收益上界 = min(共享块编码, settle) ≈ 100-140ms 隐藏，wall 预期 −60~100ms；CPU ±0（同样工作量换线程）；确定性无影响（编码纯函数、块序按房名）。实现要点：kk-world 需暴露"按单房编码 full 块"入口（现 build_shared_room_blocks 全服扫）；kk-runtime 的 execute_players 改为消费预编码块（project 相退化为信封+装配+回退房）；候选-发布一致性由"同数据同字节"保证（commit 校验不变）。风险：候选在 publish 前被 inter-room 阶段改动（portal/跨房过渡会改 txn.rooms！）——重叠编码须延后到 inter_room 应用之后，或对受跨房影响的房重编。
+
+## 2026-10-11 补记：L1a 房间级编码-结算重叠落地（现行实现，懒消费 v2）
+
+【交付】engine 暴露 `room_settled_hook`（逐房结算后回调，候选已定、inter_room/market 等晚期阶段未应用）；kk-runtime 的 KKPV 通道惰性起 2 个专职编码线程（`kk-preencode-{0,1}`），hook 内对候选做 `Arc<RoomState>` 快照（实测全批 ~7ms）轮转派发；worker 对候选只读预编码共享 full 块（row-dirty prev 以 Arc 保留快照随 Begin 下发），产物直写共享 `PreencodeMap`（`Mutex<HashMap>`），**宿主无阻塞等待**；下一拍 `build_shared_room_blocks` 逐房从地图取走即删，命中且 `matches(tick,generation,plan)` + `*entry.source == *state`（逐房深比较，兜底跨房/市场/portal 等一切 hook 后变异）才复用，未命中回退内联编码；失败轮 armed 复位、下一 Begin 清空残留；adopt_edit 同步清空。[证据](../../compat/reports/mature-comparison/2026-10-11/50x6-preencode-overlap/README.md)。
+
+【结果】冻结 ABBA：wall 0.869×、project 0.381×、settle 1.291×、CPU 1.174×，两相邻对方向一致。进程内交替 A/B（`compare-probe --interleave 25` 新增，判定主证据）：快/慢档 wall −100/−90ms（−24.8%/−17.5%）、CPU +8%/+15%。计数器插桩：hit 300/300、miss/evict/leftover 全零。
+
+【v1 同步 flush 证伪】首版结算末阻塞排空取回：settle 2.05×（flush 等待 42-56ms）、CPU 1.27×、wall 持平——单线程全量编码 140-155ms 放不进 ~110ms settle 窗，超额部分变主线程阻塞。**教训：重叠型优化收益上限 = min(被隐藏相, 窗口)，同步取回点把超额变阻塞；多 worker + 懒消费（消费点校验）才是正解。**
+
+【方法论】窗口级 ABBA 在本机存在 ±80ms 双峰机器档位噪声（曾因用户放视频放大）；交替 A/B 同进程按 tick 块切换开关，机器状态对两模式同权，分辨 ±40ms 级效应必须用它。窗口 ABBA 保留为归档协议（二进制冻结可跨会话复现）。
+
+【公平性】CPU +8~17%（worker 疑落能效核，同量编码占核更久）。本机 4P+6E 并行度 ~3.9/10 未饱和，wall 兑现；2 核 CPU-bound 部署会反噬同幅度（分析结论，darwin 无 taskset 未实测）。后续可试 worker QoS 提升驻留 P 核。
+
+【剩余差距】热稳态 1.559× → 本片预期 ~1.25×（−100ms 级），距 0.9× 仍需 run 相（变长字段重物化 cell 级复用）与 settle 内 serde 来源追查；标尺复测在后续批次执行。

@@ -1,5 +1,5 @@
 //! 行级脏位的协议级测试（编解码与块头校验）。
-use super::tests::{dec_err, enc, input, obj, put_u16, put_u32};
+use super::tests::{dec_err, enc, input, obj, put_u32};
 use super::*;
 
 fn enc_dirty(

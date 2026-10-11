@@ -13,7 +13,7 @@ use super::*;
 /// 单房私有块的编码身份：块头 tick/generation 与宿主摘要。`private`
 /// 恒真——公开地形块走 [`World::kkpv_public_terrain_blocks`] 另一条路。
 #[derive(Clone, Copy)]
-pub(super) struct RoomBlockMeta {
+pub(crate) struct RoomBlockMeta {
     pub(super) tick: u64,
     pub(super) generation: u64,
     pub(super) plan_hash: [u8; 32],

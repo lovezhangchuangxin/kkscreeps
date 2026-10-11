@@ -90,6 +90,11 @@ fn cpu_ms() -> anyhow::Result<f64> {
     Ok(process_usage()?.cpu_core_ms)
 }
 
+/// 当前累计 CPU 核毫秒（交替 A/B 探针逐 tick 差分用）。
+pub(crate) fn cpu_core_ms_now() -> anyhow::Result<f64> {
+    cpu_ms()
+}
+
 #[cfg(target_os = "macos")]
 pub(super) fn resident_bytes() -> anyhow::Result<u64> {
     let mut usage = std::mem::MaybeUninit::<libc::rusage_info_v2>::uninit();
