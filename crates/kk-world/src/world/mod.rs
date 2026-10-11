@@ -607,11 +607,14 @@ impl World {
         {
             let mut m = self.max_id_cache.borrow_mut();
             if m.0 != self.generation {
+                // BTreeMap 最大键即末键：每房 O(log n) 取 next_back，替代
+                // 全对象键平铺扫描（300 房 16 万对象的全树遍历曾是 validate
+                // 段的主要成本，见 2026-10-11 KKDIAG 取证）。
                 *m = (
                     self.generation,
                     self.rooms
                         .values()
-                        .flat_map(|room| room.objects.keys())
+                        .filter_map(|room| room.objects.keys().next_back())
                         .map(|id| id.0)
                         .max()
                         .unwrap_or(0),

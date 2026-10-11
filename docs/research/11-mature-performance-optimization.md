@@ -524,3 +524,9 @@ RSS 采样中位数均值下降 12.09%，峰值均值仅下降 1.80%；首对新
 【方法修正（重要）】"相位 p50 之和 ≈ wall"不等于各相位串行占满 wall：run_ns=窗口−project_ns 的记账下 project ⊂ run 窗口同样给出和≈wall。判定某相是否在关键路径，先核对该相消耗的资源是否饱和——run 窗口由 4 个 V8 工作者吞吐决定（50×~11.6ms/4≈145ms 满载），主线程装配（42.6ms CPU）免费藏在空隙里。ABBA 丢弃对是最终仲裁。
 
 【队列影响】R09"逐房投影内联"前提失效（L1a 已吃逐房份额、残余逐玩家构成已隐藏）；run 相墙钟=玩家吞吐（并发×每玩家执行）受公平门约束，再压只能动注入协议（列式共享快照大项）。剩余证据杠杆：settle 全局段（validate 9.3 索引化/prepare 5/commit 7.5/interroom+nukes+market+power ~19）。
+
+## 2026-10-11 补记：max_obj_id 末键修复与 validate 段归因修正
+
+【机制】max_id_cache 换代重建从全对象键平铺（~9-16 万键 BTreeMap 全树追逐）改为每房 next_back() O(log n)，结果逐位一致。[证据](../../compat/reports/mature-comparison/2026-10-11/50x6-maxid-next-back/README.md)。
+
+【归因修正】env 门控探针证伪"validate 9.3=四趟子扫可索引化"（合计 ~1.5ms）；全树重建 ~2ms 由 prepare 段支付（先触达者付费、后续命中温缓存）——ABBA prepare 三对全同向 −1.5~−2.7ms，validate 不动。**教训：同段成本可能记在首个触达惰性缓存的相位头上，跨段共享缓存（max_id_cache/obj_dir）的归因要按触达顺序拆**。未解：validate 段剩余 ~7ms 构成（可见部分 <3ms），需细粒度剖检；obj_dir 每拍触达面待排查。

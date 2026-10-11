@@ -1,0 +1,106 @@
+{
+ "phases": {
+  "ticks": 100,
+  "phases": {
+   "project": {
+    "count": 100,
+    "p50_ms": 41.46167,
+    "p95_ms": 51.365793,
+    "p99_ms": 92.543626,
+    "max_ms": 182.526748,
+    "total_ms": 4426.204676999999
+   },
+   "run": {
+    "count": 100,
+    "p50_ms": 137.973126,
+    "p95_ms": 252.380125,
+    "p99_ms": 337.770332,
+    "max_ms": 338.65046,
+    "total_ms": 15273.476032999997
+   },
+   "settle": {
+    "count": 100,
+    "p50_ms": 69.453792,
+    "p95_ms": 94.2165,
+    "p99_ms": 131.227292,
+    "max_ms": 135.700125,
+    "total_ms": 7169.535452
+   },
+   "wall": {
+    "count": 100,
+    "p50_ms": 251.498583,
+    "p95_ms": 393.065875,
+    "p99_ms": 442.306834,
+    "max_ms": 532.039084
+   }
+  }
+ },
+ "settle_diag": {
+  "ticks": 106,
+  "segments_p50_ms": {
+   "prepare": {
+    "p50_ms": 3.505667
+   },
+   "clone": {
+    "p50_ms": 12.49208
+   },
+   "settle": {
+    "p50_ms": 65.927749
+   },
+   "hook": {
+    "p50_ms": 11.404124
+   },
+   "interroom": {
+    "p50_ms": 4.996417
+   },
+   "nukes": {
+    "p50_ms": 5.548875
+   },
+   "market": {
+    "p50_ms": 5.210791
+   },
+   "power": {
+    "p50_ms": 5.14475
+   },
+   "writeback": {
+    "p50_ms": 0.015959
+   },
+   "validate": {
+    "p50_ms": 11.993917
+   },
+   "into_prepared": {
+    "p50_ms": 0.524625
+   },
+   "commit": {
+    "p50_ms": 9.187125
+   }
+  },
+  "counters_total": {
+   "id_allocs": 0,
+   "id_restores": 0,
+   "claim_calls": 0,
+   "gcl_adds": 23400,
+   "power_adds": 600,
+   "parallel_room_ticks": 106,
+   "interroom_moves": 0,
+   "portal_moves": 0,
+   "events": 138900,
+   "rooms": 31800
+  }
+ },
+ "process": {
+  "scope": "current_process_all_threads",
+  "window": "after_warmup_through_collection_loop",
+  "wall_ms": 27055.829291,
+  "cpu_core_ms": 127799.64900000002,
+  "cpu_core_ms_per_tick": 1277.9964900000002,
+  "rss_bytes_after": 3171794944,
+  "rss_bytes_sampled_peak": 3385393152,
+  "rss_bytes_sampled_p50": 3132129280,
+  "rss_observations": 101,
+  "rss_retained_samples": 101,
+  "rss_sampling_wall_ms": 2.454799,
+  "includes_sampling_and_workload_checks": true,
+  "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+ }
+}
