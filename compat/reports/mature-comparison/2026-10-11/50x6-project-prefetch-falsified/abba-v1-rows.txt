@@ -1,0 +1,10 @@
+discard-old  wall   198.4 settle   58.3 seg:clone  10.0 settle  47.7 proj   33.2 run  105.8 cpu  102714 rss   3326 par 106
+discard-new  wall   197.9 settle   59.1 seg:clone   9.9 settle  48.0 proj   34.2 run  102.7 cpu  103964 rss   3351 par 106
+old          wall   203.3 settle   59.5 seg:clone  10.2 settle  50.5 proj   34.8 run  105.4 cpu  104184 rss   3332 par 106
+new          wall   216.9 settle   61.7 seg:clone  10.3 settle  54.3 proj   35.7 run  116.2 cpu  111210 rss   3381 par 106
+new          wall   217.7 settle   63.6 seg:clone  10.6 settle  55.1 proj   37.3 run  114.1 cpu  110875 rss   3378 par 106
+old          wall   269.0 settle   73.9 seg:clone  12.2 settle  68.6 proj   44.0 run  146.4 cpu  131215 rss   3366 par 106
+wall_p50: old 269.0 new 217.7 ratio 0.809
+settle_p50: old 73.9 new 63.6 ratio 0.860
+project_p50: old 44.0 new 37.3 ratio 0.849
+run_p50: old 146.4 new 116.2 ratio 0.794
