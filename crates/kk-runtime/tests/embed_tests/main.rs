@@ -346,6 +346,7 @@ fn embed_engine_suite() -> anyhow::Result<()> {
         dice_replay_matches_live_impl,
     )?;
     scenarios.run("pairing_matrix_impl", pairing_matrix_impl)?;
+    scenarios.run("grouped_bundle_overlap_impl", grouped_bundle_overlap_impl)?;
     scenarios.run("identity_and_tick_gates_impl", identity_and_tick_gates_impl)?;
     scenarios.run(
         "rebuild_writeback_null_and_some_impl",
@@ -365,7 +366,7 @@ fn embed_engine_suite() -> anyhow::Result<()> {
         cursor_and_header_pairing_impl,
     )?;
     scenarios.run("resume_and_lifecycle_impl", resume_and_lifecycle_impl)?;
-    scenarios.finish(101)?;
+    scenarios.finish(102)?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
     Ok(())
 }

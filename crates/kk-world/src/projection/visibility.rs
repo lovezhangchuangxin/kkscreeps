@@ -23,6 +23,13 @@ pub(crate) struct VisibilityIndex {
     /// 不可见房仍须逐对象走 mod_record_json 裁切；可见房在常规路径
     /// 顺带处理，不查本表。
     mod_objects: BTreeMap<String, Vec<crate::world::ObjId>>,
+    /// 玩家 → 授予视野的自有房集合（room_owners 的反转，房名升序）。
+    /// 与 observed_rooms_of 合并即玩家完整可见集；可见集相同的查看者
+    /// 私有束字节一致（块内容与查看者无关，仅差无人消费的 audience
+    /// 改写位），宿主按可见集分组共享装配。集合必须与逐房
+    /// room_visible_to/observed 判定同源，否则共享束会把不可见房内容
+    /// 泄露给玩家。
+    owned_rooms: BTreeMap<String, BTreeSet<String>>,
 }
 
 impl VisibilityIndex {
@@ -34,6 +41,7 @@ impl VisibilityIndex {
             observed: BTreeMap::new(),
             collections: BTreeMap::new(),
             mod_objects: BTreeMap::new(),
+            owned_rooms: BTreeMap::new(),
         };
         for (name, state) in &world.rooms {
             for (id, object) in &state.objects {
@@ -89,6 +97,17 @@ impl VisibilityIndex {
                 }
             }
         }
+        // room_owners 反转出玩家→自有房集合：与 observed 合并即完整可见
+        // 集（两者都只含已注册房，与逐房判定同源）。
+        for (room, owners) in &index.room_owners {
+            for user in owners {
+                index
+                    .owned_rooms
+                    .entry(user.clone())
+                    .or_default()
+                    .insert(room.clone());
+            }
+        }
         index
     }
 
@@ -108,6 +127,16 @@ impl VisibilityIndex {
     /// 的 userObjects 房间计算。（原世界级扫描版语义，构建时物化。）
     pub(crate) fn observed_rooms_of(&self, user: &str) -> Option<&BTreeSet<String>> {
         self.observed.get(user)
+    }
+
+    /// 查看者的完整可见房集合（自有 ∪ 观察，房名升序新集合）。
+    /// 与逐房"归属 ∨ 观察"判定同源；空集表示无任何可见来源。
+    pub(crate) fn visible_rooms_of(&self, user: &str) -> BTreeSet<String> {
+        let mut rooms = self.owned_rooms.get(user).cloned().unwrap_or_default();
+        if let Some(observed) = self.observed.get(user) {
+            rooms.extend(observed.iter().cloned());
+        }
+        rooms
     }
 
     /// 不可见房的私有块候选对象 ID（升序）：己方旗/工地与全部 Mod 对象

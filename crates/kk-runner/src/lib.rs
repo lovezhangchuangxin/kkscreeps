@@ -19,8 +19,8 @@ pub use mod_api::{ModPlayerApi, ModPlayerModule};
 pub use modules::{ModuleCode, ModuleKind, ModuleTable};
 pub use ops::LogLine;
 pub use proto::{
-    EvalReport, JobGate, JobToken, PendingJob, PlayerThreads, RunEpoch, RunJob, RunReceipt,
-    TickReport,
+    EvalReport, JobGate, JobToken, KkpvPrivateBundle, PendingJob, PlayerThreads, RunEpoch, RunJob,
+    RunReceipt, TickReport,
 };
 pub use sandbox::{
     DEFAULT_HEAP_LIMIT, Sandbox, SandboxConfig, TickOutcome, lifo_violations, live_sandbox_count,

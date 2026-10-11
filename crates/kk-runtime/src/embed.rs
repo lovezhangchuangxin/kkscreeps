@@ -51,6 +51,18 @@ struct ExecutionFailure {
     reason: String,
 }
 
+/// 分组束共享的代际缓存状态（`EmbedEngine::kkpv_grouped_bundles` 载荷）：
+/// 资格探测结果 + 分组键 → 共享束句柄。代际推进整体作废。
+#[derive(Default)]
+struct KkpvGroupCache {
+    /// 缓存所属代际；None=未探测。
+    epoch: Option<kk_core::RunEpoch>,
+    /// 本代际分组资格（世界块字节与查看者无关）。
+    eligible: bool,
+    /// 分组键（可见房集合序列化）→ 共享束句柄。
+    bundles: std::collections::HashMap<String, kk_runner::SharedKkpvBundle>,
+}
+
 /// 嵌入式分片及其玩家沙箱，协调玩家执行、世界结算和失败重试。
 pub struct EmbedEngine {
     players: Option<ThreadExecutor>,
@@ -101,6 +113,10 @@ pub struct EmbedEngine {
         std::sync::Arc<kk_runner::TerrainSet>,
     )>,
     kkpv_public_store: crate::kkpv_store::KkpvBlockStore,
+    /// 束分组共享的代际状态：资格探测结果与"分组键 → 共享束句柄"映射。
+    /// 资格不成立时映射恒空；代际推进（tick/世界变异）整体作废重建。
+    /// Mutex 只为经 &self 复用，无争用。
+    kkpv_grouped_bundles: std::sync::Mutex<KkpvGroupCache>,
     /// 可信 Mod 注册与结算 realm；仅 `create_shard_with_mods` 装配。持有它使
     /// EmbedEngine 不可跨线程移动（结算与 realm 须同线程）。
     mod_realm: Option<Rc<RefCell<ModVm>>>,
@@ -205,6 +221,7 @@ impl EmbedEngine {
             preencode: None,
             pathfinder_terrain: None,
             kkpv_public_store: crate::kkpv_store::KkpvBlockStore::new(),
+            kkpv_grouped_bundles: std::sync::Mutex::new(KkpvGroupCache::default()),
         }
     }
 
@@ -501,6 +518,13 @@ impl EmbedEngine {
 
     /// 读取宿主已提交 CPU 桶，不包含本轮待发布费用。
     #[doc(hidden)]
+    /// 测试探针：当前束分组共享缓存状态（资格，组句柄数）。供引擎级
+    /// 共享生效断言；非测试面不得依赖。
+    pub fn kkpv_grouped_cache_for_test(&self) -> (bool, usize) {
+        let cache = self.kkpv_grouped_bundles.lock().expect("分组束缓存锁");
+        (cache.eligible, cache.bundles.len())
+    }
+
     pub fn player_bucket_for_test(&mut self, player: &str) -> anyhow::Result<f64> {
         self.engine
             .players()
@@ -776,8 +800,9 @@ impl EmbedEngine {
         self.execution_failure = None;
         self.fail_after_player_for_test = None;
         self.last_console.clear();
-        // 世界已清空；公开束随代际一并作废（沙箱先于此回收）。
+        // 世界已清空；公开束与分组共享束随代际一并作废（沙箱先于此回收）。
         self.kkpv_public_store = crate::kkpv_store::KkpvBlockStore::new();
+        self.kkpv_grouped_bundles = std::sync::Mutex::new(KkpvGroupCache::default());
     }
 }
 

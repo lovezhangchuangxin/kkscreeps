@@ -58,6 +58,57 @@ impl EmbedEngine {
             .clone())
     }
 
+    /// 当前代际的束分组资格：世界全部房可共享且空块可共享。同代际
+    /// 缓存探测结果。
+    pub(super) fn kkpv_grouping_eligible_for_epoch(
+        &self,
+        source: &dyn WorldSource,
+        epoch: RunEpoch,
+    ) -> bool {
+        {
+            let cache = self.kkpv_grouped_bundles.lock().expect("分组束缓存锁");
+            if cache.epoch == Some(epoch) {
+                return cache.eligible;
+            }
+        }
+        let eligible = source.kkpv_grouping_eligible(self.engine.plan_hash().bytes());
+        let mut cache = self.kkpv_grouped_bundles.lock().expect("分组束缓存锁");
+        // 代际更替必须整体作废：束字节携带块头 tick，跨代际复用会被解码
+        // 端"块头 tick 与信封不一致"拒绝（资格真假与否都一样）。
+        cache.epoch = Some(epoch);
+        cache.eligible = eligible;
+        cache.bundles.clear();
+        eligible
+    }
+
+    /// 查询当前代际某分组键的共享束句柄；未装配过返回 None（调用方逐
+    /// 查看者装配后经 [`EmbedEngine::kkpv_publish_grouped_bundle`] 发布）。
+    /// 代际不匹配的陈旧条目按懒惰清理（查询/发布时同代际才可见）。
+    pub(super) fn kkpv_grouped_bundle_hit(
+        &self,
+        epoch: RunEpoch,
+        key: &str,
+    ) -> Option<kk_runner::SharedKkpvBundle> {
+        let cache = self.kkpv_grouped_bundles.lock().expect("分组束缓存锁");
+        (cache.epoch == Some(epoch))
+            .then(|| cache.bundles.get(key).cloned())
+            .flatten()
+    }
+
+    /// 发布某分组键的共享束（首个装配该组的查看者产物）；同代际已有
+    /// 条目时保留既有句柄。
+    pub(super) fn kkpv_publish_grouped_bundle(
+        &self,
+        epoch: RunEpoch,
+        key: &str,
+        bundle: kk_runner::SharedKkpvBundle,
+    ) {
+        let mut cache = self.kkpv_grouped_bundles.lock().expect("分组束缓存锁");
+        if cache.epoch == Some(epoch) {
+            cache.bundles.entry(key.to_string()).or_insert(bundle);
+        }
+    }
+
     /// 读取公开束保留报告（固定内存测量面）：仍被句柄持有的代际、
     /// 字节数与库外句柄数。V8 侧 ArrayBuffer 引用只延长真实存活，
     /// 不进入读数——报告是存活下界。

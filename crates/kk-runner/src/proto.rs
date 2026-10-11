@@ -62,15 +62,27 @@ pub struct EvalReport {
 
 pub use kk_core::RunEpoch;
 
+/// KKPV 私有束的派发形态。
+/// [`KkpvPrivateBundle::Owned`]：逐查看者装配的字节，工作者侧一次性移入
+/// backing store（此前的唯一形态）。
+/// [`KkpvPrivateBundle::Shared`]：全视野查看者共享束——束字节跨人一致，
+/// 每代际装配一次并移入 backing store 后，逐玩家只克隆引用计数（与公开
+/// 束同机制）。两种形态对工作者完全同形，挂载与解码路径不分叉。
+#[derive(Debug)]
+pub enum KkpvPrivateBundle {
+    Owned(Vec<u8>),
+    Shared(crate::shared_bundle::SharedKkpvBundle),
+}
+
 /// 同一条命令携带已提交内存、世界、宿主预算与代码，返回本轮候选。
 #[derive(Debug)]
 pub struct RunJob {
     /// 可信宿主的不可变寻路快照，不经过玩家输入或持久化编码。
     pub terrain: Option<std::sync::Arc<kk_pathfinder::TerrainSet>>,
     pub world: Value,
-    /// KKPV 通道的私有对象束字节；Some 时 world 是不含对象数组与地形的
-    /// 世界信封。进入工作者后一次性移入 backing store，不再复制。
-    pub kkpv_bundle: Option<Vec<u8>>,
+    /// KKPV 通道的私有对象束；Some 时 world 是不含对象数组与地形的
+    /// 世界信封。进入工作者后以共享句柄挂载，不再复制。
+    pub kkpv_bundle: Option<KkpvPrivateBundle>,
     /// KKPV 通道的公开地形束共享句柄；全部玩家同一代际共用同一份内存，
     /// 派发时克隆引用计数，工作者零拷贝挂载。与 `kkpv_bundle` 同 Some
     /// 或同 None。
@@ -147,7 +159,8 @@ pub struct JobGate {
 
 enum Cmd {
     RunJob {
-        job: RunJob,
+        /// 装箱平抑变体尺寸差（RunJob 携带世界/束/内存等大载荷）。
+        job: Box<RunJob>,
         ack: mpsc::Sender<anyhow::Result<RunReceipt>>,
         notify: Option<mpsc::Sender<JobToken>>,
     },
@@ -274,8 +287,13 @@ impl PlayerThreads {
                             epoch,
                             ack,
                         } => {
-                            let _ =
-                                ack.send(run_one_tick(&mut sandbox, &world, bundle, public, epoch));
+                            let _ = ack.send(run_one_tick(
+                                &mut sandbox,
+                                &world,
+                                bundle.map(KkpvPrivateBundle::Owned),
+                                public,
+                                epoch,
+                            ));
                         }
                         Cmd::RunExpr { code, ack } => {
                             // 独立表达式也可能死循环，必须使用带看门狗的执行入口，保证线程能继续服务。
@@ -292,7 +310,7 @@ impl PlayerThreads {
                             let _ = ack.send(run_eval_tick(
                                 &mut sandbox,
                                 &world,
-                                bundle,
+                                bundle.map(KkpvPrivateBundle::Owned),
                                 public,
                                 &code,
                                 epoch,
@@ -631,7 +649,7 @@ impl PlayerThreads {
         let p = self.player_mut(id)?;
         let (ack_tx, ack_rx) = mpsc::channel();
         p.send(Cmd::RunJob {
-            job,
+            job: Box::new(job),
             ack: ack_tx,
             notify,
         });
@@ -722,9 +740,9 @@ impl Drop for PlayerThreads {
     }
 }
 
-/// 线程命令的注入通道输入。KKPV 臂的两个束都在工作者侧转为共享句柄：
-/// 公开束是引用计数克隆，私有束把命令携带的字节一次性移入 backing
-/// store——此后挂载不复制。
+/// 线程命令的注入通道输入。KKPV 臂的两个束都以共享句柄进入工作者：
+/// 公开束与全视野共享私有束是引用计数克隆，逐查看者私有束把命令携带的
+/// 字节一次性移入 backing store——此后挂载都不再复制字节。
 enum ChannelInput {
     Json,
     Kkpv {
@@ -734,14 +752,19 @@ enum ChannelInput {
 }
 
 fn channel_input(
-    bundle: Option<Vec<u8>>,
+    bundle: Option<KkpvPrivateBundle>,
     public: Option<crate::shared_bundle::SharedKkpvBundle>,
 ) -> anyhow::Result<ChannelInput> {
     match (bundle, public) {
-        (Some(private), Some(public)) => Ok(ChannelInput::Kkpv {
-            public,
-            private: crate::shared_bundle::SharedKkpvBundle::from_vec(private),
-        }),
+        (Some(private), Some(public)) => {
+            let private = match private {
+                KkpvPrivateBundle::Owned(bytes) => {
+                    crate::shared_bundle::SharedKkpvBundle::from_vec(bytes)
+                }
+                KkpvPrivateBundle::Shared(handle) => handle,
+            };
+            Ok(ChannelInput::Kkpv { public, private })
+        }
         (None, None) => Ok(ChannelInput::Json),
         // 协调器必须成对派发两个束；单侧出现说明装配缺陷，按基础设施
         // 故障上抛而不是静默降级到 JSON 通道。
@@ -754,7 +777,7 @@ fn channel_input(
 fn run_one_tick(
     sandbox: &mut Sandbox,
     world: &Value,
-    bundle: Option<Vec<u8>>,
+    bundle: Option<KkpvPrivateBundle>,
     public: Option<crate::shared_bundle::SharedKkpvBundle>,
     epoch: RunEpoch,
 ) -> anyhow::Result<TickReport> {
@@ -833,7 +856,7 @@ fn run_one_tick(
 fn run_eval_tick(
     sandbox: &mut Sandbox,
     world: &Value,
-    bundle: Option<Vec<u8>>,
+    bundle: Option<KkpvPrivateBundle>,
     public: Option<crate::shared_bundle::SharedKkpvBundle>,
     code: &str,
     epoch: RunEpoch,
@@ -844,7 +867,7 @@ fn run_eval_tick(
 fn run_eval_tick_with_budget(
     sandbox: &mut Sandbox,
     world: &Value,
-    bundle: Option<Vec<u8>>,
+    bundle: Option<KkpvPrivateBundle>,
     public: Option<crate::shared_bundle::SharedKkpvBundle>,
     code: &str,
     epoch: RunEpoch,

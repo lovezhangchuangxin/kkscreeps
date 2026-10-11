@@ -391,6 +391,39 @@ impl World {
         Ok((envelope, out))
     }
 
+    /// 查看者的束分组键：完整可见房集合（自有 ∪ 观察，房名升序、
+    /// `\u{0}` 分隔——房名为坐标格式不含该分隔符）的确定性序列化。
+    /// 仅当 [`World::kkpv_grouping_eligible`] 成立时，同键查看者的私有束
+    /// 字节完全一致（块内容与查看者无关，仅差无人消费的 audience 改写
+    /// 位），宿主可按键共享装配；键与逐房可见判定同源，不满足资格时
+    /// 调用方不得使用分组。
+    pub fn kkpv_viewer_group_key(&self, user: &str) -> String {
+        self.visibility_index()
+            .visible_rooms_of(user)
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\u{0}")
+    }
+
+    /// 束分组共享的世界资格：全部已注册房可共享（无归属旗/Mod 对象/
+    /// 扩展字段——这些内容使块字节依赖查看者裁切）且空块全部可共享
+    ///（无归属工地——否则不可见房须逐查看者枚举己方工地）。任一条件
+    /// 不满足即返回 false，调用方逐查看者装配；空世界同样不可分组。
+    pub fn kkpv_grouping_eligible(&self, plan_hash: [u8; 32]) -> bool {
+        if self.rooms.is_empty() {
+            return false;
+        }
+        let shared = self.shared_room_blocks(plan_hash);
+        shared.len() == self.rooms.len() && shared.values().all(|entry| entry.empty.is_some())
+    }
+
+    /// 分组共享命中时的配套信封：与 [`World::kkpv_bundle_for_viewer`]
+    /// 内部同一构建（gcl 逐玩家），公开给世界源 trait 转发。
+    pub fn kkpv_envelope_json_for_viewer(&self, user: &str, gcl_points: i64) -> Value {
+        self.kkpv_envelope_for_viewer(user, gcl_points)
+    }
+
     /// 测试参考：不经共享块缓存，逐房以真实查看者直写编码后按束框架
     /// 拼接（与 [`encode_bundle`] 分帧一致）。生产装配走
     /// [`World::kkpv_bundle_for_viewer`]，共享房复用缓存字节——两者
@@ -783,5 +816,7 @@ fn value_to_json(value: &KkpvValue) -> Value {
     }
 }
 
+#[cfg(test)]
+mod grouping_tests;
 #[cfg(test)]
 mod tests;

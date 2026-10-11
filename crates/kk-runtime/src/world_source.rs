@@ -72,6 +72,24 @@ pub trait WorldSource {
     ) -> Option<Vec<kk_schema::kkpv::KkpvBlockInput>> {
         None
     }
+
+    /// 束分组共享的世界资格：全部房可共享且空块可共享（块字节不依赖
+    /// 查看者裁切）时为 true。默认 false（永不分组）。
+    fn kkpv_grouping_eligible(&self, _plan_hash: [u8; 32]) -> bool {
+        false
+    }
+
+    /// 查看者的束分组键（完整可见房集合的确定性序列化）；仅在世界资格
+    /// 成立时同键查看者束字节一致。默认 None（无分组信息，逐查看者装配）。
+    fn kkpv_viewer_group_key(&self, _viewer: &str) -> Option<String> {
+        None
+    }
+
+    /// 分组共享命中时的配套信封：与逐查看者投影的信封同一构建。默认
+    /// None，调用方回退逐查看者装配。
+    fn kkpv_envelope_json_for_viewer(&self, _viewer: &str, _gcl_points: i64) -> Option<Value> {
+        None
+    }
 }
 
 impl WorldSource for kk_world::World {
@@ -124,6 +142,20 @@ impl WorldSource for kk_world::World {
             self,
             plan_hash,
             audience_hash,
+        ))
+    }
+
+    fn kkpv_grouping_eligible(&self, plan_hash: [u8; 32]) -> bool {
+        kk_world::World::kkpv_grouping_eligible(self, plan_hash)
+    }
+
+    fn kkpv_viewer_group_key(&self, viewer: &str) -> Option<String> {
+        Some(kk_world::World::kkpv_viewer_group_key(self, viewer))
+    }
+
+    fn kkpv_envelope_json_for_viewer(&self, viewer: &str, gcl_points: i64) -> Option<Value> {
+        Some(kk_world::World::kkpv_envelope_json_for_viewer(
+            self, viewer, gcl_points,
         ))
     }
 
