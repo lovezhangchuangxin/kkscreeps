@@ -114,6 +114,8 @@
 
 ## 目标架构与来源
 
+2026-10-11 用户授权为性能全面领先 xxscreeps、内存更低与同等灵活 Mod 进行必要的任意改造。新的[目标架构](performance-target.md)与[实施计划](../plans/performance-rearchitecture.md)推荐紧凑房间存储、统一事务变化集、增量玩家视图与房间依赖调度；它们是尚未实施的演进方案，不改变本页当前调用链。保留默认行为、合法 Mod 通用路径及全域原子发布，不把现有容器或固定三相流程作为不可更改约束。
+
 房间任务并行、玩家与房间结算重叠、共享快照、数据库与输入日志持久化、网络服务和前端尚需分别实现与验收。详细要求见 [架构索引](README.md)，取舍依据见 [ADR-004](../decisions/ADR-004-core-architecture.md)、[ADR-013](../decisions/ADR-013-architecture-review-coordinator.md)和 [ADR-014](../decisions/ADR-014-contribution-plane.md)。
 
 常量来源为 Screeps common，指令规则和玩家 API 主要对照 Screeps engine，原生寻路对照 Screeps driver。具体版本与符号在相应源码中注明；原始研究见 [研究索引](../research/README.md)。

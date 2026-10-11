@@ -7,6 +7,7 @@
 | 文档 | 内容 |
 |---|---|
 | [overall.md](overall.md) | 当前运行入口、模块职责、实际依赖和数据表示；区分预留模块与目标服务 |
+| [performance-target.md](performance-target.md) | 2026-10-11 推荐的未实现重构目标：紧凑房间存储、受控变化集、增量视图、依赖调度与完整 Mod 能力 |
 | [source-organization.md](source-organization.md) | 当前源码模块导航、测试分组与文件规模门禁 |
 | [game-loop.md](game-loop.md) | 当前玩家执行与结算流程，以及并行流水线的目标 |
 | [background-services.md](background-services.md) | G27.a 独立后台线程/V8、受控异步生命周期、有限只读探针和作者 CLI；耐久/网络仍待后续 |
