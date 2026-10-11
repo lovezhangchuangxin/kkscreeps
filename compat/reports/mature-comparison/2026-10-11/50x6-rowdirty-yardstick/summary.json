@@ -1,0 +1,187 @@
+{
+ "success": true,
+ "equivalent": false,
+ "comparison_policy": "same initial fixture, complete player/room execution and real activity; gameplay divergence disclosed",
+ "strict_equivalence": false,
+ "scope": "engine execution/settlement/commit; no disk or HTTP",
+ "formal_window": false,
+ "provenance": {
+  "payload_manifest": {
+   "binary": "145b4e4f29bf51a1261cf48e782671005cb7c579366bc3cf50c504cfad9d6f09",
+   "node": "72661776a737f5bbd7bc66af9dc5a5ef324819a53df518fdc7143127927c1378",
+   "kk_sources": "ca149b3e859d9bb725f08fa56b755856432efa8608aa98d03bea2e34778bac71",
+   "cargo_lock": "079708199f4246eb3eb8e55d77a3a150dcb9aed46be73ae5e413da964c382fca",
+   "xxs": "47a8b5f2983c1c7fc03897da26c0c3949181ba163c6191b78dea3c28011b743c",
+   "lodash": "996c8c389881a79da61b272b6777c36cdd07fd94ae2162a3a1dd444fecb2b2a0",
+   "xxs_lock": "eef90d5cf690aa724460be882edf5f4e7b7eb48cd3cbe7b779c901f50b07ba5a",
+   "isolated_vm": "d8e7044dc51a8b359ce263e4d0c9656adfbb2ecf764f809ecf02e89db4755fd8",
+   "harness": "2a79d3402debd35efeb8b5dd7005fbc3bff8101eaea0653b416d6ade90ea7005",
+   "adapter": "d7883f84db328f03684e91be4de6dc06a0bf2629edc389f48362f179d6689f05",
+   "player": "af03ad7df5f1ba12f173695133ceb8126389844081d6a7ac77b9d865ff29f034",
+   "mature": "a3f1ae51c63c83fe6afaa7b9064640955fb04d3350be9749b529ddb3b2fa2ce0",
+   "mature_player": "b6d050331e0ad6deb09950c3de08b695719c9034bcc055b0c04a8da653a1d40d",
+   "mature_adapter": "410f0789feb0b9cacf2bcabfa41a5de52ac71af433a4691ca006665c963dab32"
+  },
+  "binary_sha256": "145b4e4f29bf51a1261cf48e782671005cb7c579366bc3cf50c504cfad9d6f09",
+  "xxs_tree_sha256": "47a8b5f2983c1c7fc03897da26c0c3949181ba163c6191b78dea3c28011b743c",
+  "isolated_vm_sha256": "d8e7044dc51a8b359ce263e4d0c9656adfbb2ecf764f809ecf02e89db4755fd8",
+  "node": "v26.11.1",
+  "node_sha256": "72661776a737f5bbd7bc66af9dc5a5ef324819a53df518fdc7143127927c1378",
+  "machine_model": "Mac16,12",
+  "memory_bytes": 25769803776,
+  "xxs_commit": "8e2df39e8423e6ff170865a5da6556e99bdd397f",
+  "xxs_status": "",
+  "kk_commit": "21853050af23730a582fd17870366f536b1a7e89",
+  "kk_status": "",
+  "adapter_sha256": "d7883f84db328f03684e91be4de6dc06a0bf2629edc389f48362f179d6689f05",
+  "harness_sha256": "2a79d3402debd35efeb8b5dd7005fbc3bff8101eaea0653b416d6ade90ea7005",
+  "machine": "macOS-15.7.3-arm64-arm-64bit",
+  "processor": "arm",
+  "logical_cpus": 10,
+  "command": [
+   "scripts/benchmark/compare.py",
+   "--xxs-root",
+   "/Users/keqing/Desktop/projects/sources/xxscreeps",
+   "--node",
+   "/Users/keqing/.nvm/versions/node/v26.11.1/bin/node",
+   "--players",
+   "50",
+   "--runs",
+   "1",
+   "--warmup",
+   "5",
+   "--ticks",
+   "100",
+   "--concurrency",
+   "4",
+   "--output",
+   "/tmp/kkscreeps-rowdirty-yard/window1"
+  ],
+  "started_unix": 1791684416.918377,
+  "finished_unix": 1791684533.838666,
+  "xxs_status_after": ""
+ },
+ "summary": [
+  {
+   "profile": "mature",
+   "players": 50,
+   "rooms": 300,
+   "runs": 1,
+   "workload_comparisons": [
+    {
+     "state": {
+      "before": {
+       "equal": false,
+       "first_difference": "$[0].structures: length 517 != 518",
+       "rooms_with_difference": 48
+      },
+      "after": {
+       "equal": false,
+       "first_difference": "$[0].structures: length 517 != 518",
+       "rooms_with_difference": 300
+      }
+     },
+     "action_counts_equal": false,
+     "actions": {
+      "factory": {
+       "kkscreeps": 600,
+       "xxscreeps": 600,
+       "delta_percent": 0.0
+      },
+      "harvest": {
+       "kkscreeps": 49800,
+       "xxscreeps": 49800,
+       "delta_percent": 0.0
+      },
+      "link": {
+       "kkscreeps": 4200,
+       "xxscreeps": 4200,
+       "delta_percent": 0.0
+      },
+      "mineral": {
+       "kkscreeps": 4500,
+       "xxscreeps": 4500,
+       "delta_percent": 0.0
+      },
+      "move": {
+       "kkscreeps": 88800,
+       "xxscreeps": 88500,
+       "delta_percent": 0.3389830508474523
+      },
+      "observe": {
+       "kkscreeps": 30000,
+       "xxscreeps": 30000,
+       "delta_percent": 0.0
+      },
+      "pathSearch": {
+       "kkscreeps": 12900,
+       "xxscreeps": 12900,
+       "delta_percent": 0.0
+      },
+      "power": {
+       "kkscreeps": 600,
+       "xxscreeps": 600,
+       "delta_percent": 0.0
+      },
+      "reaction": {
+       "kkscreeps": 4800,
+       "xxscreeps": 4800,
+       "delta_percent": 0.0
+      },
+      "terminal": {
+       "kkscreeps": 300,
+       "xxscreeps": 300,
+       "delta_percent": 0.0
+      },
+      "transfer": {
+       "kkscreeps": 32100,
+       "xxscreeps": 32100,
+       "delta_percent": 0.0
+      },
+      "upgrade": {
+       "kkscreeps": 23400,
+       "xxscreeps": 23400,
+       "delta_percent": 0.0
+      },
+      "withdraw": {
+       "kkscreeps": 21000,
+       "xxscreeps": 21000,
+       "delta_percent": 0.0
+      }
+     },
+     "equivalent": false
+    }
+   ],
+   "kkscreeps": {
+    "p50_ms": 493.677584,
+    "p95_ms": 652.639458,
+    "p99_ms": 712.712041,
+    "cpu_core_ms_per_tick": 1472.24412,
+    "rss_bytes_sampled_p50": 3194241024,
+    "rss_bytes_sampled_peak": 3296624640
+   },
+   "xxscreeps": {
+    "p50_ms": 316.63095799999974,
+    "p95_ms": 423.21291700000074,
+    "p99_ms": 557.2002920000014,
+    "cpu_core_ms_per_tick": 1899.3264199999999,
+    "rss_bytes_sampled_p50": 3454730240,
+    "rss_bytes_sampled_peak": 3778707456
+   },
+   "kkscreeps_over_xxscreeps": {
+    "p50_ms": 1.5591576613933007,
+    "p95_ms": 1.542106660227478,
+    "p99_ms": 1.2790948806609712,
+    "cpu_core_ms_per_tick": 0.7751401257294153,
+    "rss_bytes_sampled_p50": 0.9245992601726264,
+    "rss_bytes_sampled_peak": 0.8724212388459638
+   },
+   "observed_goal": {
+    "faster_p50": false,
+    "lower_peak_rss": true
+   }
+  }
+ ],
+ "thermal_protocol": "compare.py 整跑一轮丢弃后采集（两侧引擎同窗）",
+ "context": "row-dirty（21853050）后首个 xxs 同窗标尺：wall 1.559×（自 1.84×）、CPU 0.775×（kk 首次低于 xxs）、RSS 峰值 0.872×；等价分歧签名（structures 517/518、move +0.34%）与既往窗口一致，无新分歧"
+}

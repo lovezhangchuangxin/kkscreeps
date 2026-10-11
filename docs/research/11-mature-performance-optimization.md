@@ -379,3 +379,8 @@ RSS 采样中位数均值下降 12.09%，峰值均值仅下降 1.80%；首对新
 【验证链】kk-schema 40 单测（偏移交叉验证/脏位语义/拒变体/首拍字节等价）+ kk-world 脏位语义锁（第二拍带脏位与全 fresh 编码逐对象逐字段等值、插入行脏/存量行净）+ kk-runner sandbox 62 场景（新增 `kkpv_dirty_resident`：连拍干净行懒字段重指后可读 + 基准错位回退全量）+ sim 106 + kk-mod-host + 棘轮 2905/9 豁免零转红 + 完整无参数 `pnpm run check`。
 
 【剩余杠杆结构（更新）】热稳态 wall 降至 ~500-570ms = proj ~185-227 + run ~170-191 + settle ~117-141；达标 0.9×（热稳态 xxs×0.9 ≈ 253-319ms）已进入射程——run 相尚有变长字段重物化削减（cell 级复用）与 settle 可并行成分（BTreeMap 重建 ~30ms、publish_tick ~26ms、commit_rooms ~11ms）两线；另需安静机热稳态标尺复测确认对 xxs 的实际比值。
+
+
+## 2026-10-11 补记：row-dirty 后热稳态标尺——1.559×、CPU 首次低于 xxs
+
+丢弃窗热协议同窗复测（[证据](../../compat/reports/mature-comparison/2026-10-11/50x6-rowdirty-yardstick/summary.json)）：**kk wall P50 493.7ms vs xxs 316.6ms = 1.559×**（P95 1.542×、P99 1.279×，旅程 23.4×→…→1.84×→1.559×）；**CPU core-ms 0.775×——kk 首次低于 xxs**（1472 vs 1899）；RSS P50 0.925×/峰值 0.872×（更低，含 row-dirty 保留 +~150MB 后仍低）；公平门①并行度未变（kk ~3.3×）。等价分歧签名与既往完全一致（structures 517/518、move +0.34%），row-dirty 未引入新分歧。剩余 1.559×→0.9×（~285ms）需三相再压：settle 可并行成分（BTreeMap 重建 ~30ms、publish_tick ~26ms、commit_rooms ~11ms）、run 相变长重物化 cell 级复用、以及相位重叠/并行化的 L1a 仲裁路径（2 核亲和窗细则已确认）。
