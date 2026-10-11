@@ -195,7 +195,12 @@ impl World {
             self.player_ticks
         };
         let generation = self.next_generation()?;
-        self.rooms = rooms.into_iter().collect();
+        // 逐槽替换取代整树重建：上游已验证房集与顺序逐房一致——两序
+        // 列锁步 zip 即可（免 300 次 String 键克隆与整树重插），旧
+        // RoomState 在槽位处原地释放。
+        for (slot, (_name, room)) in self.rooms.values_mut().zip(rooms) {
+            *slot = room;
+        }
         self.next_obj_id = next_id;
         self.time = time;
         self.player_ticks = player_ticks;

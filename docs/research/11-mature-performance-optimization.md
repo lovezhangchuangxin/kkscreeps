@@ -384,3 +384,14 @@ RSS 采样中位数均值下降 12.09%，峰值均值仅下降 1.80%；首对新
 ## 2026-10-11 补记：row-dirty 后热稳态标尺——1.559×、CPU 首次低于 xxs
 
 丢弃窗热协议同窗复测（[证据](../../compat/reports/mature-comparison/2026-10-11/50x6-rowdirty-yardstick/summary.json)）：**kk wall P50 493.7ms vs xxs 316.6ms = 1.559×**（P95 1.542×、P99 1.279×，旅程 23.4×→…→1.84×→1.559×）；**CPU core-ms 0.775×——kk 首次低于 xxs**（1472 vs 1899）；RSS P50 0.925×/峰值 0.872×（更低，含 row-dirty 保留 +~150MB 后仍低）；公平门①并行度未变（kk ~3.3×）。等价分歧签名与既往完全一致（structures 517/518、move +0.34%），row-dirty 未引入新分歧。剩余 1.559×→0.9×（~285ms）需三相再压：settle 可并行成分（BTreeMap 重建 ~30ms、publish_tick ~26ms、commit_rooms ~11ms）、run 相变长重物化 cell 级复用、以及相位重叠/并行化的 L1a 仲裁路径（2 核亲和窗细则已确认）。
+
+
+## 2026-10-11 补记：settle 数据搬家切分证伪与 L1a 重叠设计定型
+
+【采样归因（release）】settle ~117ms（row-dirty 后）在 tick_with_writebacks 子树内的自帧分布：settle_room 本体 766（~45%，游戏规则）、BTreeMap 迭代/重建 406+133、publish/commit 331/306、分配器（szone/tiny malloc+free）~600 分散、validate_stage 130、serde 反序列化 123+101（来源待查）。
+
+【A+B 切分与证伪】A：commit_tick_rooms 逐槽替换（values_mut 锁步 zip，免整树重建与 300 次 String 键克隆；上游已验证房集与顺序一致）；B：settle_rooms_stage 房间深克隆 thread::scope 并行（可用并行 1/2、至多 4 线程、小房集退化串行；克隆纯只读、按索引保序、无 ID 确定性问题）。ABBA（丢弃窗 O,N,N,O）：**settle 比值 1.002（±2%）、wall 均值 +4% 且相邻对方向矛盾（0.973/0.897）——判噪声**。结论：深克隆与 BTreeMap 重建/搬家在 release 下合计 <5ms，早前 ~30ms 归因（粗采样）误导了切分选择；B 撤回、A 保留（微改免工作量）。[证据](../../compat/reports/mature-comparison/2026-10-11/50x6-settle-split-falsified/summary.json)。
+
+【教训】settle 相的采样归因必须以"改动→ABBA 复验"闭环，子树样本占比≠墙钟可回收量（分配器成本被重复计入多个子树）。
+
+【下一主片：L1a 房间级编码-结算重叠（设计定型）】当前三相串行 wall ≈ project 190（其中共享 full 块编码 ~100-140 + 信封/装配/回退 ~50-90）+ run 175（worker 吞吐约束，主线程 44% 等待）+ settle 117（settle_room 本体为主，切分证伪后不可再压）。重叠方案：staged_body 的 settle_rooms_stage 逐房结算完成即把**候选房**（txn.rooms 已结算元素，不可变）交给空闲工作线程编码共享 full 块——编码对候选只读、产物与发布后编码逐字节一致（含 row-dirty：prev 保留块以 Arc 快照随任务下发，线程内不触共享 RefCell）；主线程继续结算后续房间。收益上界 = min(共享块编码, settle) ≈ 100-140ms 隐藏，wall 预期 −60~100ms；CPU ±0（同样工作量换线程）；确定性无影响（编码纯函数、块序按房名）。实现要点：kk-world 需暴露"按单房编码 full 块"入口（现 build_shared_room_blocks 全服扫）；kk-runtime 的 execute_players 改为消费预编码块（project 相退化为信封+装配+回退房）；候选-发布一致性由"同数据同字节"保证（commit 校验不变）。风险：候选在 publish 前被 inter-room 阶段改动（portal/跨房过渡会改 txn.rooms！）——重叠编码须延后到 inter_room 应用之后，或对受跨房影响的房重编。
