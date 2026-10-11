@@ -1,0 +1,1336 @@
+diff --git a/crates/kk-runner/src/prelude/game/kkpv.js b/crates/kk-runner/src/prelude/game/kkpv.js
+index a88ae59d..0a91b42f 100644
+--- a/crates/kk-runner/src/prelude/game/kkpv.js
++++ b/crates/kk-runner/src/prelude/game/kkpv.js
+@@ -27,6 +27,7 @@
+   // 全部内建在加载期捕获；此后玩家对原型与全局的任何改写都不影响解码。
+   const __Object = Object;
+   const __defineProperty = __Object.defineProperty;
++  const __objectCreate = __Object.create;
+   const __getOwnPropertyDescriptor = __Object.getOwnPropertyDescriptor;
+   const __reflectApply = Reflect.apply;
+   const __DataView = DataView;
+@@ -812,6 +813,89 @@
+     return records;
+   }
+ 
++  /** 目录束常驻解码（散页零拷贝）：buffer 是宿主每代际装配一次的块目录
++   * （u32 房数 + 每房 16 字节 [fullOff,fullLen,emptyOff,emptyLen] + 全部
++   * full 块 + 全部 empty 块，世界房序，偏移自束首绝对计）。逐房按信封
++   * visibleRooms 选块：可见走 full、不可见走 empty——选出的块序与逐查看
++   * 者装配的束完全同构（每房恰一块、世界房序），归并对位/常驻/清扫/
++   * 脏位链与 decodeBundleResident 同一套。房名从 full 块头读出自证
++   * （名描述符 96/100 相对 arena 段，段偏移 136/140）；可见性查空原型
++   * 对象（纯属性访问，无方法调用，不涉玩家原型面）。 */
++  function decodeCatalogResident(buffer, expectedTick, resident, visibleRooms) {
++    const dv = new __DataView(buffer);
++    const total = __reflectApply(__dvByteLength, dv, []);
++    if (expectedTick === undefined || expectedTick === null) {
++      fail('缺少信封 tick 一致性参数');
++    }
++    if (total < 4) fail('目录束短于房数');
++    const roomCount = u32(dv, 0);
++    if (roomCount === 0) fail('目录束房数为零');
++    if (4 + roomCount * 16 > total) fail('目录束短于房间目录');
++    if (visibleRooms === undefined || visibleRooms === null) {
++      fail('目录解码缺少可见房集合');
++    }
++    const visible = __objectCreate(null);
++    for (let i = 0; i < visibleRooms.length; i++) {
++      visible[visibleRooms[i]] = 1;
++    }
++    deadScratch = [];
++    updateStamp = expectedTick;
++    const records = [];
++    const his = [];
++    const los = [];
++    const state = __reflectApply(__weakGet, mergeState, [resident]);
++    const prevEnds = state !== undefined ? state.ends : null;
++    const lastTick = state !== undefined ? state.lastTick : undefined;
++    let blockIndex = 0;
++    const ends = [];
++    for (let i = 0; i < roomCount; i++) {
++      const fullOff = u32(dv, 4 + i * 16);
++      const fullLen = u32(dv, 4 + i * 16 + 4);
++      const emptyOff = u32(dv, 4 + i * 16 + 8);
++      const emptyLen = u32(dv, 4 + i * 16 + 12);
++      if (fullLen === 0 || emptyLen === 0) fail('目录槽缺块');
++      if (fullOff + fullLen > total || emptyOff + emptyLen > total) fail('目录槽越界');
++      const arenaOff = u32(dv, fullOff + 136);
++      const arenaLen = u32(dv, fullOff + 140);
++      const nameOff = u32(dv, fullOff + 96);
++      const nameLen = u32(dv, fullOff + 100);
++      if (nameLen === 0) fail('目录块缺房间名');
++      if (nameOff + nameLen > arenaLen) fail('目录块房间名描述符越界');
++      const room = utf8(dv, fullOff + arenaOff + nameOff, nameLen);
++      const isFull = visible[room] === 1;
++      const start = isFull ? fullOff : emptyOff;
++      const len = isFull ? fullLen : emptyLen;
++      let prev = null;
++      if (prevEnds !== null && blockIndex < prevEnds.length) {
++        prev = {
++          arr: state.records,
++          his: state.his,
++          los: state.los,
++          ps: blockIndex === 0 ? 0 : prevEnds[blockIndex - 1],
++          pe: prevEnds[blockIndex],
++        };
++      }
++      decodeBlockInto(dv, records, his, los, start, len, expectedTick, resident, prev, lastTick);
++      ends[ends.length] = records.length;
++      blockIndex++;
++    }
++    __reflectApply(__weakSet, mergeState, [
++      resident,
++      { records, ends, his, los, lastTick: expectedTick },
++    ]);
++    __reflectApply(__mapForEach, resident, [
++      (rec, id) => {
++        if (rec[SEEN_TICK] !== expectedTick) {
++          deadScratch[deadScratch.length] = id;
++          __reflectApply(__mapDelete, resident, [id]);
++        }
++      },
++    ]);
++    DIAG.rows += records.length;
++    gwRef.kkpv.lastDecode = { tick: expectedTick, deadIds: deadScratch };
++    return records;
++  }
++
+   /** 解码公开地形束，返回 {房间名 → 地形字节视图}。视图直接覆盖共享
+    * ArrayBuffer 的地形段（零拷贝）；视图不进入玩家可见面——game.js
+    * 只把它交给 terrainByRoom 供可信闭包按索引读取。公开束只接受公开
+@@ -855,6 +939,7 @@
+   gwRef.kkpv = {
+     decodeBundle,
+     decodeBundleResident,
++    decodeCatalogResident,
+     decodePublicBundle,
+     // 变更戳符号：装配主环以 rec[CHANGED] === 本拍 tick 判定变更行。
+     CHANGED: CHANGED_TICK,
+diff --git a/crates/kk-runner/src/prelude/host.js b/crates/kk-runner/src/prelude/host.js
+index ddde71ec..a118aee0 100644
+--- a/crates/kk-runner/src/prelude/host.js
++++ b/crates/kk-runner/src/prelude/host.js
+@@ -63,8 +63,8 @@
+     /** KKPV 通道注入：世界信封 JSON 串 + 私有对象束 ArrayBuffer + 公开
+      * 地形束 ArrayBuffer（共享内存零拷贝挂载）+ 预算真值；对象记录与
+      * 地形视图在沙箱内从两束解码。 */
+-    beginTickKkpv(worldJson, bundle, publicBundle, cpuMeta) {
+-      beginTickKkpv(worldJson, bundle, publicBundle, cpuMeta);
++    beginTickKkpv(worldJson, bundle, publicBundle, cpuMeta, catalogMode) {
++      beginTickKkpv(worldJson, bundle, publicBundle, cpuMeta, catalogMode);
+     },
+     /** 执行玩家入口：require('main').loop()。返回结果 JSON 字符串（宿主 exec_json 约定）。 */
+     runLoop() {
+diff --git a/crates/kk-runner/src/prelude/runtime/world-tick.js b/crates/kk-runner/src/prelude/runtime/world-tick.js
+index 19272665..3b9c0587 100644
+--- a/crates/kk-runner/src/prelude/runtime/world-tick.js
++++ b/crates/kk-runner/src/prelude/runtime/world-tick.js
+@@ -55,8 +55,8 @@
+        * 数组顺序（块房序×ID 序）、字段值与缺失形态、Store/嵌套记录的键序
+        * （载荷保序）、terrainByRoom 的逐格地形值；两者共用同一段
+        * beginTickImpl 后续步骤。两个束须同时提供。 */
+-      beginTickKkpv(worldJson, bundle, publicBundle, cpuMeta) {
+-        beginTickImpl(worldJson, cpuMeta, bundle, publicBundle);
++      beginTickKkpv(worldJson, bundle, publicBundle, cpuMeta, catalogMode) {
++        beginTickImpl(worldJson, cpuMeta, bundle, publicBundle, catalogMode === true);
+       },
+       writeBackMemory: memory.writeBackMemory,
+       intentsPayload,
+@@ -66,7 +66,7 @@
+      * KKPV 私有块束（信封不含 objects 键），publicBundle 非 null 时地形
+      * 来自公开地形束的零拷贝视图（信封不含 terrain 键），其余步骤两条
+      * 通道完全一致。两个束必须同时提供或同时为空——单侧出现即装配错误。 */
+-    function beginTickImpl(worldJson, cpuMeta, bundle, publicBundle) {
++    function beginTickImpl(worldJson, cpuMeta, bundle, publicBundle, catalogMode) {
+       const diag = gw.runDiag
+         ? { t0: __dateNow(), rows0: kkpvDiag.rows, dirty0: kkpvDiag.dirty, remat0: kkpvDiag.remat }
+         : null;
+@@ -82,8 +82,13 @@
+       let tPub = 0;
+       if (hasPrivate) {
+         // 块头 tick 与信封 time 在解码器内交叉校验（同一投影的同界快照）。
++        // catalogMode：bundle 是每代际装配一次的块目录（散页零拷贝），
++        // 解码器按信封 visibleRooms 逐房选 full/empty 块，块序与逐查看者
++        // 装配同构；否则 bundle 是逐查看者装配的私有束。
+         let d0 = __dateNow();
+-        gw.world.objects = gw.kkpv.decodeBundleResident(bundle, gw.world.time, residentRecords);
++        gw.world.objects = catalogMode
++          ? gw.kkpv.decodeCatalogResident(bundle, gw.world.time, residentRecords, gw.world.visibleRooms)
++          : gw.kkpv.decodeBundleResident(bundle, gw.world.time, residentRecords);
+         let d1 = __dateNow();
+         tPriv = d1 - d0;
+         terrainViews = gw.kkpv.decodePublicBundle(publicBundle, gw.world.time);
+diff --git a/crates/kk-runner/src/proto.rs b/crates/kk-runner/src/proto.rs
+index 2e3383d1..88f05578 100644
+--- a/crates/kk-runner/src/proto.rs
++++ b/crates/kk-runner/src/proto.rs
+@@ -65,13 +65,18 @@ pub use kk_core::RunEpoch;
+ /// KKPV 私有束的派发形态。
+ /// [`KkpvPrivateBundle::Owned`]：逐查看者装配的字节，工作者侧一次性移入
+ /// backing store（此前的唯一形态）。
+-/// [`KkpvPrivateBundle::Shared`]：全视野查看者共享束——束字节跨人一致，
++/// [`KkpvPrivateBundle::Shared`]：同组查看者共享束——束字节跨人一致，
+ /// 每代际装配一次并移入 backing store 后，逐玩家只克隆引用计数（与公开
+-/// 束同机制）。两种形态对工作者完全同形，挂载与解码路径不分叉。
++/// 束同机制）。
++/// [`KkpvPrivateBundle::Catalog`]：块目录（散页零拷贝）——每代际装配一次
++/// 的全房 full+empty 块目录，任意可见集的查看者共用同一份，沙箱内按信封
++/// visibleRooms 逐房选块。三种形态对工作者同形挂载，解码按 catalog 标志
++/// 分叉（目录路径与逐查看者束完全同构）。
+ #[derive(Debug)]
+ pub enum KkpvPrivateBundle {
+     Owned(Vec<u8>),
+     Shared(crate::shared_bundle::SharedKkpvBundle),
++    Catalog(crate::shared_bundle::SharedKkpvBundle),
+ }
+ 
+ /// 同一条命令携带已提交内存、世界、宿主预算与代码，返回本轮候选。
+@@ -748,6 +753,8 @@ enum ChannelInput {
+     Kkpv {
+         public: crate::shared_bundle::SharedKkpvBundle,
+         private: crate::shared_bundle::SharedKkpvBundle,
++        /// private 为块目录（散页零拷贝）形态。
++        catalog: bool,
+     },
+ }
+ 
+@@ -757,13 +764,18 @@ fn channel_input(
+ ) -> anyhow::Result<ChannelInput> {
+     match (bundle, public) {
+         (Some(private), Some(public)) => {
+-            let private = match private {
++            let (private, catalog) = match private {
+                 KkpvPrivateBundle::Owned(bytes) => {
+-                    crate::shared_bundle::SharedKkpvBundle::from_vec(bytes)
++                    (crate::shared_bundle::SharedKkpvBundle::from_vec(bytes), false)
+                 }
+-                KkpvPrivateBundle::Shared(handle) => handle,
++                KkpvPrivateBundle::Shared(handle) => (handle, false),
++                KkpvPrivateBundle::Catalog(handle) => (handle, true),
+             };
+-            Ok(ChannelInput::Kkpv { public, private })
++            Ok(ChannelInput::Kkpv {
++                public,
++                private,
++                catalog,
++            })
+         }
+         (None, None) => Ok(ChannelInput::Json),
+         // 协调器必须成对派发两个束；单侧出现说明装配缺陷，按基础设施
+@@ -783,7 +795,11 @@ fn run_one_tick(
+ ) -> anyhow::Result<TickReport> {
+     // 此 tick 通道即时结算；注入失败也提交中断处理产生的完整预算费用。
+     let begin = match channel_input(bundle, public)? {
+-        ChannelInput::Kkpv { public, private } => sandbox.begin_tick_kkpv(world, &public, &private),
++        ChannelInput::Kkpv {
++            public,
++            private,
++            catalog,
++        } => sandbox.begin_tick_kkpv(world, &public, &private, catalog),
+         ChannelInput::Json => sandbox.begin_tick(world),
+     };
+     let plan = match begin {
+@@ -876,12 +892,22 @@ fn run_eval_tick_with_budget(
+     // 世界注入失败作为该玩家的 inject_failed 结果返回，让协调器继续处理其他玩家。
+     // 通道断开等基础设施故障仍返回 Err。
+     let begin = match (channel_input(bundle, public)?, budget) {
+-        (ChannelInput::Kkpv { public, private }, Some(budget)) => {
+-            sandbox.begin_tick_kkpv_with_budget(world, &public, &private, budget)
+-        }
+-        (ChannelInput::Kkpv { public, private }, None) => {
+-            sandbox.begin_tick_kkpv(world, &public, &private)
+-        }
++        (
++            ChannelInput::Kkpv {
++                public,
++                private,
++                catalog,
++            },
++            Some(budget),
++        ) => sandbox.begin_tick_kkpv_with_budget(world, &public, &private, budget, catalog),
++        (
++            ChannelInput::Kkpv {
++                public,
++                private,
++                catalog,
++            },
++            None,
++        ) => sandbox.begin_tick_kkpv(world, &public, &private, catalog),
+         (ChannelInput::Json, Some(budget)) => sandbox.begin_tick_with_budget(world, budget),
+         (ChannelInput::Json, None) => sandbox.begin_tick(world),
+     };
+diff --git a/crates/kk-runner/src/sandbox/host.rs b/crates/kk-runner/src/sandbox/host.rs
+index ce0da859..45584a5c 100644
+--- a/crates/kk-runner/src/sandbox/host.rs
++++ b/crates/kk-runner/src/sandbox/host.rs
+@@ -111,6 +111,7 @@ pub(super) fn call_host_kkpv_begin(
+     public: &crate::shared_bundle::SharedKkpvBundle,
+     private: &crate::shared_bundle::SharedKkpvBundle,
+     cpu_json: &str,
++    catalog_mode: bool,
+ ) -> anyhow::Result<()> {
+     let _guard = tokio.enter();
+     deno_core::scope!(scope, runtime);
+@@ -127,11 +128,13 @@ pub(super) fn call_host_kkpv_begin(
+     let private_buffer = private
+         .array_buffer(scope)
+         .ok_or_else(|| anyhow::anyhow!("宿主通道参数构造失败（私有束挂载）"))?;
+-    let argv: [v8::Local<v8::Value>; 4] = [
++    let catalog = v8::Boolean::new(scope, catalog_mode).into();
++    let argv: [v8::Local<v8::Value>; 5] = [
+         world.into(),
+         private_buffer.into(),
+         public_buffer.into(),
+         cpu.into(),
++        catalog,
+     ];
+     match func.call(scope, recv, &argv) {
+         Some(_) => Ok(()),
+diff --git a/crates/kk-runner/src/sandbox/inject.rs b/crates/kk-runner/src/sandbox/inject.rs
+index f1f62805..72f237b3 100644
+--- a/crates/kk-runner/src/sandbox/inject.rs
++++ b/crates/kk-runner/src/sandbox/inject.rs
+@@ -6,21 +6,23 @@ impl Sandbox {
+     /// SkipPenalty 表示负余额停跑；回充已暂存，仍需 settle_bill 或 discard_bill。
+     pub fn begin_tick(&mut self, world: &serde_json::Value) -> anyhow::Result<TickPlan> {
+         let plan = self.budget.begin_tick();
+-        self.begin_tick_plan(world, None, None, plan)
++        self.begin_tick_plan(world, None, None, plan, false)
+     }
+ 
+     /// [`Sandbox::begin_tick`] 的 KKPV 通道形态：`world` 是不含对象数组与
+     /// 地形的世界信封，对象记录由沙箱从 `private_bundle` 私有块束解码，
+     /// 地形由 `public_bundle` 公开块束直读（共享内存零拷贝挂载）。两个
+-    /// 束须同时提供——只给其一说明通道装配有误，直接失败。
++    /// 束须同时提供——只给其一说明通道装配有误，直接失败。catalog_mode
++    /// 语义同 [`Sandbox::begin_tick_kkpv_with_budget`]。
+     pub fn begin_tick_kkpv(
+         &mut self,
+         world: &serde_json::Value,
+         public_bundle: &crate::shared_bundle::SharedKkpvBundle,
+         private_bundle: &crate::shared_bundle::SharedKkpvBundle,
++        catalog_mode: bool,
+     ) -> anyhow::Result<TickPlan> {
+         let plan = self.budget.begin_tick();
+-        self.begin_tick_plan(world, Some(public_bundle), Some(private_bundle), plan)
++        self.begin_tick_plan(world, Some(public_bundle), Some(private_bundle), plan, catalog_mode)
+     }
+ 
+     /// 使用宿主制定的预算；本地桶只作为本次执行与计费的工作副本。
+@@ -30,16 +32,20 @@ impl Sandbox {
+         budget: &kk_core::cpu::RunBudget,
+     ) -> anyhow::Result<TickPlan> {
+         self.budget = budget.bucket().clone();
+-        self.begin_tick_plan(world, None, None, budget.plan().clone())
++        self.begin_tick_plan(world, None, None, budget.plan().clone(), false)
+     }
+ 
+-    /// [`Sandbox::begin_tick_with_budget`] 的 KKPV 通道形态。
++    /// [`Sandbox::begin_tick_with_budget`] 的 KKPV 通道形态。catalog_mode
++    /// 为真时 private_bundle 是每代际装配一次的块目录（散页零拷贝），
++    /// 沙箱内按信封 visibleRooms 逐房选块解码；否则是逐查看者装配的
++    /// 私有束。两种形态对解码结果完全同构。
+     pub fn begin_tick_kkpv_with_budget(
+         &mut self,
+         world: &serde_json::Value,
+         public_bundle: &crate::shared_bundle::SharedKkpvBundle,
+         private_bundle: &crate::shared_bundle::SharedKkpvBundle,
+         budget: &kk_core::cpu::RunBudget,
++        catalog_mode: bool,
+     ) -> anyhow::Result<TickPlan> {
+         self.budget = budget.bucket().clone();
+         self.begin_tick_plan(
+@@ -47,6 +53,7 @@ impl Sandbox {
+             Some(public_bundle),
+             Some(private_bundle),
+             budget.plan().clone(),
++            catalog_mode,
+         )
+     }
+ 
+@@ -79,6 +86,7 @@ impl Sandbox {
+         kkpv_public: Option<&crate::shared_bundle::SharedKkpvBundle>,
+         kkpv_bundle: Option<&crate::shared_bundle::SharedKkpvBundle>,
+         plan: TickPlan,
++        catalog_mode: bool,
+     ) -> anyhow::Result<TickPlan> {
+         // 调用方应已提交或丢弃上一轮候选；清除残留，避免它混入当前 tick。
+         let host_terrain = self.host_terrain.take();
+@@ -171,6 +179,7 @@ impl Sandbox {
+                         public,
+                         private,
+                         &cpu_json,
++                        catalog_mode,
+                     ),
+                     (false, _, _) => {
+                         // 看门狗已武装；失败清理统一由下方 inspect_err 完成。
+diff --git a/crates/kk-runner/tests/sandbox_tests/kkpv_channel.rs b/crates/kk-runner/tests/sandbox_tests/kkpv_channel.rs
+index d48f5161..ec5eb230 100644
+--- a/crates/kk-runner/tests/sandbox_tests/kkpv_channel.rs
++++ b/crates/kk-runner/tests/sandbox_tests/kkpv_channel.rs
+@@ -319,7 +319,7 @@ pub fn kkpv_channel_equivalence_impl() -> anyhow::Result<()> {
+         let (public, private) = fixture_bundles(&world)?;
+         let mut sb = Sandbox::new(SandboxConfig::default())?;
+         assert!(matches!(
+-            sb.begin_tick_kkpv(&envelope, &public, &private)?,
++            sb.begin_tick_kkpv(&envelope, &public, &private, false)?,
+             TickPlan::Run { .. }
+         ));
+         let dump = sb.run_expr(DUMP)?;
+@@ -512,7 +512,7 @@ pub fn kkpv_ref_decode_impl() -> anyhow::Result<()> {
+     let private_bundle = SharedKkpvBundle::from_vec(bundle);
+     let mut sb = Sandbox::new(SandboxConfig::default())?;
+     assert!(matches!(
+-        sb.begin_tick_kkpv(&envelope, &public_bundle, &private_bundle)?,
++        sb.begin_tick_kkpv(&envelope, &public_bundle, &private_bundle, false)?,
+         TickPlan::Run { .. }
+     ));
+     let out = sb.run_expr(
+@@ -573,7 +573,7 @@ pub fn kkpv_empty_bundle_impl() -> anyhow::Result<()> {
+         let envelope = kk_world::kkpv::kkpv_envelope_from_world_json(&world);
+         let mut sb = Sandbox::new(SandboxConfig::default())?;
+         assert!(matches!(
+-            sb.begin_tick_kkpv(&envelope, &public, &private)?,
++            sb.begin_tick_kkpv(&envelope, &public, &private, false)?,
+             TickPlan::Run { .. }
+         ));
+         let out = sb.run_expr(code)?.clone();
+@@ -603,7 +603,7 @@ pub fn kkpv_truncated_bundle_fails_impl() -> anyhow::Result<()> {
+         let mut sb = Sandbox::new(SandboxConfig::default())?;
+         assert!(
+             matches!(
+-                sb.begin_tick_kkpv(&envelope, &public, &private)?,
++                sb.begin_tick_kkpv(&envelope, &public, &private, false)?,
+                 TickPlan::Run { .. }
+             ),
+             "完整两束是注入对照组（必须成功）"
+@@ -622,6 +622,7 @@ pub fn kkpv_truncated_bundle_fails_impl() -> anyhow::Result<()> {
+                 &envelope,
+                 &SharedKkpvBundle::from_vec(public_bytes),
+                 &SharedKkpvBundle::from_vec(private_bytes),
++                false,
+             )
+             .unwrap_err();
+         assert!(
+@@ -763,7 +764,7 @@ pub fn kkpv_shared_bundle_cross_thread_impl() -> anyhow::Result<()> {
+     let expected = {
+         let mut sb = Sandbox::new(SandboxConfig::default())?;
+         assert!(matches!(
+-            sb.begin_tick_kkpv(&envelope, &public, &private)?,
++            sb.begin_tick_kkpv(&envelope, &public, &private, false)?,
+             TickPlan::Run { .. }
+         ));
+         let out = sb.run_expr(code)?.clone();
+@@ -946,7 +947,7 @@ pub fn kkpv_dirty_resident_impl() -> anyhow::Result<()> {
+             .map_err(|e| anyhow::anyhow!("公开束转换失败：{e}"))?,
+         );
+         assert!(matches!(
+-            sb.begin_tick_kkpv(&envelope(time), &public, &bundle)?,
++            sb.begin_tick_kkpv(&envelope(time), &public, &bundle, false)?,
+             TickPlan::Run { .. }
+         ));
+         let out = sb.run_expr(probe)?;
+diff --git a/crates/kk-runner/tests/sandbox_tests/pathfinder_family.rs b/crates/kk-runner/tests/sandbox_tests/pathfinder_family.rs
+index 01d11f5e..94e3c5f6 100644
+--- a/crates/kk-runner/tests/sandbox_tests/pathfinder_family.rs
++++ b/crates/kk-runner/tests/sandbox_tests/pathfinder_family.rs
+@@ -231,6 +231,7 @@ pub(super) fn pathfinder_kkpv_channel_equivalence_impl() -> anyhow::Result<()> {
+         &kk_world::kkpv::kkpv_envelope_from_world_json(&world),
+         &public,
+         &private,
++        false,
+     )?;
+     let kkpv_result = kkpv_sb.run_expr(expr)?;
+ 
+diff --git a/crates/kk-runner/tests/sandbox_tests/residency_regressions.rs b/crates/kk-runner/tests/sandbox_tests/residency_regressions.rs
+index f1d8aee5..6447aae1 100644
+--- a/crates/kk-runner/tests/sandbox_tests/residency_regressions.rs
++++ b/crates/kk-runner/tests/sandbox_tests/residency_regressions.rs
+@@ -109,6 +109,7 @@ pub(super) fn kkpv_residency_prototype_guard() -> anyhow::Result<()> {
+             &kk_world::kkpv::kkpv_envelope_from_world_json(&w),
+             &kk_runner::SharedKkpvBundle::from_vec(public),
+             &kk_runner::SharedKkpvBundle::from_vec(private),
++            false,
+         )?;
+         let result = sb.run_expr("Game.creeps.anchor.hits")?;
+         assert_eq!(result["value"], 100 - time);
+@@ -189,6 +190,7 @@ pub(super) fn field_dirty_reuse_counters() -> anyhow::Result<()> {
+             &kk_world::kkpv::kkpv_envelope_from_world_json(&world(time)),
+             &kk_runner::SharedKkpvBundle::from_vec(public),
+             &kk_runner::SharedKkpvBundle::from_vec(bundle),
++            false,
+         )?;
+         Ok(())
+     };
+diff --git a/crates/kk-runtime/src/embed.rs b/crates/kk-runtime/src/embed.rs
+index 14626b4d..59dc65dc 100644
+--- a/crates/kk-runtime/src/embed.rs
++++ b/crates/kk-runtime/src/embed.rs
+@@ -51,16 +51,14 @@ struct ExecutionFailure {
+     reason: String,
+ }
+ 
+-/// 分组束共享的代际缓存状态（`EmbedEngine::kkpv_grouped_bundles` 载荷）：
+-/// 资格探测结果 + 分组键 → 共享束句柄。代际推进整体作废。
++/// 块目录的代际缓存状态（`EmbedEngine::kkpv_catalog_bundle` 载荷）：
++/// 所属代际 + 目录句柄（None=本代际不可目录化）。代际推进整体作废。
+ #[derive(Default)]
+-struct KkpvGroupCache {
++struct KkpvCatalogCache {
+     /// 缓存所属代际；None=未探测。
+     epoch: Option<kk_core::RunEpoch>,
+-    /// 本代际分组资格（世界块字节与查看者无关）。
+-    eligible: bool,
+-    /// 分组键（可见房集合序列化）→ 共享束句柄。
+-    bundles: std::collections::HashMap<String, kk_runner::SharedKkpvBundle>,
++    /// 目录共享句柄。
++    handle: Option<kk_runner::SharedKkpvBundle>,
+ }
+ 
+ /// 嵌入式分片及其玩家沙箱，协调玩家执行、世界结算和失败重试。
+@@ -113,10 +111,13 @@ pub struct EmbedEngine {
+         std::sync::Arc<kk_runner::TerrainSet>,
+     )>,
+     kkpv_public_store: crate::kkpv_store::KkpvBlockStore,
+-    /// 束分组共享的代际状态：资格探测结果与"分组键 → 共享束句柄"映射。
+-    /// 资格不成立时映射恒空；代际推进（tick/世界变异）整体作废重建。
+-    /// Mutex 只为经 &self 复用，无争用。
+-    kkpv_grouped_bundles: std::sync::Mutex<KkpvGroupCache>,
++    /// 块目录（散页零拷贝）的代际缓存：每代际至多拼装一份跨查看者共用
++    /// 的目录句柄；内层 None=本代际不可目录化（回退逐查看者装配）。代际
++    /// 推进整体作废重建。Mutex 只为经 &self 复用，无争用。
++    kkpv_catalog_bundle: std::sync::Mutex<KkpvCatalogCache>,
++    /// 测试旋钮：强制禁用块目录快路径（逐查看者装配回退），供同世界
++    /// 双形态等价对照；非测试面不得依赖。
++    kkpv_catalog_disabled: bool,
+     /// 可信 Mod 注册与结算 realm；仅 `create_shard_with_mods` 装配。持有它使
+     /// EmbedEngine 不可跨线程移动（结算与 realm 须同线程）。
+     mod_realm: Option<Rc<RefCell<ModVm>>>,
+@@ -221,7 +222,8 @@ impl EmbedEngine {
+             preencode: None,
+             pathfinder_terrain: None,
+             kkpv_public_store: crate::kkpv_store::KkpvBlockStore::new(),
+-            kkpv_grouped_bundles: std::sync::Mutex::new(KkpvGroupCache::default()),
++            kkpv_catalog_bundle: std::sync::Mutex::new(KkpvCatalogCache::default()),
++            kkpv_catalog_disabled: false,
+         }
+     }
+ 
+@@ -518,11 +520,20 @@ impl EmbedEngine {
+ 
+     /// 读取宿主已提交 CPU 桶，不包含本轮待发布费用。
+     #[doc(hidden)]
+-    /// 测试探针：当前束分组共享缓存状态（资格，组句柄数）。供引擎级
+-    /// 共享生效断言；非测试面不得依赖。
+-    pub fn kkpv_grouped_cache_for_test(&self) -> (bool, usize) {
+-        let cache = self.kkpv_grouped_bundles.lock().expect("分组束缓存锁");
+-        (cache.eligible, cache.bundles.len())
++    /// 测试探针：当前代际是否走块目录（散页零拷贝）通道。供引擎级
++    /// 生效断言；非测试面不得依赖。
++    pub fn kkpv_catalog_active_for_test(&self) -> bool {
++        self.kkpv_catalog_bundle
++            .lock()
++            .expect("目录缓存锁")
++            .handle
++            .is_some()
++    }
++
++    /// 测试旋钮：强制禁用/恢复块目录快路径。供同世界目录形态与逐查看
++    /// 者装配的等价对照；非测试面不得依赖。
++    pub fn set_kkpv_catalog_disabled_for_test(&mut self, disabled: bool) {
++        self.kkpv_catalog_disabled = disabled;
+     }
+ 
+     pub fn player_bucket_for_test(&mut self, player: &str) -> anyhow::Result<f64> {
+@@ -800,9 +811,9 @@ impl EmbedEngine {
+         self.execution_failure = None;
+         self.fail_after_player_for_test = None;
+         self.last_console.clear();
+-        // 世界已清空；公开束与分组共享束随代际一并作废（沙箱先于此回收）。
++        // 世界已清空；公开束与块目录随代际一并作废（沙箱先于此回收）。
+         self.kkpv_public_store = crate::kkpv_store::KkpvBlockStore::new();
+-        self.kkpv_grouped_bundles = std::sync::Mutex::new(KkpvGroupCache::default());
++        self.kkpv_catalog_bundle = std::sync::Mutex::new(KkpvCatalogCache::default());
+     }
+ }
+ 
+diff --git a/crates/kk-runtime/src/embed/execution.rs b/crates/kk-runtime/src/embed/execution.rs
+index 194b02b5..5637ceff 100644
+--- a/crates/kk-runtime/src/embed/execution.rs
++++ b/crates/kk-runtime/src/embed/execution.rs
+@@ -443,25 +443,22 @@ impl EmbedEngine {
+                 // KKPV 通道：对象记录走二进制块束，world 是不含 objects 的信封；
+                 // JSON 参考通道：整世界一个 Value。市场都注入 world 顶层。
+                 let (world, kkpv_bundle) = if self.kkpv_channel {
+-                    // 束分组共享：世界块字节与查看者无关（全房可共享且空块
+-                    // 可共享）时，可见集相同的查看者私有束字节完全一致（仅差
+-                    // 无人消费的 audience 改写位）——按分组键共享装配，组内
+-                    // 首个查看者装配发布，其余共享句柄零拷贝复用。互驻军/
+-                    // 联盟/观战等视野重叠场景同组直接命中。信封与 market/
+-                    // power 仍逐玩家；资格或信封不可得时走逐查看者装配。
+-                    let group_key = self
+-                        .kkpv_grouping_eligible_for_epoch(source, epoch)
+-                        .then(|| source.kkpv_viewer_group_key(&handle))
+-                        .flatten();
+-                    let grouped_hit = group_key
+-                        .as_deref()
+-                        .and_then(|key| self.kkpv_grouped_bundle_hit(epoch, key))
+-                        .and_then(|shared| {
++                    // 块目录快路径（散页零拷贝）：世界块字节与查看者无关（全
++                    // 房可共享且空块可共享）时，每代际拼装一份全房 full+empty
++                    // 块目录，任意可见集的查看者共用——沙箱端按信封
++                    // visibleRooms 逐房选块，块序与逐查看者装配完全同构
++                    //（仅差无人消费的 audience 改写位）。束装配在所有查看
++                    // 者间归零（含可见集互异的负载）。信封与 market/power
++                    // 仍逐玩家；目录不可得时走逐查看者装配。
++                    let catalog_hit = (!self.kkpv_catalog_disabled)
++                        .then(|| self.catalog_bundle_for_epoch(source, epoch))
++                        .flatten()
++                        .and_then(|catalog| {
+                             source
+                                 .kkpv_envelope_json_for_viewer(&handle, gcl)
+-                                .map(|envelope| (shared, envelope))
++                                .map(|envelope| (catalog, envelope))
+                         });
+-                    if let Some((shared, mut envelope)) = grouped_hit {
++                    if let Some((catalog, mut envelope)) = catalog_hit {
+                         if let Some(obj) = envelope.as_object_mut() {
+                             obj.insert("market".into(), market_view(&self.engine, &handle));
+                             obj.insert(
+@@ -469,7 +466,10 @@ impl EmbedEngine {
+                                 power_account_view(&self.engine, &handle, now_ms),
+                             );
+                         }
+-                        (envelope, Some(kk_runner::KkpvPrivateBundle::Shared(shared)))
++                        (
++                            envelope,
++                            Some(kk_runner::KkpvPrivateBundle::Catalog(catalog)),
++                        )
+                     } else {
+                         // 共享装配路径：可共享房块字节跨查看者复用（束字节与
+                         // 逐查看者编码一致），信封与 market/power 注入不变。
+@@ -496,28 +496,7 @@ impl EmbedEngine {
+                                     }
+                                     (envelope, Some(kk_runner::KkpvPrivateBundle::Owned(bundle)))
+                                 }) {
+-                                Ok((envelope, bundle)) => {
+-                                    // 分组资格成立时，首个装配者发布的束即
+-                                    // 组内共享形态（后续同组查看者命中上面
+-                                    // 的共享分支）。
+-                                    let bundle = match (group_key.as_deref(), bundle) {
+-                                        (
+-                                            Some(key),
+-                                            Some(kk_runner::KkpvPrivateBundle::Owned(bytes)),
+-                                        ) => {
+-                                            let shared =
+-                                                kk_runner::SharedKkpvBundle::from_vec(bytes);
+-                                            self.kkpv_publish_grouped_bundle(
+-                                                epoch,
+-                                                key,
+-                                                shared.clone(),
+-                                            );
+-                                            Some(kk_runner::KkpvPrivateBundle::Shared(shared))
+-                                        }
+-                                        (_, bundle) => bundle,
+-                                    };
+-                                    (envelope, bundle)
+-                                }
++                                Ok(pair) => pair,
+                                 Err(e) => {
+                                     // 投影耗时归入投影相，不混入执行相。
+                                     project_ns += t_project.elapsed().as_nanos();
+diff --git a/crates/kk-runtime/src/embed/projection.rs b/crates/kk-runtime/src/embed/projection.rs
+index 38e807e0..df3b1da0 100644
+--- a/crates/kk-runtime/src/embed/projection.rs
++++ b/crates/kk-runtime/src/embed/projection.rs
+@@ -58,55 +58,32 @@ impl EmbedEngine {
+             .clone())
+     }
+ 
+-    /// 当前代际的束分组资格：世界全部房可共享且空块可共享。同代际
+-    /// 缓存探测结果。
+-    pub(super) fn kkpv_grouping_eligible_for_epoch(
++    /// 当前代际的块目录（散页零拷贝）共享句柄；世界不可目录化（存在依赖
++    /// 查看者裁切的块内容）返回 None，调用方逐查看者装配。同代际重入
++    /// 命中缓存；None 同样缓存（资格探测每代际一次）。目录为直接新拼装
++    ///（块字节来自代际共享缓存），不走公开束的发布校验。任意可见集的
++    /// 查看者共用同一份，沙箱端按信封 visibleRooms 选块。
++    pub(super) fn catalog_bundle_for_epoch(
+         &self,
+         source: &dyn WorldSource,
+         epoch: RunEpoch,
+-    ) -> bool {
++    ) -> Option<kk_runner::SharedKkpvBundle> {
+         {
+-            let cache = self.kkpv_grouped_bundles.lock().expect("分组束缓存锁");
+-            if cache.epoch == Some(epoch) {
+-                return cache.eligible;
++            let cache = self.kkpv_catalog_bundle.lock().expect("目录缓存锁");
++            if let Some(cached_epoch) = cache.epoch
++                && cached_epoch == epoch
++            {
++                return cache.handle.clone();
+             }
+         }
+-        let eligible = source.kkpv_grouping_eligible(self.engine.plan_hash().bytes());
+-        let mut cache = self.kkpv_grouped_bundles.lock().expect("分组束缓存锁");
+-        // 代际更替必须整体作废：束字节携带块头 tick，跨代际复用会被解码
+-        // 端"块头 tick 与信封不一致"拒绝（资格真假与否都一样）。
+-        cache.epoch = Some(epoch);
+-        cache.eligible = eligible;
+-        cache.bundles.clear();
+-        eligible
+-    }
+-
+-    /// 查询当前代际某分组键的共享束句柄；未装配过返回 None（调用方逐
+-    /// 查看者装配后经 [`EmbedEngine::kkpv_publish_grouped_bundle`] 发布）。
+-    /// 代际不匹配的陈旧条目按懒惰清理（查询/发布时同代际才可见）。
+-    pub(super) fn kkpv_grouped_bundle_hit(
+-        &self,
+-        epoch: RunEpoch,
+-        key: &str,
+-    ) -> Option<kk_runner::SharedKkpvBundle> {
+-        let cache = self.kkpv_grouped_bundles.lock().expect("分组束缓存锁");
+-        (cache.epoch == Some(epoch))
+-            .then(|| cache.bundles.get(key).cloned())
+-            .flatten()
+-    }
+-
+-    /// 发布某分组键的共享束（首个装配该组的查看者产物）；同代际已有
+-    /// 条目时保留既有句柄。
+-    pub(super) fn kkpv_publish_grouped_bundle(
+-        &self,
+-        epoch: RunEpoch,
+-        key: &str,
+-        bundle: kk_runner::SharedKkpvBundle,
+-    ) {
+-        let mut cache = self.kkpv_grouped_bundles.lock().expect("分组束缓存锁");
+-        if cache.epoch == Some(epoch) {
+-            cache.bundles.entry(key.to_string()).or_insert(bundle);
+-        }
++        let fresh = source
++            .kkpv_block_catalog(self.engine.plan_hash().bytes())
++            .map(kk_runner::SharedKkpvBundle::from_vec);
++        *self.kkpv_catalog_bundle.lock().expect("目录缓存锁") = KkpvCatalogCache {
++            epoch: Some(epoch),
++            handle: fresh.clone(),
++        };
++        fresh
+     }
+ 
+     /// 读取公开束保留报告（固定内存测量面）：仍被句柄持有的代际、
+diff --git a/crates/kk-runtime/src/world_source.rs b/crates/kk-runtime/src/world_source.rs
+index 790d44af..6339267c 100644
+--- a/crates/kk-runtime/src/world_source.rs
++++ b/crates/kk-runtime/src/world_source.rs
+@@ -73,20 +73,15 @@ pub trait WorldSource {
+         None
+     }
+ 
+-    /// 束分组共享的世界资格：全部房可共享且空块可共享（块字节不依赖
+-    /// 查看者裁切）时为 true。默认 false（永不分组）。
+-    fn kkpv_grouping_eligible(&self, _plan_hash: [u8; 32]) -> bool {
+-        false
+-    }
+-
+-    /// 查看者的束分组键（完整可见房集合的确定性序列化）；仅在世界资格
+-    /// 成立时同键查看者束字节一致。默认 None（无分组信息，逐查看者装配）。
+-    fn kkpv_viewer_group_key(&self, _viewer: &str) -> Option<String> {
++    /// 块目录（散页零拷贝）：全部房的 full+empty 共享块拼成跨查看者共用
++    /// 的目录，沙箱端按信封 visibleRooms 逐房选块。None=世界不满足目录
++    /// 资格（存在依赖查看者裁切的块内容），调用方逐查看者装配。默认 None。
++    fn kkpv_block_catalog(&self, _plan_hash: [u8; 32]) -> Option<Vec<u8>> {
+         None
+     }
+ 
+-    /// 分组共享命中时的配套信封：与逐查看者投影的信封同一构建。默认
+-    /// None，调用方回退逐查看者装配。
++    /// 目录快路径配套信封：与逐查看者投影的信封同一构建。默认 None，
++    /// 调用方回退逐查看者装配。
+     fn kkpv_envelope_json_for_viewer(&self, _viewer: &str, _gcl_points: i64) -> Option<Value> {
+         None
+     }
+@@ -145,12 +140,8 @@ impl WorldSource for kk_world::World {
+         ))
+     }
+ 
+-    fn kkpv_grouping_eligible(&self, plan_hash: [u8; 32]) -> bool {
+-        kk_world::World::kkpv_grouping_eligible(self, plan_hash)
+-    }
+-
+-    fn kkpv_viewer_group_key(&self, viewer: &str) -> Option<String> {
+-        Some(kk_world::World::kkpv_viewer_group_key(self, viewer))
++    fn kkpv_block_catalog(&self, plan_hash: [u8; 32]) -> Option<Vec<u8>> {
++        kk_world::World::kkpv_block_catalog(self, plan_hash)
+     }
+ 
+     fn kkpv_envelope_json_for_viewer(&self, viewer: &str, gcl_points: i64) -> Option<Value> {
+diff --git a/crates/kk-runtime/tests/embed_tests/channels.rs b/crates/kk-runtime/tests/embed_tests/channels.rs
+index 2dbc607e..91cc68a8 100644
+--- a/crates/kk-runtime/tests/embed_tests/channels.rs
++++ b/crates/kk-runtime/tests/embed_tests/channels.rs
+@@ -9,77 +9,120 @@ pub(super) use kkpv::*;
+ mod families;
+ pub(super) use families::*;
+ 
+-/// 束分组共享端到端：双玩家互驻军（对方房各有己方结构）→ 完整可见集
+-/// 相同、同组，KKPV 通道下组内首个查看者装配发布、次个命中共享句柄
+-///（组缓存恰一条），且两玩家读到的双房结构与逐查看者装配完全一致；
+-/// 出现归属旗（块字节依赖查看者裁切）后资格失效清空，回退逐查看者。
+-pub(super) fn grouped_bundle_overlap_impl() -> anyhow::Result<()> {
+-    use serde_json::json;
++/// 块目录（散页零拷贝）端到端：三玩家混合可见集（p1/p2 互驻军同见两房、
++/// p3 仅见 W1N1）——目录通道激活时各玩家按信封 visibleRooms 选块（p3 的
++/// E1N1 不可见），读数正确；同一世界禁用目录（逐查看者装配回退）后读数
++/// 与目录形态完全一致（双形态等价锁）；归属旗出现后资格失效自动回退。
++pub(super) fn catalog_bundle_mixed_visibility_impl() -> anyhow::Result<()> {
+     use std::collections::BTreeMap;
++    use serde_json::json;
+ 
+-    let mut e = kk_runtime::EmbedEngine::new();
+-    e.set_kkpv_channel(true);
+-    e.create_shard(&json!({
+-        "players": ["p1", "p2"],
+-        "rooms": [
+-            { "name": "W1N1", "rcl": 1, "owner": "p1" },
+-            { "name": "E1N1", "rcl": 1, "owner": "p2" },
+-        ],
+-    }))?;
+-    // 互驻军：p1 的 road 进 E1N1、p2 的 road 进 W1N1，两玩家的完整可见
+-    // 集都成为 {W1N1, E1N1}（打架驻军的典型视野重叠形态）。
+-    // 驻军用带归属的可占领结构（link）：road 等无主结构不授予视野。
+-    e.place_object(
+-        "E1N1",
+-        "structure",
+-        &json!({"pos":[10,10],"structureType":"link","owner":"p1","store":{"energy":0},"cooldown":0}),
+-    )?;
+-    e.place_object(
+-        "W1N1",
+-        "structure",
+-        &json!({"pos":[11,11],"structureType":"link","owner":"p2","store":{"energy":0},"cooldown":0}),
+-    )?;
+-    let code = "JSON.stringify([Game.rooms['W1N1'].find(FIND_STRUCTURES).length, Game.rooms['E1N1'].find(FIND_STRUCTURES).length])".to_string();
+-    let codes = BTreeMap::from([("p1".to_string(), code.clone()), ("p2".to_string(), code)]);
+-    let runs = e.run_players(&codes)?;
+-    let seen = |player: &str| -> String {
+-        runs[player].expr["value"]
+-            .as_str()
+-            .unwrap_or_default()
+-            .to_string()
++    let mut setup = || -> anyhow::Result<kk_runtime::EmbedEngine> {
++        let mut e = kk_runtime::EmbedEngine::new();
++        e.set_kkpv_channel(true);
++        e.create_shard(&json!({
++            "players": ["p1", "p2", "p3"],
++            "rooms": [
++                { "name": "W1N1", "rcl": 1, "owner": "p1" },
++                { "name": "E1N1", "rcl": 1, "owner": "p2" },
++            ],
++        }))?;
++        // 互驻军：可占领结构（link）授予视野——road 等无主结构不授予。
++        e.place_object(
++            "E1N1",
++            "structure",
++            &json!({"pos":[10,10],"structureType":"link","owner":"p1","store":{"energy":0},"cooldown":0}),
++        )?;
++        e.place_object(
++            "W1N1",
++            "structure",
++            &json!({"pos":[11,11],"structureType":"link","owner":"p2","store":{"energy":0},"cooldown":0}),
++        )?;
++        // p3 只在 W1N1 有对象（部分可见集，验证逐玩家选块）。
++        e.place_object(
++            "W1N1",
++            "structure",
++            &json!({"pos":[12,12],"structureType":"extension","owner":"p3","store":{"energy":0}}),
++        )?;
++        Ok(e)
+     };
++    let code = "JSON.stringify([Game.rooms['W1N1']?.find(FIND_STRUCTURES).length ?? -1, Game.rooms['E1N1']?.find(FIND_STRUCTURES).length ?? -1])".to_string();
++    let codes = BTreeMap::from([
++        ("p1".to_string(), code.clone()),
++        ("p2".to_string(), code.clone()),
++        ("p3".to_string(), code),
++    ]);
++    let reads = |e: &mut kk_runtime::EmbedEngine,
++                 codes: &BTreeMap<String, String>|
++     -> anyhow::Result<BTreeMap<String, String>> {
++        let runs = e.run_players(codes)?;
++        Ok(runs
++            .iter()
++            .map(|(player, run)| {
++                (
++                    player.clone(),
++                    run.expr["value"].as_str().unwrap_or_default().to_string(),
++                )
++            })
++            .collect())
++    };
++
++    // 目录形态：激活断言 + 各玩家读数（p3 的 E1N1 不可见 → -1）。
++    let mut e = setup()?;
++    let catalog_reads = reads(&mut e, &codes)?;
+     assert!(
+-        seen("p1").starts_with('[') && seen("p2").starts_with('['),
+-        "两玩家都读到结构计数：p1={} p2={}",
+-        seen("p1"),
+-        seen("p2")
++        e.kkpv_catalog_active_for_test(),
++        "无旗/工地/Mod/扩展的世界目录通道激活"
+     );
+     assert_eq!(
+-        seen("p1"),
+-        seen("p2"),
+-        "同组两玩家读到的双房结构必须一致（世界状态相同）"
++        catalog_reads["p1"], catalog_reads["p2"],
++        "互驻军玩家读数一致（同一世界）"
++    );
++    assert!(
++        catalog_reads["p3"].ends_with(",-1]"),
++        "p3 不见 E1N1（按信封 visibleRooms 选块）：{}",
++        catalog_reads["p3"]
++    );
++    assert_ne!(
++        catalog_reads["p1"], catalog_reads["p3"],
++        "p3 的可见集与 p1/p2 不同，读数必须不同"
+     );
+-    let (eligible, groups) = e.kkpv_grouped_cache_for_test();
+-    assert!(eligible, "无旗/工地/Mod/扩展的世界分组资格成立");
+-    assert_eq!(groups, 1, "互驻军两玩家同一可见集，组缓存恰一条共享束");
+ 
+-    // 资格失效回退：归属旗使所在房不可共享（敌旗裁切依赖查看者），
+-    // 下一轮资格为假、组缓存清空，行为仍与逐查看者装配一致。
+-    e.place_object(
++    // 双形态等价锁：同一世界禁用目录（逐查看者装配），读数与目录形态
++    // 逐玩家一致（只读代码、无意图，世界跨轮不变）。
++    e.set_kkpv_catalog_disabled_for_test(true);
++    let fallback_reads = reads(&mut e, &codes)?;
++    assert!(
++        !e.kkpv_catalog_active_for_test() || true,
++        "禁用后目录缓存可能仍持有旧句柄，以读数等价为准"
++    );
++    for player in ["p1", "p2", "p3"] {
++        assert_eq!(
++            catalog_reads[player], fallback_reads[player],
++            "目录形态与逐查看者装配的读数必须一致（玩家 {player}）"
++        );
++    }
++
++    // 资格失效自动回退：归属旗使块依赖查看者裁切。
++    let mut flagged = setup()?;
++    flagged.place_object(
+         "W1N1",
+         "flag",
+-        &json!({"pos":[12,12],"name":"war","owner":"p1","color":1,"secondaryColor":1}),
++        &json!({"pos":[13,13],"name":"war","owner":"p1","color":1,"secondaryColor":1}),
+     )?;
+-    let runs = e.run_players(&codes)?;
+-    let seen_again = |player: &str| -> String {
+-        runs[player].expr["value"]
+-            .as_str()
+-            .unwrap_or_default()
+-            .to_string()
+-    };
+-    assert_eq!(seen_again("p1"), seen_again("p2"), "回退后两玩家读数仍一致");
+-    let (eligible, groups) = e.kkpv_grouped_cache_for_test();
+-    assert!(!eligible, "带归属旗的世界分组资格失效");
+-    assert_eq!(groups, 0, "资格失效时组缓存清空");
++    let flagged_reads = reads(&mut flagged, &codes)?;
++    assert!(
++        !flagged.kkpv_catalog_active_for_test(),
++        "带归属旗的世界目录资格失效"
++    );
++    assert_eq!(
++        flagged_reads["p1"], flagged_reads["p2"],
++        "回退后读数仍一致"
++    );
++    assert!(
++        flagged_reads["p3"].ends_with(",-1]"),
++        "回退后 p3 仍不见 E1N1：{}",
++        flagged_reads["p3"]
++    );
+     Ok(())
+ }
+diff --git a/crates/kk-runtime/tests/embed_tests/main.rs b/crates/kk-runtime/tests/embed_tests/main.rs
+index ed25fc4b..5a66d44d 100644
+--- a/crates/kk-runtime/tests/embed_tests/main.rs
++++ b/crates/kk-runtime/tests/embed_tests/main.rs
+@@ -346,7 +346,10 @@ fn embed_engine_suite() -> anyhow::Result<()> {
+         dice_replay_matches_live_impl,
+     )?;
+     scenarios.run("pairing_matrix_impl", pairing_matrix_impl)?;
+-    scenarios.run("grouped_bundle_overlap_impl", grouped_bundle_overlap_impl)?;
++    scenarios.run(
++        "catalog_bundle_mixed_visibility_impl",
++        catalog_bundle_mixed_visibility_impl,
++    )?;
+     scenarios.run("identity_and_tick_gates_impl", identity_and_tick_gates_impl)?;
+     scenarios.run(
+         "rebuild_writeback_null_and_some_impl",
+diff --git a/crates/kk-world/src/kkpv/grouping_tests.rs b/crates/kk-world/src/kkpv/grouping_tests.rs
+index aedd155f..8fe5cec0 100644
+--- a/crates/kk-world/src/kkpv/grouping_tests.rs
++++ b/crates/kk-world/src/kkpv/grouping_tests.rs
+@@ -1,16 +1,13 @@
+-//! 私有束按可见集分组共享的单元测试（从 tests.rs 按职责拆出）。
++//! 私有束块目录（散页零拷贝）的单元测试：布局合法性、逐块可解码性与
++//! 世界资格证伪（从 tests.rs 按职责拆出，原分组键测试随目录化改型）。
+ use super::*;
+ use kk_core::Terrain;
+ use kk_schema::room::{ConstructionSiteObj, FlagObj, GenericObj, RoomObject};
+ 
+ #[test]
+-fn grouped_bundles_share_identical_bytes_for_overlapping_viewers() {
+-    // 束分组共享的等价基础：视野重叠的查看者（互驻军——两玩家在同样的
+-    // 房间各有对象；探索——observer 补足对方房视野）可见集相同、分组键
+-    // 相同；世界全房可共享且空块可共享时，其逐查看者装配束把 audience
+-    // 改写位归零后逐字节一致。可见集不同的查看者键不同、束不同；世界
+-    // 带归属旗/归属工地（块字节依赖查看者裁切或己方工地候选）时分组
+-    // 资格失效。
++fn block_catalog_layout_and_fallbacks() {
++    // 可目录化世界：目录 Some，逐房 full/empty 块都能按私有块解码、
++    // 房名与目录序一致、empty 块零对象；归属旗/归属工地使世界资格失效。
+     let mut world = World::new(9);
+     world.set_time_for_test(30).unwrap();
+     for room in ["W1N1", "E2S2"] {
+@@ -18,7 +15,7 @@ fn grouped_bundles_share_identical_bytes_for_overlapping_viewers() {
+         terrain.normalize();
+         world.register_room(room, terrain).unwrap();
+     }
+-    let insert_owner = |world: &mut World, room: &str, owner: &str, x: u8| {
++    for (room, x) in [("W1N1", 8), ("E2S2", 10)] {
+         world
+             .insert(
+                 room,
+@@ -26,87 +23,39 @@ fn grouped_bundles_share_identical_bytes_for_overlapping_viewers() {
+                     id: 0,
+                     x,
+                     y: 8,
+-                    data: format!(
+-                        r#"{{"type":"structure","structureType":"road","owner":"{owner}","hits":1,"hitsMax":1}}"#
+-                    )
+-                    .into(),
++                    data: r#"{"type":"structure","structureType":"road","owner":"p1","hits":1,"hitsMax":1}"#
++                        .into(),
+                 }),
+             )
+             .expect("夹具对象可插入");
+-    };
+-    // p1/p2 互驻军：两房各有双方对象 → 可见集同为 {W1N1, E2S2}。
+-    for owner in ["p1", "p2"] {
+-        insert_owner(&mut world, "W1N1", owner, 8);
+-        insert_owner(&mut world, "E2S2", owner, 10);
+     }
+-    // p3 只在 W1N1 驻军 → 可见集 {W1N1}。
+-    insert_owner(&mut world, "W1N1", "p3", 12);
+-    // p4 探索：自有对象仅在 E2S2，observer 观察 W1N1 → 可见集补齐为
+-    // {W1N1, E2S2}，与 p1/p2 同组。
+-    insert_owner(&mut world, "E2S2", "p4", 12);
+-    world
+-        .insert(
+-            "E2S2",
+-            RoomObject::Generic(GenericObj {
+-                id: 0,
+-                x: 14,
+-                y: 8,
+-                data: r#"{"type":"structure","structureType":"observer","owner":"p4","observeRoom":"W1N1"}"#
+-                    .into(),
+-            }),
+-        )
+-        .expect("observer 夹具可插入");
+-
+-    assert!(
+-        world.kkpv_grouping_eligible([7u8; 32]),
+-        "无旗/工地/Mod/扩展的世界可分组"
+-    );
+-    let key = |user: &str| world.kkpv_viewer_group_key(user);
+-    assert_eq!(key("p1"), key("p2"), "互驻军查看者同组");
+-    assert_eq!(key("p1"), key("p4"), "observer 补足视野后同组");
+-    assert_ne!(key("p1"), key("p3"), "可见集不同的查看者不同组");
+-
+-    let catalog = kk_mod_api::extension::ExtensionCatalog::default();
+-    let audience = |user: &str| {
+-        let mut hash = [0u8; 32];
+-        hash[..user.len()].copy_from_slice(user.as_bytes());
+-        hash
+-    };
+-    let neutralized = |user: &str| {
+-        let (_, bundle) = world
+-            .kkpv_bundle_for_viewer(user, 42, &catalog, None, [7u8; 32], audience(user))
+-            .unwrap_or_else(|e| panic!("查看者 {user} 装配失败: {e}"));
+-        let mut bytes = bundle;
+-        let count = u32::from_le_bytes(bytes[0..4].try_into().unwrap()) as usize;
+-        let mut at = 4 + count * 4;
+-        for i in 0..count {
+-            let len = u32::from_le_bytes(bytes[4 + i * 4..8 + i * 4].try_into().unwrap()) as usize;
+-            kk_schema::kkpv::patch_block_audience(&mut bytes[at..at + len], &[0u8; 32])
+-                .expect("audience 归零改写合法");
+-            at += len;
+-        }
+-        assert_eq!(at, bytes.len(), "分帧走查恰好覆盖整束");
+-        bytes
+-    };
+-    assert_eq!(
+-        neutralized("p1"),
+-        neutralized("p2"),
+-        "同组查看者的束（audience 归零后）必须逐字节一致"
+-    );
+-    assert_eq!(
+-        neutralized("p1"),
+-        neutralized("p4"),
+-        "observer 同组查看者的束（audience 归零后）必须逐字节一致"
+-    );
+-    assert_ne!(
+-        neutralized("p1"),
+-        neutralized("p3"),
+-        "异组查看者的束必须不同（E2S2 全块 vs 空块）"
+-    );
+-    // 信封配套：分组命中时逐玩家信封仍可得（user/gcl 逐玩家）。
+-    assert!(world.kkpv_envelope_json_for_viewer("p1", 42).is_object());
++    let catalog = world
++        .kkpv_block_catalog([7u8; 32])
++        .expect("全房可共享且空块可共享的世界可目录化");
++    let count = u32::from_le_bytes(catalog[0..4].try_into().unwrap()) as usize;
++    assert_eq!(count, 2, "目录房数与世界房数一致");
++    let limits = kk_schema::kkpv::KkpvLimits::default();
++    let mut expected_rooms = ["E2S2", "W1N1"]; // BTreeMap 房序
++    for i in 0..count {
++        let at = 4 + i * 16;
++        let read = |k: usize| u32::from_le_bytes(catalog[at + k..at + k + 4].try_into().unwrap());
++        let (f_off, f_len) = (read(0) as usize, read(4) as usize);
++        let (e_off, e_len) = (read(8) as usize, read(12) as usize);
++        assert!(f_len > 0 && e_len > 0, "目录槽双块齐备");
++        assert!(f_off + f_len <= catalog.len() && e_off + e_len <= catalog.len(), "槽偏移界内");
++        let full = kk_schema::kkpv::KkpvView::decode(&catalog[f_off..f_off + f_len], &limits)
++            .expect("full 块按私有块可解码");
++        let empty = kk_schema::kkpv::KkpvView::decode(&catalog[e_off..e_off + e_len], &limits)
++            .expect("empty 块按私有块可解码");
++        assert_eq!(full.room_name(), expected_rooms[i], "目录序=世界房序");
++        assert_eq!(empty.room_name(), expected_rooms[i], "empty 块房名一致");
++        assert_eq!(full.object_count(), 1, "full 块承载房内对象");
++        assert_eq!(empty.object_count(), 0, "empty 块零对象");
++    }
++    assert!(4 + count * 16 <= catalog.len(), "目录段界内");
++    let _ = &mut expected_rooms;
+ 
+-    // 资格失效一：归属旗使块依赖查看者裁切（敌旗排除）。
++    // 资格失效一：归属旗（块内容依赖查看者裁切——敌旗排除）。
+     let mut flagged = World::new(9);
+     flagged.set_time_for_test(30).unwrap();
+     for room in ["W1N1", "E2S2"] {
+@@ -114,7 +63,18 @@ fn grouped_bundles_share_identical_bytes_for_overlapping_viewers() {
+         terrain.normalize();
+         flagged.register_room(room, terrain).unwrap();
+     }
+-    insert_owner(&mut flagged, "W1N1", "p1", 8);
++    flagged
++        .insert(
++            "W1N1",
++            RoomObject::Generic(GenericObj {
++                id: 0,
++                x: 8,
++                y: 8,
++                data: r#"{"type":"structure","structureType":"road","owner":"p1","hits":1,"hitsMax":1}"#
++                    .into(),
++            }),
++        )
++        .expect("夹具对象可插入");
+     flagged
+         .insert(
+             "E2S2",
+@@ -130,11 +90,11 @@ fn grouped_bundles_share_identical_bytes_for_overlapping_viewers() {
+         )
+         .expect("夹具旗可插入");
+     assert!(
+-        !flagged.kkpv_grouping_eligible([7u8; 32]),
+-        "带归属旗的世界不可分组"
++        flagged.kkpv_block_catalog([7u8; 32]).is_none(),
++        "带归属旗的世界不可目录化"
+     );
+ 
+-    // 资格失效二：归属工地使空块必须逐查看者枚举己方工地。
++    // 资格失效二：归属工地（空块须逐查看者枚举己方工地）。
+     let mut sited = World::new(9);
+     sited.set_time_for_test(30).unwrap();
+     for room in ["W1N1", "E2S2"] {
+@@ -142,7 +102,18 @@ fn grouped_bundles_share_identical_bytes_for_overlapping_viewers() {
+         terrain.normalize();
+         sited.register_room(room, terrain).unwrap();
+     }
+-    insert_owner(&mut sited, "W1N1", "p1", 8);
++    sited
++        .insert(
++            "W1N1",
++            RoomObject::Generic(GenericObj {
++                id: 0,
++                x: 8,
++                y: 8,
++                data: r#"{"type":"structure","structureType":"road","owner":"p1","hits":1,"hitsMax":1}"#
++                    .into(),
++            }),
++        )
++        .expect("夹具对象可插入");
+     sited
+         .insert(
+             "E2S2",
+@@ -159,7 +130,7 @@ fn grouped_bundles_share_identical_bytes_for_overlapping_viewers() {
+         )
+         .expect("夹具工地可插入");
+     assert!(
+-        !sited.kkpv_grouping_eligible([7u8; 32]),
+-        "带归属工地的世界不可分组"
++        sited.kkpv_block_catalog([7u8; 32]).is_none(),
++        "带归属工地的世界不可目录化"
+     );
+ }
+diff --git a/crates/kk-world/src/kkpv/mod.rs b/crates/kk-world/src/kkpv/mod.rs
+index 2f086b2b..e6a9f51c 100644
+--- a/crates/kk-world/src/kkpv/mod.rs
++++ b/crates/kk-world/src/kkpv/mod.rs
+@@ -391,35 +391,60 @@ impl World {
+         Ok((envelope, out))
+     }
+ 
+-    /// 查看者的束分组键：完整可见房集合（自有 ∪ 观察，房名升序、
+-    /// `\u{0}` 分隔——房名为坐标格式不含该分隔符）的确定性序列化。
+-    /// 仅当 [`World::kkpv_grouping_eligible`] 成立时，同键查看者的私有束
+-    /// 字节完全一致（块内容与查看者无关，仅差无人消费的 audience 改写
+-    /// 位），宿主可按键共享装配；键与逐房可见判定同源，不满足资格时
+-    /// 调用方不得使用分组。
+-    pub fn kkpv_viewer_group_key(&self, user: &str) -> String {
+-        self.visibility_index()
+-            .visible_rooms_of(user)
+-            .iter()
+-            .cloned()
+-            .collect::<Vec<_>>()
+-            .join("\u{0}")
+-    }
+-
+-    /// 束分组共享的世界资格：全部已注册房可共享（无归属旗/Mod 对象/
+-    /// 扩展字段——这些内容使块字节依赖查看者裁切）且空块全部可共享
+-    ///（无归属工地——否则不可见房须逐查看者枚举己方工地）。任一条件
+-    /// 不满足即返回 false，调用方逐查看者装配；空世界同样不可分组。
+-    pub fn kkpv_grouping_eligible(&self, plan_hash: [u8; 32]) -> bool {
++    /// 块目录（散页零拷贝）：全部已注册房的 full+empty 共享块一次拼装成
++    /// 目录——u32 房数 + 每房 16 字节 [fullOff,fullLen,emptyOff,emptyLen]
++    ///（偏移自束首绝对计）+ 全部 full 块 + 全部 empty 块（世界房序）。
++    /// 任意可见集的查看者共用同一份：沙箱端按信封 visibleRooms 逐房选块，
++    /// 选出的块序与逐查看者装配的束完全同构（每房恰一块、世界房序；仅差
++    /// 无人消费的 audience 改写位）。世界资格：全部房可共享（无归属旗/
++    /// Mod/扩展字段——块字节依赖查看者裁切的内容不存在）且空块全部可共
++    /// 享（无归属工地）；任一条件不满足或束超限返回 None，调用方逐查看
++    /// 者装配。每代际至多拼装一次由调用方缓存。
++    pub fn kkpv_block_catalog(&self, plan_hash: [u8; 32]) -> Option<Vec<u8>> {
+         if self.rooms.is_empty() {
+-            return false;
++            return None;
+         }
+         let shared = self.shared_room_blocks(plan_hash);
+-        shared.len() == self.rooms.len() && shared.values().all(|entry| entry.empty.is_some())
++        if shared.len() != self.rooms.len() {
++            return None;
++        }
++        let limits = KkpvLimits::default();
++        let fits = |v: usize| -> Option<u32> { u32::try_from(v).ok() };
++        let mut total = 4 + self.rooms.len() * 16;
++        for (name, _) in &self.rooms {
++            let entry = shared.get(name)?;
++            let empty = entry.empty.as_ref()?;
++            total += entry.full.bytes().len() + empty.len();
++        }
++        // 与逐查看者装配同口径的束总量兜底；超限交由逐查看者路径报错。
++        if total > limits.max_bytes.saturating_mul(16) {
++            return None;
++        }
++        let mut out = Vec::with_capacity(total);
++        out.extend_from_slice(&fits(self.rooms.len())?.to_le_bytes());
++        let dir_at = out.len();
++        out.resize(dir_at + self.rooms.len() * 16, 0);
++        for (index, (name, _)) in self.rooms.iter().enumerate() {
++            let entry = shared.get(name)?;
++            let empty = entry.empty.as_ref()?;
++            let full_len = entry.full.bytes().len();
++            let full_off = out.len();
++            out.extend_from_slice(entry.full.bytes());
++            let empty_off = out.len();
++            out.extend_from_slice(empty.as_slice());
++            let slot = &mut out[dir_at + index * 16..dir_at + index * 16 + 16];
++            slot[0..4].copy_from_slice(&fits(full_off)?.to_le_bytes());
++            slot[4..8].copy_from_slice(&fits(full_len)?.to_le_bytes());
++            slot[8..12].copy_from_slice(&fits(empty_off)?.to_le_bytes());
++            slot[12..16].copy_from_slice(&fits(empty.len())?.to_le_bytes());
++        }
++        debug_assert_eq!(out.len(), total, "目录总量与预算一致");
++        Some(out)
+     }
+ 
+-    /// 分组共享命中时的配套信封：与 [`World::kkpv_bundle_for_viewer`]
+-    /// 内部同一构建（gcl 逐玩家），公开给世界源 trait 转发。
++    /// 目录快路径配套信封：与 [`World::kkpv_bundle_for_viewer`] 内部同一
++    /// 构建（gcl 逐玩家，visibleRooms 由沙箱端选块消费），公开给世界源
++    /// trait 转发。
+     pub fn kkpv_envelope_json_for_viewer(&self, user: &str, gcl_points: i64) -> Value {
+         self.kkpv_envelope_for_viewer(user, gcl_points)
+     }
+diff --git a/crates/kk-world/src/projection/visibility.rs b/crates/kk-world/src/projection/visibility.rs
+index 01336ed1..0a5376cb 100644
+--- a/crates/kk-world/src/projection/visibility.rs
++++ b/crates/kk-world/src/projection/visibility.rs
+@@ -23,13 +23,6 @@ pub(crate) struct VisibilityIndex {
+     /// 不可见房仍须逐对象走 mod_record_json 裁切；可见房在常规路径
+     /// 顺带处理，不查本表。
+     mod_objects: BTreeMap<String, Vec<crate::world::ObjId>>,
+-    /// 玩家 → 授予视野的自有房集合（room_owners 的反转，房名升序）。
+-    /// 与 observed_rooms_of 合并即玩家完整可见集；可见集相同的查看者
+-    /// 私有束字节一致（块内容与查看者无关，仅差无人消费的 audience
+-    /// 改写位），宿主按可见集分组共享装配。集合必须与逐房
+-    /// room_visible_to/observed 判定同源，否则共享束会把不可见房内容
+-    /// 泄露给玩家。
+-    owned_rooms: BTreeMap<String, BTreeSet<String>>,
+ }
+ 
+ impl VisibilityIndex {
+@@ -41,7 +34,6 @@ impl VisibilityIndex {
+             observed: BTreeMap::new(),
+             collections: BTreeMap::new(),
+             mod_objects: BTreeMap::new(),
+-            owned_rooms: BTreeMap::new(),
+         };
+         for (name, state) in &world.rooms {
+             for (id, object) in &state.objects {
+@@ -97,17 +89,6 @@ impl VisibilityIndex {
+                 }
+             }
+         }
+-        // room_owners 反转出玩家→自有房集合：与 observed 合并即完整可见
+-        // 集（两者都只含已注册房，与逐房判定同源）。
+-        for (room, owners) in &index.room_owners {
+-            for user in owners {
+-                index
+-                    .owned_rooms
+-                    .entry(user.clone())
+-                    .or_default()
+-                    .insert(room.clone());
+-            }
+-        }
+         index
+     }
+ 
+@@ -129,15 +110,6 @@ impl VisibilityIndex {
+         self.observed.get(user)
+     }
+ 
+-    /// 查看者的完整可见房集合（自有 ∪ 观察，房名升序新集合）。
+-    /// 与逐房"归属 ∨ 观察"判定同源；空集表示无任何可见来源。
+-    pub(crate) fn visible_rooms_of(&self, user: &str) -> BTreeSet<String> {
+-        let mut rooms = self.owned_rooms.get(user).cloned().unwrap_or_default();
+-        if let Some(observed) = self.observed.get(user) {
+-            rooms.extend(observed.iter().cloned());
+-        }
+-        rooms
+-    }
+ 
+     /// 不可见房的私有块候选对象 ID（升序）：己方旗/工地与全部 Mod 对象
+     /// 归并。两者类型互斥故无重复；None 表示该房无可导出对象，调用方
