@@ -11,6 +11,8 @@
   const __Map = Map;
   const __Set = Set;
   const __mapSet = Map.prototype.set;
+  const __mapGet = Map.prototype.get;
+  const __mapDelete = Map.prototype.delete;
   const __reflectApply = Reflect.apply;
   const __objectEntries = Object.entries;
   // run 相构成诊断（KKDIAG）：捕获原始 Date.now 与 kkpv 计数器；只在
@@ -98,12 +100,32 @@
       __Object.setPrototypeOf(gw.world, null);
       gw.viewerName = gw.world.user ?? null;
       // 先建立当前 tick 的原始对象索引，再装配 Game；装配期间的 getter 已会回查该索引。
+      // KKPV 增量路径：rawById 持久跨 tick——干净行记录对象不变（解码器
+      // 常驻复用），只补变更行（新建/重建换对象）与消亡行；回退轮全量
+      // 打戳自动覆盖，JSON 通道全量重建。
       const raw0 = __dateNow();
-      gw.rawById = new __Map();
       const tickObjs = gw.world.objects || [];
-      for (let i = 0; i < tickObjs.length; i++) {
-        const o = tickObjs[i];
-        if (o && o.id !== undefined) __reflectApply(__mapSet, gw.rawById, [o.id, o]);
+      const dec = gw.kkpv.lastDecode;
+      if (hasPrivate && dec !== undefined && dec.tick === gw.world.time) {
+        const CH = gw.kkpv.CHANGED;
+        const t = gw.world.time;
+        const deadIds = dec.deadIds;
+        for (let i = 0; i < tickObjs.length; i++) {
+          const o = tickObjs[i];
+          if (o[CH] !== t) continue;
+          if (__reflectApply(__mapGet, gw.rawById, [o.id]) !== o) {
+            __reflectApply(__mapSet, gw.rawById, [o.id, o]);
+          }
+        }
+        for (let i = 0; i < deadIds.length; i++) {
+          __reflectApply(__mapDelete, gw.rawById, [deadIds[i]]);
+        }
+      } else {
+        gw.rawById = new __Map();
+        for (let i = 0; i < tickObjs.length; i++) {
+          const o = tickObjs[i];
+          if (o && o.id !== undefined) __reflectApply(__mapSet, gw.rawById, [o.id, o]);
+        }
       }
       const tRawid = __dateNow() - raw0;
       resetIntents(); // 官方每 tick 新建收集器（runtime.js _start 每 tick 执行）

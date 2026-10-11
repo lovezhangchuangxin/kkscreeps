@@ -521,13 +521,26 @@
   // 保持（记录常驻已开同类先例，玩家侧无存量依赖）；直接读 `_name`
   // 在复用后首访前得旧值属病态旁路，棘轮守卫。
   const residentWrappers = new Map();
-  // 元数据 {type, structureType, x, y, room, effects}：比较信息不经
-  // wrapper 代理回读（probe 的 get 陷阱会走玩家可钩的 Set.prototype.has）。
+  // 元数据 {type, structureType, x, y, room, effects, owner, name, rec}：比较
+  // 信息不经 wrapper 代理回读（probe 的 get 陷阱会走玩家可钩的
+  // Set.prototype.has）。owner/name/rec 供装配主环差分（分类键变更、跨房
+  // 移动、记录对象重建的判定）；rec 是本拍对应的原始记录引用。
   const residentMeta = new Map();
   const __mapSet = Map.prototype.set;
   const __mapHas = Map.prototype.has;
   const __mapDelete = Map.prototype.delete;
   const __mapForEach = Map.prototype.forEach;
+  // 逐拍清空包装的全部 `_` 前缀自有键：`_` 是引擎字段记忆的命名空间，
+  // 时间折算字段（ticksToDeploy/decayTime 等绝对键 getter）行干净也要
+  // 失效，且玩家直接挂的 `_` 键（不经 getter/setter，无法标记跟踪）须
+  // 与官方每拍重建语义一致地消失——无条件扫描，不做存在性捷径。
+  function clearWrapperMemos(prev) {
+    const memoKeys = __objectKeys(prev);
+    for (let i = 0; i < memoKeys.length; i++) {
+      const key = memoKeys[i];
+      if (key.charCodeAt(0) === 95) prev[key] = undefined;
+    }
+  }
   gw.wrapObjectResident = function (o, now) {
     if (o.type !== 'mod') {
       const prev = __reflectApply(__mapGet, residentWrappers, [o.id]);
@@ -540,11 +553,7 @@
       ) {
         // 拍级记忆急清：清空本 wrapper 的全部 `_` 前缀自有键（toJSON
         // 与玩家自挂的非 `_` 键保留）。
-        const memoKeys = __objectKeys(prev);
-        for (let i = 0; i < memoKeys.length; i++) {
-          const key = memoKeys[i];
-          if (key.charCodeAt(0) === 95) prev[key] = undefined;
-        }
+        clearWrapperMemos(prev);
         if (meta.x !== o.x || meta.y !== o.y || meta.room !== o.room) {
           prev.pos = new gw.RoomPosition(o.x, o.y, o.room);
           meta.x = o.x;
@@ -562,6 +571,9 @@
           prev.color = o.color || 10;
           prev.secondaryColor = o.secondaryColor || o.color || 10;
         }
+        meta.owner = o.owner;
+        meta.name = o.name;
+        meta.rec = o;
         return prev;
       }
     }
@@ -577,10 +589,29 @@
           y: o.y,
           room: o.room,
           effects: !!o.effects,
+          owner: o.owner,
+          name: o.name,
+          rec: o,
         },
       ]);
     }
     return w;
+  };
+  // 装配差分的元数据读取（主环在调用 wrapObjectResident 前取旧值比对）。
+  gw.residentMetaOf = function (id) {
+    return __reflectApply(__mapGet, residentMeta, [id]);
+  };
+  // 干净行的记忆刷新：行数据未变（跳过包装差分），但 `_` 前缀记忆与
+  // 玩家自挂 `_` 键仍须逐拍清空（与旧全量主环同语义）。
+  gw.tickResidentMemo = function (o) {
+    const prev = __reflectApply(__mapGet, residentWrappers, [o.id]);
+    if (prev !== undefined) clearWrapperMemos(prev);
+  };
+  // 按消亡 id 精准出表：KKPV 通道下替代全表扫描清扫（deadIds 来自解码
+  // 器归并/清扫，数量级为每拍个位数）。id 不在表中时为无害 no-op。
+  gw.dropResidentWrapper = function (id) {
+    __reflectApply(__mapDelete, residentWrappers, [id]);
+    __reflectApply(__mapDelete, residentMeta, [id]);
   };
   gw.sweepResidentWrappers = function () {
     // 对象消亡出表：rawById 缺席的 id 移除，防常驻表无界增长；Map 遍历

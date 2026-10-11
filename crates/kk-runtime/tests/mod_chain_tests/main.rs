@@ -263,6 +263,8 @@ mod store_rules;
 mod terminal_power_effects;
 mod wrapper_residency;
 
+mod assembly_incremental;
+
 mod trace;
 
 mod composition;

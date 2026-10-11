@@ -1,4 +1,6 @@
-/* 单房间查询上下文拥有 look 类型/空间索引与出口缓存；每 tick 重新构造。
+/* 单房间查询上下文拥有 look 类型/空间索引与出口缓存；Room 实例常驻后
+ * 跨 tick 复用，查询状态经 let 绑定被方法闭包捕获——rebuild 重绑即整建
+ * （成员变动房），moveCell 做值变动行的格位迁移（干净行零工作）。
  * 原始对象列表仅交给创建预检与寻路缓存，索引不暴露为玩家属性。 */
 (() => {
   'use strict';
@@ -6,120 +8,166 @@
   const { countStub, lodash: _ } = globalThis.__kkp;
   const __mapGet = Map.prototype.get;
   const __reflectApply = Reflect.apply;
-  // 装配索引使用捕获的 push，避免玩家替换数组原型破坏下一 tick。
+  // 装配索引使用捕获的 push/indexOf/splice，避免玩家替换数组原型破坏装配。
   const __arrayPush = Array.prototype.push;
+  const __arrayIndexOf = Array.prototype.indexOf;
+  const __arraySplice = Array.prototype.splice;
   const ERR_INVALID_ARGS = globalThis.ERR_INVALID_ARGS;
   const TERRAIN_MASK_WALL = globalThis.TERRAIN_MASK_WALL;
   const terrainWordAt = gw.terrainWordAt;
-  // bucket 由 buildGame 主循环单次分桶产出：{os: 本房原始对象[], ws: 对应
-  // 包装[]}。undefined/null 表示该房无对象（可见房可无对象）。查询装配只
-  // 遍历本房桶——省去逐可见房全量扫描与 objectsById 回查。
-  gw.makeRoomQueries = function (name, bucket) {
-    // 无 controller 房间的官方投影是 undefined（非 null）
+  // look 类型归类（官方装配分支同构：source/mineral 独立臂、spawn/controller
+  // 属 structure、dropped resource 落 energy 臂；Mod 对象按类型键，键带冒号
+  // 不与内建 look 键冲突）。rebuild 与 moveCell 共用。
+  function lookTypeOf(o) {
+    if (o.type === 'creep') return 'creep';
+    if (o.type === 'resource') return 'energy';
+    if (o.type === 'structure') {
+      if (o.structureType === 'source') return 'source';
+      if (o.structureType === 'mineral') return 'mineral';
+      return 'structure';
+    }
+    if (o.type === 'spawn') return 'structure';
+    if (o.type === 'flag') return 'flag';
+    if (o.type === 'constructionSite') return 'constructionSite';
+    if (o.type === 'tombstone') return 'tombstone';
+    if (o.type === 'ruin') return 'ruin';
+    if (o.type === 'nuke') return 'nuke';
+    if (o.type === 'powerCreep') return 'powerCreep';
+    if (o.type === 'deposit') return 'deposit';
+    if (o.type === 'mod') return o.modType;
+    return null;
+  }
+  gw.makeRoomQueries = function (name) {
+    // 查询状态（let 绑供方法闭包按变量读取，rebuild 重绑换新）：
+    // lookReg 键索引、lookSpatial 空间索引、roomObjs/roomWraps 平行列表、
+    // 结构引用与 find 出口缓存。
+    let lookReg;
+    let lookSpatial;
+    let roomObjs;
+    let roomWraps;
     let controller;
-    // 一次扫描本房对象建立类型索引与 x*50+y 的空间索引，同时寻找 controller。
-    // energy/resource 共用索引，lookAt 同格掉落资源会输出两项。
-    // 来源：上游 engine/src/game/rooms.js 的 lookTypeRegisters/lookTypeSpatialRegisters。
-    const lookReg = {
-      creep: {},
-      source: {},
-      mineral: {},
-      deposit: {},
-      structure: {},
-      flag: {},
-      constructionSite: {},
-      tombstone: {},
-      ruin: {},
-      nuke: {},
-      powerCreep: {},
-    };
-    lookReg.energy = {};
-    lookReg.resource = lookReg.energy;
-    const lookSpatial = {
-      creep: [],
-      source: [],
-      mineral: [],
-      deposit: [],
-      structure: [],
-      flag: [],
-      constructionSite: [],
-      tombstone: [],
-      ruin: [],
-      nuke: [],
-      powerCreep: [],
-    };
-    // 保留本房原始对象供工地名额与占位检查；storage/terminal 另记录其玩家视图引用。
-    const roomObjs = bucket === undefined || bucket === null ? [] : bucket.os;
-    const roomWraps = bucket === undefined || bucket === null ? null : bucket.ws;
-    let storageObj, terminalObj;
-    lookSpatial.energy = [];
-    lookSpatial.resource = lookSpatial.energy;
+    let storageObj;
+    let terminalObj;
+    let findCache = {};
     // Mod look 桶按玩家面目录预初始化（与内建 13 桶同等待遇）：空房
     // lookForAt 返回 [] 而不是 ERR_INVALID_ARGS；类型键来自注册目录
-    //（恒含冒号），不与内建键或 Object.prototype 原型键冲突。
+    //（恒含冒号），不与内建键或 Object.prototype 原型键冲突。manifest
+    // 在装载期注入，类型键集 tick 期不变——常驻快照安全。
     const modLookTypes = [];
     if (gw.modApi !== undefined) {
       for (const typeKey in gw.modApi.types) {
-        lookReg[typeKey] = {};
-        lookSpatial[typeKey] = [];
         modLookTypes.push(typeKey);
       }
       modLookTypes.sort();
     }
-    for (let i = 0; i < roomObjs.length; i++) {
-      const o = roomObjs[i];
-      const w = roomWraps === null ? undefined : roomWraps[i];
-      if (o.type === 'structure' && o.structureType === 'controller') {
-        controller = w;
-      }
-      if (o.type === 'structure' && o.structureType === 'storage') {
-        storageObj = w;
-      }
-      if (o.type === 'structure' && o.structureType === 'terminal') {
-        terminalObj = w;
-      }
-      // look 类型归类（官方装配分支同构：source/mineral 独立臂、spawn/controller
-      // 属 structure、dropped resource 落 energy 臂）
-      let t = null;
-      if (o.type === 'creep') t = 'creep';
-      else if (o.type === 'resource') t = 'energy';
-      else if (o.type === 'structure') {
-        if (o.structureType === 'source') t = 'source';
-        else if (o.structureType === 'mineral') t = 'mineral';
-        else t = 'structure';
-      } else if (o.type === 'spawn') t = 'structure';
-      else if (o.type === 'flag') t = 'flag';
-      else if (o.type === 'constructionSite') t = 'constructionSite';
-      else if (o.type === 'tombstone') t = 'tombstone';
-      else if (o.type === 'ruin') t = 'ruin';
-      else if (o.type === 'nuke') t = 'nuke';
-      else if (o.type === 'powerCreep') t = 'powerCreep';
-      else if (o.type === 'deposit') t = 'deposit';
-      // Mod 对象按类型键进 look 桶（键带冒号，不与内建 look 键冲突；
-      // 桶已在下方按玩家面目录预初始化）。未安装玩家面的分片不会有
-      // mod 记录，此分支为死代码。
-      else if (o.type === 'mod') t = o.modType;
-      if (t === null) continue;
-      if (w === undefined) continue;
-      lookReg[t][o.id] = w;
-      const index = o.x * 50 + o.y;
-      if (lookSpatial[t][index] === undefined) {
-        lookSpatial[t][index] = [w];
-      } else {
-        __reflectApply(__arrayPush, lookSpatial[t][index], [w]);
-      }
-    }
-    return {
-      controller,
-      storageObj,
-      terminalObj,
-      roomObjs,
+    const api = {
+      // 整建：按桶（本房原始对象与包装平行数组）重建全部索引。桶数组由
+      // 装配层持久持有并原地重填（身份恒定），此处只重绑引用与内容。
+      rebuild(bucket) {
+        // 无 controller 房间的官方投影是 undefined（非 null）
+        controller = undefined;
+        storageObj = undefined;
+        terminalObj = undefined;
+        // 一次扫描本房对象建立类型索引与 x*50+y 的空间索引，同时寻找
+        // controller/storage/terminal。energy/resource 共用索引，lookAt
+        // 同格掉落资源会输出两项。
+        // 来源：上游 engine/src/game/rooms.js 的 lookTypeRegisters/
+        // lookTypeSpatialRegisters。
+        lookReg = {
+          creep: {},
+          source: {},
+          mineral: {},
+          deposit: {},
+          structure: {},
+          flag: {},
+          constructionSite: {},
+          tombstone: {},
+          ruin: {},
+          nuke: {},
+          powerCreep: {},
+        };
+        lookReg.energy = {};
+        lookReg.resource = lookReg.energy;
+        lookSpatial = {
+          creep: [],
+          source: [],
+          mineral: [],
+          deposit: [],
+          structure: [],
+          flag: [],
+          constructionSite: [],
+          tombstone: [],
+          ruin: [],
+          nuke: [],
+          powerCreep: [],
+        };
+        lookSpatial.energy = [];
+        lookSpatial.resource = lookSpatial.energy;
+        for (let m = 0; m < modLookTypes.length; m++) {
+          lookReg[modLookTypes[m]] = {};
+          lookSpatial[modLookTypes[m]] = [];
+        }
+        roomObjs = bucket === undefined || bucket === null ? [] : bucket.os;
+        roomWraps = bucket === undefined || bucket === null ? null : bucket.ws;
+        for (let i = 0; i < roomObjs.length; i++) {
+          const o = roomObjs[i];
+          const w = roomWraps === null ? undefined : roomWraps[i];
+          if (o.type === 'structure' && o.structureType === 'controller') {
+            controller = w;
+          }
+          if (o.type === 'structure' && o.structureType === 'storage') {
+            storageObj = w;
+          }
+          if (o.type === 'structure' && o.structureType === 'terminal') {
+            terminalObj = w;
+          }
+          const t = lookTypeOf(o);
+          if (t === null) continue;
+          if (w === undefined) continue;
+          lookReg[t][o.id] = w;
+          const index = o.x * 50 + o.y;
+          if (lookSpatial[t][index] === undefined) {
+            lookSpatial[t][index] = [w];
+          } else {
+            __reflectApply(__arrayPush, lookSpatial[t][index], [w]);
+          }
+        }
+        api.controller = controller;
+        api.storageObj = storageObj;
+        api.terminalObj = terminalObj;
+        api.roomObjs = roomObjs;
+      },
+      // 值变动行的格位迁移：同记录同房就地更新（未跨房、未重建包装），
+      // lookReg 按 id 键不变，只有 x/y 变化时迁移空间索引格位。ox/oy 是
+      // 上一拍位置（装配主环在包装刷新前从常驻元数据读出）。
+      moveCell(ox, oy, o, w) {
+        if (ox === o.x && oy === o.y) return;
+        const reg = lookSpatial[lookTypeOf(o)];
+        if (reg === undefined) return;
+        const fromIdx = ox * 50 + oy;
+        const from = reg[fromIdx];
+        if (from !== undefined) {
+          const at = __reflectApply(__arrayIndexOf, from, [w]);
+          if (at >= 0) {
+            if (from.length === 1) delete reg[fromIdx];
+            else __reflectApply(__arraySplice, from, [at, 1]);
+          }
+        }
+        const toIdx = o.x * 50 + o.y;
+        const cell = reg[toIdx];
+        if (cell === undefined) reg[toIdx] = [w];
+        else cell[cell.length] = w;
+      },
+      // find 出口缓存逐拍重置：缓存数组含建缓存时的 RoomPosition 实例，
+      // 跨拍保留会放大玩家对位置的篡改面（官方面每拍重建）。
+      resetFindCache() {
+        findCache = {};
+      },
       install(methods) {
         // 方向出口缓存未过滤结果；FIND_EXIT 首次合并的缓存已经过当次 filter。
         // 再次调用的 filter 作用于该缓存，不能恢复首次已过滤掉的出口。
         // 返回新数组但复用元素引用；对象类查询每次扫描本房对象。
         // 来源：上游 engine/src/game/rooms.js 的 Room.find。
-        const findCache = {};
         methods.find = function (type, opts) {
           countStub('room.find:' + type);
           // 官方 rooms.js:592-601：FIND_EXIT = 四向臂 concat（官方序
@@ -541,5 +589,6 @@
         };
       },
     };
+    return api;
   };
 })();

@@ -295,6 +295,11 @@
   // 错位轮走慢路径自愈（重建记录，正确性无害），下一拍恢复全量对位。
   const mergeState = new WeakMap();
 
+  // 变更戳（本拍 expectedTick）：走全量更新或新建/重建的记录打戳，干净行
+  // 不打——装配主环（game.js）按戳跳过干净行的全部包装/分桶/分类工作。
+  // 回退轮（跳拍、重试、块数变动、签名不符）自然全量打戳，装配随之自动
+  // 退化为全量路径，无需独立门控。符号键不进枚举与 JSON 面。
+  const CHANGED_TICK = __Symbol('kk.changedTick');
   // 变长字段的共享惰性访问器按**字段索引**工作：字段元数据（含列偏移）
   // 随块布局逐 tick 变化，因此放在 DECODE_CTX 里按索引取，而不是在闭包
   // 里捕获——访问器于是对常驻记录终身有效，就地更新只需换 ctx。
@@ -346,7 +351,7 @@
     } else if (baseTick > expectedTick) {
       fail('脏位基准拍号晚于本块拍号');
     }
-    if (((flags & 2) !== 0) !== (dirty[1] > 0)) fail('脏位段与 FLAG_DIRTY 不一致');
+    if (((flags & 2) !== 0) !== dirty[1] > 0) fail('脏位段与 FLAG_DIRTY 不一致');
     if (readUint(dv, start + 16) !== expectedTick) fail('块头 tick 与信封不一致');
     const objectCount = u32(dv, start + 104);
     const typeCount = u32(dv, start + 108);
@@ -397,7 +402,18 @@
   // lastTick 是该常驻表上一拍成功解码的拍号；块携带脏位段且基准拍号
   // 与之衔接时，干净行（与基准拍逐格等值）只重指 ctx、跳过全字段更新
   // ——错位（跳拍、重试、基准过期）自动回退全量路径。
-  function decodeBlockInto(dv, records, his, los, start, len, expectedTick, resident, prev, lastTick) {
+  function decodeBlockInto(
+    dv,
+    records,
+    his,
+    los,
+    start,
+    len,
+    expectedTick,
+    resident,
+    prev,
+    lastTick,
+  ) {
     const h = checkBlockHeader(dv, start, len, expectedTick);
     if ((h.flags & 1) !== 1) fail('私有束要求私有块');
     if (h.terrain[1] !== 0) fail('私有对象块不带地形段');
@@ -405,8 +421,7 @@
     const arenaBase = h.arenaBase;
     const arenaLen = h.arenaLen;
     if (objectCount * 16 !== h.directory[1]) fail('目录长度与对象数不符');
-    const cleanEnabled =
-      (h.flags & 2) !== 0 && resident !== null && h.baseTick === lastTick;
+    const cleanEnabled = (h.flags & 2) !== 0 && resident !== null && h.baseTick === lastTick;
 
     // 类型桶：16 字节桶头 + 12 字节字段项 + 缺失/null 位图 + 定宽列，
     // 消费量须与桶段长度精确一致。
@@ -516,7 +531,13 @@
       if (resident !== null && prevArr !== null) {
         while (pi < pe) {
           if (prevHiCol[pi] < hi || (prevHiCol[pi] === hi && prevLoCol[pi] < lo)) {
-            __reflectApply(__mapDelete, resident, [prevArr[pi].id]);
+            // 块内消失的旧记录：本拍已在其他块复用（SEEN_TICK 已推进——
+            // 跨房移动换块）则是活行，不得出 resident 也不算消亡；未见
+            // 过才是真消亡。消亡收集以 SEEN 判定为准，末尾清扫兜底。
+            if (prevArr[pi][SEEN_TICK] !== expectedTick) {
+              deadScratch[deadScratch.length] = prevArr[pi].id;
+              __reflectApply(__mapDelete, resident, [prevArr[pi].id]);
+            }
             pi++;
           } else {
             break;
@@ -572,6 +593,8 @@
       }
       const rec = {};
       rec.id = id;
+      // 新建记录（含签名不符重建）：本拍新数据，打变更戳。
+      rec[CHANGED_TICK] = updateStamp;
       // 定宽列（bool/int/uint/float/ref）一次 DataView 读即值：急切装
       // 普通数据属性比逐对象逐字段装访问器便宜得多，也免去其闭包分配。
       // 变长列（str/array/object）保持首读惰性：共享访问器 + Symbol 上下文。
@@ -598,10 +621,14 @@
       his[his.length] = hi;
       los[los.length] = lo;
     }
-    // 块尾残留的旧记录（键大于本块末键）：本拍消亡，出 resident。
+    // 块尾残留的旧记录（键大于本块末键）：块内消失，同上以 SEEN 区分
+    // 跨块活行与真消亡。
     if (resident !== null && prevArr !== null) {
       while (pi < pe) {
-        __reflectApply(__mapDelete, resident, [prevArr[pi].id]);
+        if (prevArr[pi][SEEN_TICK] !== expectedTick) {
+          deadScratch[deadScratch.length] = prevArr[pi].id;
+          __reflectApply(__mapDelete, resident, [prevArr[pi].id]);
+        }
         pi++;
       }
     }
@@ -621,9 +648,11 @@
 
   // 常驻记录的就地更新：ctx 换指新块（复用对象免分配），急读属性按新值
   // 重写、缺失字段删除残留，变长字段重装共享访问器（顶掉已物化的旧值）。
-  // 调用前已由布局签名保证字段集、顺序与列类型不变。
+  // 调用前已由布局签名保证字段集、顺序与列类型不变。就地更新即数据变更
+  // ——打变更戳供装配主环差分（干净行不打）。
   function updateResident(rec, dv, bucket, row, arenaBase, arenaLen) {
     DIAG.dirty++;
+    rec[CHANGED_TICK] = updateStamp;
     if (bucket.lazyAccessors !== null) {
       rePointCtx(rec, dv, row, arenaBase, arenaLen, bucket.fields);
     }
@@ -688,12 +717,20 @@
   const DIAG = { rows: 0, dirty: 0, remat: 0 };
   globalThis.__kkp.kkpvDiag = DIAG;
 
+  // 本拍消亡 id 收集与变更戳当前值：decodeBundleResident 每次调用重置，
+  // 结束后经 gw.kkpv.lastDecode 交给装配主环（rawById/常驻包装/分类的
+  // 差分驱动）。decodeBundle（无常驻参考路径）不消费这些信息。
+  let deadScratch = [];
+  let updateStamp = -1;
+
   function decodeBundleResident(buffer, expectedTick, resident) {
     const dv = new __DataView(buffer);
     const total = __reflectApply(__dvByteLength, dv, []);
     if (expectedTick === undefined || expectedTick === null) {
       fail('缺少信封 tick 一致性参数');
     }
+    deadScratch = [];
+    updateStamp = expectedTick;
     const records = [];
     const his = [];
     const los = [];
@@ -727,10 +764,16 @@
     ]);
     __reflectApply(__mapForEach, resident, [
       (rec, id) => {
-        if (rec[SEEN_TICK] !== expectedTick) __reflectApply(__mapDelete, resident, [id]);
+        if (rec[SEEN_TICK] !== expectedTick) {
+          deadScratch[deadScratch.length] = id;
+          __reflectApply(__mapDelete, resident, [id]);
+        }
       },
     ]);
     DIAG.rows += records.length;
+    // 交给装配差分：tick 供门控（JSON 通道/跳拍自然失配），deadIds 供
+    // rawById/常驻包装/分类/分桶的消亡清理。对象每拍新建，旧引用读旧拍。
+    gwRef.kkpv.lastDecode = { tick: expectedTick, deadIds: deadScratch };
     return records;
   }
 
@@ -772,5 +815,13 @@
     return out;
   }
 
-  globalThis.__kkp.gw.kkpv = { decodeBundle, decodeBundleResident, decodePublicBundle };
+  // gw 引用加载期捕获（__kkp 收尾删除后闭包仍可写 lastDecode）。
+  const gwRef = globalThis.__kkp.gw;
+  gwRef.kkpv = {
+    decodeBundle,
+    decodeBundleResident,
+    decodePublicBundle,
+    // 变更戳符号：装配主环以 rec[CHANGED] === 本拍 tick 判定变更行。
+    CHANGED: CHANGED_TICK,
+  };
 })();
