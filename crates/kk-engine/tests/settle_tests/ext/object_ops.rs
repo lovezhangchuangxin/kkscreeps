@@ -61,7 +61,7 @@ fn object_mutation_journal_restores_all_positions_and_creation_cursor() {
     settle_quiet(
         &mut f,
         ext_batch("p1", actor, json!({"amount":1})),
-        Rc::new(dispatch),
+        std::sync::Arc::new(dispatch),
         plan,
     )
     .unwrap();

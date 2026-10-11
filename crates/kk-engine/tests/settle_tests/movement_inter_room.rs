@@ -61,11 +61,13 @@ impl TwoRooms {
             stores: kk_world::place::builtin_store_rules(),
             combat: kk_world::place::builtin_combat_ranges(),
             move_gate: Default::default(),
-            quotas: std::rc::Rc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
+            quotas: std::sync::Arc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
             static_passability: Default::default(),
             resources: Default::default(),
-            contrib: std::rc::Rc::new(kk_engine::settle::contrib::ContributionDispatch::default()),
-            extensions: std::rc::Rc::new(kk_mod_api::extension::ExtensionCatalog::default()),
+            contrib: std::sync::Arc::new(
+                kk_engine::settle::contrib::ContributionDispatch::default(),
+            ),
+            extensions: std::sync::Arc::new(kk_mod_api::extension::ExtensionCatalog::default()),
             plan: kk_engine::settle::builtin_plan(),
         };
         let mut rooms = Vec::new();
@@ -230,11 +232,13 @@ fn inter_room_unregistered_target_keeps_creep() {
             stores: kk_world::place::builtin_store_rules(),
             combat: kk_world::place::builtin_combat_ranges(),
             move_gate: Default::default(),
-            quotas: std::rc::Rc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
+            quotas: std::sync::Arc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
             static_passability: Default::default(),
             resources: Default::default(),
-            contrib: std::rc::Rc::new(kk_engine::settle::contrib::ContributionDispatch::default()),
-            extensions: std::rc::Rc::new(kk_mod_api::extension::ExtensionCatalog::default()),
+            contrib: std::sync::Arc::new(
+                kk_engine::settle::contrib::ContributionDispatch::default(),
+            ),
+            extensions: std::sync::Arc::new(kk_mod_api::extension::ExtensionCatalog::default()),
             plan: kk_engine::settle::builtin_plan(),
         },
     )

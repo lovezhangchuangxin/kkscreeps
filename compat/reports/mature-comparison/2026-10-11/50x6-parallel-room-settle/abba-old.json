@@ -1,0 +1,93 @@
+{
+ "phases": {
+  "phases": {
+   "project": {
+    "count": 100,
+    "p50_ms": 52.601667,
+    "p95_ms": 60.472416,
+    "p99_ms": 90.912041,
+    "max_ms": 202.488334,
+    "total_ms": 5238.1372519999995
+   },
+   "run": {
+    "count": 100,
+    "p50_ms": 162.7765,
+    "p95_ms": 281.005708,
+    "p99_ms": 363.293039,
+    "max_ms": 379.588958,
+    "total_ms": 17805.476496000003
+   },
+   "settle": {
+    "count": 100,
+    "p50_ms": 160.302375,
+    "p95_ms": 180.038458,
+    "p99_ms": 229.330333,
+    "max_ms": 336.8125,
+    "total_ms": 15628.499747
+   },
+   "wall": {
+    "count": 100,
+    "p50_ms": 380.97254200000003,
+    "p95_ms": 530.133459,
+    "p99_ms": 625.242,
+    "max_ms": 631.858583
+   }
+  }
+ },
+ "settle_diag": {
+  "ticks": 106,
+  "segments_p50_ms": {
+   "prepare": {
+    "p50_ms": 7.468875
+   },
+   "clone": {
+    "p50_ms": 15.147051
+   },
+   "settle": {
+    "p50_ms": 50.424127
+   },
+   "hook": {
+    "p50_ms": 12.064452
+   },
+   "interroom": {
+    "p50_ms": 6.66875
+   },
+   "nukes": {
+    "p50_ms": 6.875709
+   },
+   "market": {
+    "p50_ms": 6.600167
+   },
+   "power": {
+    "p50_ms": 5.738916
+   },
+   "writeback": {
+    "p50_ms": 0.018584
+   },
+   "validate": {
+    "p50_ms": 14.144042
+   },
+   "into_prepared": {
+    "p50_ms": 0.570458
+   },
+   "commit": {
+    "p50_ms": 27.898917
+   }
+  },
+  "counters_total": {
+   "id_allocs": 0,
+   "id_restores": 0,
+   "claim_calls": 0,
+   "gcl_adds": 23400,
+   "power_adds": 600,
+   "interroom_moves": 0,
+   "portal_moves": 0,
+   "events": 138900,
+   "rooms": 31800
+  }
+ },
+ "process": {
+  "cpu_core_ms": 144201.428,
+  "rss_bytes_sampled_peak": 3285925888
+ }
+}

@@ -150,13 +150,15 @@ mod mod_view_tests {
                 stores: kk_mod_api::builtin::StoreRules::from_plan(plan.rules()).unwrap(),
                 combat: kk_mod_api::builtin::CombatRanges::from_plan(plan.rules()).unwrap(),
                 move_gate: Default::default(),
-                quotas: std::rc::Rc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
+                quotas: std::sync::Arc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
                 static_passability: Default::default(),
-                resources: std::rc::Rc::new(kk_mod_api::resources::ResourceCatalog::from_plan(
+                resources: std::sync::Arc::new(kk_mod_api::resources::ResourceCatalog::from_plan(
                     &plan,
                 )),
-                contrib: std::rc::Rc::new(crate::settle::contrib::ContributionDispatch::default()),
-                extensions: std::rc::Rc::new(kk_mod_api::extension::ExtensionCatalog::default()),
+                contrib: std::sync::Arc::new(
+                    crate::settle::contrib::ContributionDispatch::default(),
+                ),
+                extensions: std::sync::Arc::new(kk_mod_api::extension::ExtensionCatalog::default()),
                 plan,
             },
         );
@@ -222,13 +224,15 @@ mod mod_view_tests {
                 stores: kk_mod_api::builtin::StoreRules::from_plan(plan.rules()).unwrap(),
                 combat: kk_mod_api::builtin::CombatRanges::from_plan(plan.rules()).unwrap(),
                 move_gate: Default::default(),
-                quotas: std::rc::Rc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
+                quotas: std::sync::Arc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
                 static_passability: Default::default(),
-                resources: std::rc::Rc::new(kk_mod_api::resources::ResourceCatalog::from_plan(
+                resources: std::sync::Arc::new(kk_mod_api::resources::ResourceCatalog::from_plan(
                     &plan,
                 )),
-                contrib: std::rc::Rc::new(crate::settle::contrib::ContributionDispatch::default()),
-                extensions: std::rc::Rc::new(kk_mod_api::extension::ExtensionCatalog::default()),
+                contrib: std::sync::Arc::new(
+                    crate::settle::contrib::ContributionDispatch::default(),
+                ),
+                extensions: std::sync::Arc::new(kk_mod_api::extension::ExtensionCatalog::default()),
                 plan,
             },
         );

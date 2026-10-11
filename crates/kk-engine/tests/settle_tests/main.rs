@@ -331,13 +331,13 @@ impl Fixture {
                 stores: kk_world::place::builtin_store_rules(),
                 combat: kk_world::place::builtin_combat_ranges(),
                 move_gate: Default::default(),
-                quotas: std::rc::Rc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
+                quotas: std::sync::Arc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
                 static_passability: Default::default(),
                 resources: Default::default(),
-                contrib: std::rc::Rc::new(
+                contrib: std::sync::Arc::new(
                     kk_engine::settle::contrib::ContributionDispatch::default(),
                 ),
-                extensions: std::rc::Rc::new(kk_mod_api::extension::ExtensionCatalog::default()),
+                extensions: std::sync::Arc::new(kk_mod_api::extension::ExtensionCatalog::default()),
                 plan: kk_engine::settle::builtin_plan(),
             },
         )
@@ -355,7 +355,7 @@ impl Fixture {
     /// 场景使用。
     fn settle_with_rules(&mut self, batch: IntentBatch, plan: &kk_mod_api::ContributionPlan) {
         let links = kk_mod_api::builtin::LinkRules::from_plan(plan.rules()).unwrap();
-        let quotas = std::rc::Rc::new(
+        let quotas = std::sync::Arc::new(
             kk_mod_api::builtin::StructureQuotaSnapshot::from_plan(plan.rules()).unwrap(),
         );
         let extensions = kk_mod_api::extension::ExtensionCatalog::default();
@@ -371,10 +371,10 @@ impl Fixture {
                 quotas,
                 static_passability: Default::default(),
                 resources: Default::default(),
-                contrib: std::rc::Rc::new(
+                contrib: std::sync::Arc::new(
                     kk_engine::settle::contrib::ContributionDispatch::default(),
                 ),
-                extensions: std::rc::Rc::new(extensions),
+                extensions: std::sync::Arc::new(extensions),
                 plan: kk_engine::settle::builtin_plan(),
             },
         );
@@ -384,7 +384,7 @@ impl Fixture {
     fn settle_with_dispatch(
         &mut self,
         batch: IntentBatch,
-        dispatch: std::rc::Rc<kk_engine::settle::contrib::ContributionDispatch>,
+        dispatch: std::sync::Arc<kk_engine::settle::contrib::ContributionDispatch>,
     ) {
         self.settle_with(batch, kk_world::place::builtin_link_rules(), dispatch);
     }
@@ -393,7 +393,7 @@ impl Fixture {
         &mut self,
         batch: IntentBatch,
         links: kk_mod_api::builtin::LinkRules,
-        dispatch: std::rc::Rc<kk_engine::settle::contrib::ContributionDispatch>,
+        dispatch: std::sync::Arc<kk_engine::settle::contrib::ContributionDispatch>,
     ) {
         let extensions = kk_mod_api::extension::ExtensionCatalog::default();
         self.settle_with_plane(
@@ -405,11 +405,11 @@ impl Fixture {
                 stores: kk_world::place::builtin_store_rules(),
                 combat: kk_world::place::builtin_combat_ranges(),
                 move_gate: Default::default(),
-                quotas: std::rc::Rc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
+                quotas: std::sync::Arc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
                 static_passability: Default::default(),
                 resources: Default::default(),
                 contrib: dispatch,
-                extensions: std::rc::Rc::new(extensions),
+                extensions: std::sync::Arc::new(extensions),
                 plan: kk_engine::settle::builtin_plan(),
             },
         );

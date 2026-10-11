@@ -56,7 +56,7 @@ fn rust_lifecycle_replacement_installs_original_binding_and_ticks_without_intent
     for replaced in [false, true] {
         let mut c = lifecycle();
         let mut handlers = BTreeMap::new();
-        let log = Rc::new(RefCell::new(Vec::new()));
+        let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         if replaced {
             let binding = Key::new("extmod:handler.replace").unwrap();
             c.bindings.insert(binding.clone());
@@ -99,7 +99,7 @@ fn rust_lifecycle_replacement_installs_original_binding_and_ticks_without_intent
         .unwrap();
         e.tick_with_intents(IntentBatch::default()).unwrap();
         assert_eq!(
-            *log.borrow(),
+            *log.lock().unwrap(),
             vec![if replaced { "replace" } else { "tick" }]
         );
         assert_eq!(e.world().time(), 1);

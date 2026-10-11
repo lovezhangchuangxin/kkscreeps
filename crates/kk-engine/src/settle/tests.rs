@@ -482,7 +482,7 @@ fn validate_stage_tripwires_discriminate() {
                 },
             )
             .unwrap();
-        txn.state.inner.borrow_mut().next_id = next;
+        txn.state.inner.lock().expect("共享候选锁").next_id = next;
         txn.rooms = txn
             .room_names
             .iter()
@@ -502,7 +502,12 @@ fn validate_stage_tripwires_discriminate() {
     let err = engine.validate_stage(&mut mk_cand(0)).unwrap_err();
     assert!(err.to_string().contains("回退"), "{err}");
     let mut cand = mk_cand(engine.next_id);
-    cand.state.inner.borrow_mut().players.remove("p1");
+    cand.state
+        .inner
+        .lock()
+        .expect("共享候选锁")
+        .players
+        .remove("p1");
     let err = engine.validate_stage(&mut cand).unwrap_err();
     assert!(err.to_string().contains("丢键"), "{err}");
 }

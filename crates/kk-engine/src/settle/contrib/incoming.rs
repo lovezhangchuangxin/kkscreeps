@@ -9,6 +9,10 @@ pub(super) enum IncomingSlot {
 }
 
 impl IncomingSlot {
+    /// 是否为宿主槽形态（派发表 any_hosted 的组成判定）。
+    pub(super) fn is_hosted(&self) -> bool {
+        matches!(self, IncomingSlot::Hosted(_))
+    }
     pub(super) fn native_from_plan(plan: &ContributionPlan) -> Result<Self, String> {
         match dispatch_of(plan, kk_mod_api::builtin::INCOMING_DAMAGE_SLOT)? {
             Dispatch::Native(binding)
@@ -29,7 +33,9 @@ impl IncomingSlot {
             return Ok(Some(default_damage));
         };
         let candidate = Rc::new(IncomingDamage::prepare(&ctx.borrow(), id, default_damage)?);
-        let outcome = slot.executor.run(
+        let executor = super::hosted_executor(slot.executor)?;
+
+        let outcome = executor.run(
             &slot.plan,
             ctx,
             SlotCall::Incoming {
@@ -54,6 +60,10 @@ pub(super) enum ModIncomingSlot {
 }
 
 impl ModIncomingSlot {
+    /// 是否为宿主槽形态（派发表 any_hosted 的组成判定）。
+    pub(super) fn is_hosted(&self) -> bool {
+        matches!(self, ModIncomingSlot::Hosted(_))
+    }
     pub(super) fn native_from_plan(plan: &ContributionPlan) -> Result<Self, String> {
         match dispatch_of(plan, kk_mod_api::builtin::MOD_INCOMING_SLOT)? {
             Dispatch::Native(binding) if binding.as_str() == "builtin:mod.receiveDamage.native" => {
@@ -75,7 +85,9 @@ impl ModIncomingSlot {
             return Ok(damage);
         };
         let candidate = Rc::new(ModIncomingDamage::prepare(damage, attacker, attack_type)?);
-        let outcome = slot.executor.run(
+        let executor = super::hosted_executor(slot.executor)?;
+
+        let outcome = executor.run(
             &slot.plan,
             ctx,
             SlotCall::ModIncoming {

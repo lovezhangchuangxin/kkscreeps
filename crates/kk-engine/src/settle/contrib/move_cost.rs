@@ -9,6 +9,10 @@ pub(super) enum MoveCostSlot {
 }
 
 impl MoveCostSlot {
+    /// 是否为宿主槽形态（派发表 any_hosted 的组成判定）。
+    pub(super) fn is_hosted(&self) -> bool {
+        matches!(self, MoveCostSlot::Hosted(_))
+    }
     pub(super) fn native_from_plan(plan: &ContributionPlan) -> Result<Self, String> {
         match dispatch_of(plan, kk_mod_api::builtin::MOVE_COST_SLOT)? {
             Dispatch::Native(binding) if binding.as_str() == "builtin:room.moveCost.native" => {
@@ -35,7 +39,9 @@ impl MoveCostSlot {
             return Ok(None);
         };
         let candidate = Rc::new(candidate);
-        let outcome = slot.executor.run(
+        let executor = super::hosted_executor(slot.executor)?;
+
+        let outcome = executor.run(
             &slot.plan,
             ctx,
             SlotCall::MoveCost {

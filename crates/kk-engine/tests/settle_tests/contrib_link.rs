@@ -155,12 +155,12 @@ fn contrib_dispatch_native_vs_chained_bench() {
         TickHandler::Wrap(Box::new(|_ctx, id, next| next.call(id))),
     );
     tick_handlers.insert(after, TickHandler::After(Box::new(|_, _| Ok(()))));
-    let chained = std::rc::Rc::new(
+    let chained = std::sync::Arc::new(
         ContributionDispatch::assemble(&plan, BTreeMap::new(), tick_handlers).unwrap(),
     );
-    let native = std::rc::Rc::new(ContributionDispatch::default());
+    let native = std::sync::Arc::new(ContributionDispatch::default());
 
-    let bench = |label: &str, dispatch: &std::rc::Rc<ContributionDispatch>| {
+    let bench = |label: &str, dispatch: &std::sync::Arc<ContributionDispatch>| {
         let mut f = Fixture::new(7, terrain_with(&[]));
         f.controller(5, Some("p1"));
         for i in 0..LINKS {

@@ -734,7 +734,8 @@ impl EmbedEngine {
             }
         }
         let injected = random.map(|values| {
-            let queue = std::rc::Rc::new(std::cell::RefCell::new(values.iter().copied().collect()));
+            let queue =
+                std::sync::Arc::new(std::sync::Mutex::new(values.iter().copied().collect()));
             (values, queue)
         });
         if let Some((_, rc)) = &injected {
@@ -748,11 +749,11 @@ impl EmbedEngine {
                 let input = TickInput::now();
                 let random_start = injected
                     .as_ref()
-                    .map(|(values, rc)| values.len() - rc.borrow().len());
+                    .map(|(values, rc)| values.len() - rc.lock().expect("处理器随机队列锁").len());
                 self.settle_world(IntentBatch::default(), input)?;
                 let consumed_random = injected.as_ref().map(|(values, rc)| {
                     &values[random_start.expect("注入源必有起始游标")
-                        ..values.len() - rc.borrow().len()]
+                        ..values.len() - rc.lock().expect("处理器随机队列锁").len()]
                 });
                 if self.input_log.is_some()
                     && let Err(e) = self.log_round(
@@ -772,7 +773,7 @@ impl EmbedEngine {
         })();
         let consumed = match &injected {
             Some((values, rc)) => {
-                let left = rc.borrow().len();
+                let left = rc.lock().expect("处理器随机队列锁").len();
                 u64::try_from(values.len() - left).unwrap_or(0)
             }
             None => 0,
@@ -842,7 +843,7 @@ impl EmbedEngine {
             );
             let round = replay::rebuild_round(segment).with_context(at)?;
             let replay_random = round.processor_random.as_ref().map(|values| {
-                std::rc::Rc::new(std::cell::RefCell::new(values.iter().copied().collect()))
+                std::sync::Arc::new(std::sync::Mutex::new(values.iter().copied().collect()))
             });
             if let Some(queue) = &replay_random {
                 self.engine
@@ -858,11 +859,12 @@ impl EmbedEngine {
                 format!("{}回放结算失败（原轮必然成功——实现缺陷或载荷损坏）", at())
             })?;
             if let Some(queue) = replay_random {
+                let remaining = queue.lock().expect("处理器随机队列锁").len();
                 anyhow::ensure!(
-                    queue.borrow().is_empty(),
+                    remaining == 0,
                     "{}处理器随机消费数与日志不符（剩余 {} 个值）",
                     at(),
-                    queue.borrow().len()
+                    remaining
                 );
             }
         }

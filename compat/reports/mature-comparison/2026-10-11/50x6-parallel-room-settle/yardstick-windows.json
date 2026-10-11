@@ -1,0 +1,74 @@
+{
+ "discard": {
+  "kk_p50": 260.3,
+  "xxs_p50": 232.5,
+  "ratio": 1.1196,
+  "cpu_ratio": 0.816,
+  "kk_phases": {
+   "project": 40.8,
+   "run": 117.3,
+   "settle": 96.9,
+   "wall": 260.3
+  }
+ },
+ "measure": {
+  "kk_p50": 249.6,
+  "xxs_p50": 214.2,
+  "ratio": 1.1651,
+  "cpu_ratio": 0.83,
+  "kk_phases": {
+   "project": 39.7,
+   "run": 111.7,
+   "settle": 95.2,
+   "wall": 249.6
+  }
+ },
+ "w2": {
+  "kk_p50": 264.6,
+  "xxs_p50": 238.9,
+  "ratio": 1.1074,
+  "cpu_ratio": 0.765,
+  "kk_phases": {
+   "project": 38.5,
+   "run": 114.4,
+   "settle": 106.6,
+   "wall": 264.6
+  }
+ },
+ "qos": {
+  "kk_p50": 259.6,
+  "xxs_p50": 276.9,
+  "ratio": 0.9372,
+  "cpu_ratio": 0.689,
+  "kk_phases": {
+   "project": 39.2,
+   "run": 110.9,
+   "settle": 101.3,
+   "wall": 259.6
+  }
+ },
+ "final-serial": {
+  "kk_p50": 381.3,
+  "xxs_p50": 335.8,
+  "ratio": 1.1353,
+  "cpu_ratio": 0.719,
+  "kk_phases": {
+   "project": 56.1,
+   "run": 157.1,
+   "settle": 162.5,
+   "wall": 381.3
+  }
+ },
+ "final-par": {
+  "kk_p50": 412.9,
+  "xxs_p50": 329.6,
+  "ratio": 1.2527,
+  "cpu_ratio": 0.934,
+  "kk_phases": {
+   "project": 65.9,
+   "run": 189.6,
+   "settle": 151.5,
+   "wall": 412.9
+  }
+ }
+}

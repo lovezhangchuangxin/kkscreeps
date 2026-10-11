@@ -24,15 +24,15 @@ pub struct Plane {
     /// 地形同源读取。
     pub static_passability: kk_mod_api::builtin::StaticPassability,
     /// 内建结构 RCL 配额；结算配额判定与玩家面常量注入同源读取。
-    pub quotas: Rc<kk_mod_api::builtin::StructureQuotaSnapshot>,
+    pub quotas: Arc<kk_mod_api::builtin::StructureQuotaSnapshot>,
     /// 资源目录：内建 RESOURCES_ALL 加计划声明的命名空间资源。
     /// 搬运/掉落/超容回收与领域能力按它校验；市场/跨房发送不读它。
-    pub resources: Rc<kk_mod_api::resources::ResourceCatalog>,
+    pub resources: Arc<kk_mod_api::resources::ResourceCatalog>,
     /// 建筑目录：计划声明的可建造结构配方。工地创建、建造消耗、耐久、
     /// 寻路语义与生产结算按它执行；内建结构仍走官方常量表。
-    pub buildings: Rc<kk_mod_api::buildings::BuildingCatalog>,
-    pub contrib: Rc<contrib::ContributionDispatch>,
-    pub extensions: Rc<kk_mod_api::extension::ExtensionCatalog>,
+    pub buildings: Arc<kk_mod_api::buildings::BuildingCatalog>,
+    pub contrib: Arc<contrib::ContributionDispatch>,
+    pub extensions: Arc<kk_mod_api::extension::ExtensionCatalog>,
     /// 当前世界房集的包含跨度（官方 calcWorldSize 同式，装配时活算）：
     /// terminal send 意图相的费用距离按它逐轴环绕，与全局 market 相、
     /// 玩家面 getWorldSize/calcTransactionCost 三处同源。

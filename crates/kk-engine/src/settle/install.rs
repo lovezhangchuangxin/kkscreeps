@@ -1,5 +1,5 @@
 //! 计划安装入口：先准备并校验完整候选，再统一发布。
-use crate::settle::{Engine, contrib};
+use crate::settle::{Engine, HostedRegistryGuard, contrib};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -95,9 +95,14 @@ impl Engine {
             return Err("Replace 绑定必须是已安装函数".into());
         }
         Self::check_intent_centers(&plan, &replacements)?;
+        let watermark = contrib::hosted_id_watermark();
         let candidate = candidate::Installation::prepare(plan, bindings, |plan, bindings| {
             contrib::ContributionDispatch::assemble_hosted(plan, executor, bindings)
         })?;
+        // 本次装配登记的句柄归本引擎；换装先退役旧句柄（旧 realm 随
+        // 引用释放销毁）。
+        let ids: Vec<u64> = (watermark..contrib::hosted_id_watermark()).collect();
+        self.hosted_registry_ids = HostedRegistryGuard(ids);
         candidate.publish(self);
         Ok(())
     }

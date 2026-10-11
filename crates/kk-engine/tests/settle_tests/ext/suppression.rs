@@ -41,10 +41,10 @@ fn suppression_contribution() -> Contribution {
 }
 
 /// value 置为 args.mark 的 process 中心；执行记入 log 以断言链序。
-fn zero_process(log: Rc<RefCell<Vec<String>>>) -> ExtSimple {
+fn zero_process(log: std::sync::Arc<std::sync::Mutex<Vec<String>>>) -> ExtSimple {
     Box::new(move |ctx, id, args| {
-        log.borrow_mut().push("zero".into());
-        let mut fields = ctx.borrow().mod_fields(id).ok_or("目标不是 Mod 对象")?;
+        log.lock().unwrap().push("zero".into());
+        let mut fields = ctx.borrow_mut().mod_fields(id).ok_or("目标不是 Mod 对象")?;
         let mark = args
             .get("mark")
             .and_then(Value::as_i64)
@@ -56,8 +56,8 @@ fn zero_process(log: Rc<RefCell<Vec<String>>>) -> ExtSimple {
 
 fn dispatches(
     plan: &std::sync::Arc<kk_mod_api::ContributionPlan>,
-    log: &Rc<RefCell<Vec<String>>>,
-) -> std::rc::Rc<ContributionDispatch> {
+    log: &std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+) -> std::sync::Arc<ContributionDispatch> {
     let mut processes = BTreeMap::new();
     processes.insert(
         Key::new("extmod:increment.process").unwrap(),
@@ -67,7 +67,7 @@ fn dispatches(
         Key::new("extmod:zero.process").unwrap(),
         zero_process(log.clone()),
     );
-    std::rc::Rc::new(
+    std::sync::Arc::new(
         ContributionDispatch::assemble_with_ext(
             plan,
             BTreeMap::new(),
@@ -91,7 +91,7 @@ fn ext_intents(player: &str, id: ObjId, pairs: &[(Key, Value)]) -> IntentBatch {
 /// 时 increment 不进链（log 无 process），value=mark。
 #[test]
 fn suppressor_present_skips_suppressed_intent() {
-    let log = Rc::new(RefCell::new(Vec::new()));
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let plan = frozen(suppression_contribution());
     let dispatch = dispatches(&plan, &log);
     let mut f = Fixture::new(13, terrain_with(&[]));
@@ -114,14 +114,18 @@ fn suppressor_present_skips_suppressed_intent() {
         plan.clone(),
     )
     .unwrap();
-    assert_eq!(*log.borrow(), vec!["zero"], "被压制键不进链，仅压制者执行");
+    assert_eq!(
+        *log.lock().unwrap(),
+        vec!["zero"],
+        "被压制键不进链，仅压制者执行"
+    );
     assert_eq!(counter_value(&f, id)["value"], json!(7), "压制者效果落地");
 }
 
 /// 压制者缺席则执行：同对象只发 increment，正常累加。
 #[test]
 fn suppressor_absent_executes_suppressed_intent() {
-    let log = Rc::new(RefCell::new(Vec::new()));
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let plan = frozen(suppression_contribution());
     let dispatch = dispatches(&plan, &log);
     let mut f = Fixture::new(14, terrain_with(&[]));
@@ -141,7 +145,7 @@ fn suppressor_absent_executes_suppressed_intent() {
         plan.clone(),
     )
     .unwrap();
-    assert_eq!(*log.borrow(), vec!["process"], "无压制者时照常执行");
+    assert_eq!(*log.lock().unwrap(), vec!["process"], "无压制者时照常执行");
     assert_eq!(counter_value(&f, id)["value"], json!(8));
 }
 
@@ -149,7 +153,7 @@ fn suppressor_absent_executes_suppressed_intent() {
 /// 义）：zero 携带越界参数被 schema 丢弃，increment 仍被压制。
 #[test]
 fn suppression_is_presence_based_not_success_based() {
-    let log = Rc::new(RefCell::new(Vec::new()));
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let plan = frozen(suppression_contribution());
     let dispatch = dispatches(&plan, &log);
     let mut f = Fixture::new(15, terrain_with(&[]));
@@ -174,7 +178,7 @@ fn suppression_is_presence_based_not_success_based() {
         plan.clone(),
     )
     .unwrap();
-    assert!(log.borrow().is_empty(), "两条都不进链");
+    assert!(log.lock().unwrap().is_empty(), "两条都不进链");
     assert_eq!(
         counter_value(&f, id)["value"],
         json!(5),
@@ -186,7 +190,7 @@ fn suppression_is_presence_based_not_success_based() {
 /// 象时不压制本对象的 increment，两个效果各自落地。
 #[test]
 fn suppression_is_scoped_to_same_receiver() {
-    let log = Rc::new(RefCell::new(Vec::new()));
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let plan = frozen(suppression_contribution());
     let dispatch = dispatches(&plan, &log);
     let mut f = Fixture::new(16, terrain_with(&[]));
@@ -261,7 +265,8 @@ fn chained_suppression_each_link_presence_based() {
     c.intents = descriptors;
     c.slots = slots;
     let plan = frozen(c);
-    let log_all: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
+    let log_all: std::sync::Arc<std::sync::Mutex<Vec<String>>> =
+        std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let mut processes = BTreeMap::new();
     for name in ["high", "mid", "low"] {
         let log_one = log_all.clone();
@@ -269,8 +274,8 @@ fn chained_suppression_each_link_presence_based() {
             Key::new(format!("extmod:{name}.process")).unwrap(),
             Box::new(
                 move |ctx: &kk_engine::settle::RoomCtx, id: ObjId, args: &Value| {
-                    log_one.borrow_mut().push(name.to_string());
-                    let mut fields = ctx.borrow().mod_fields(id).ok_or("目标不是 Mod 对象")?;
+                    log_one.lock().unwrap().push(name.to_string());
+                    let mut fields = ctx.borrow_mut().mod_fields(id).ok_or("目标不是 Mod 对象")?;
                     let mark = args
                         .get("mark")
                         .and_then(Value::as_i64)
@@ -281,7 +286,7 @@ fn chained_suppression_each_link_presence_based() {
             ) as ExtSimple,
         );
     }
-    let dispatch = std::rc::Rc::new(
+    let dispatch = std::sync::Arc::new(
         ContributionDispatch::assemble_with_ext(
             &plan,
             BTreeMap::new(),
@@ -296,7 +301,7 @@ fn chained_suppression_each_link_presence_based() {
     let key = |name: &str| Key::new(format!("extmod:{name}")).unwrap();
 
     // 三键齐发：只执行 high（mid 被 high 压、low 被 mid 的存在压）。
-    log_all.borrow_mut().clear();
+    log_all.lock().unwrap().clear();
     settle_quiet(
         &mut f,
         ext_intents(
@@ -312,11 +317,15 @@ fn chained_suppression_each_link_presence_based() {
         plan.clone(),
     )
     .unwrap();
-    assert_eq!(*log_all.borrow(), vec!["high"], "链上只有未压制者执行");
+    assert_eq!(
+        *log_all.lock().unwrap(),
+        vec!["high"],
+        "链上只有未压制者执行"
+    );
     assert_eq!(counter_value(&f, id)["value"], json!(4));
 
     // high 缺席：mid 执行且压 low（mid 的键存在即压制）。
-    log_all.borrow_mut().clear();
+    log_all.lock().unwrap().clear();
     settle_quiet(
         &mut f,
         ext_intents(
@@ -331,7 +340,11 @@ fn chained_suppression_each_link_presence_based() {
         plan.clone(),
     )
     .unwrap();
-    assert_eq!(*log_all.borrow(), vec!["mid"], "mid 执行且其键存在压制 low");
+    assert_eq!(
+        *log_all.lock().unwrap(),
+        vec!["mid"],
+        "mid 执行且其键存在压制 low"
+    );
     assert_eq!(counter_value(&f, id)["value"], json!(2));
 }
 
@@ -339,7 +352,7 @@ fn chained_suppression_each_link_presence_based() {
 /// 键不影响 p1 的意图执行（p2 的发射在归属校验处被丢弃，本就不进链）。
 #[test]
 fn suppression_is_isolated_per_player() {
-    let log = Rc::new(RefCell::new(Vec::new()));
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let plan = frozen(suppression_contribution());
     let dispatch = dispatches(&plan, &log);
     let mut f = Fixture::new(18, terrain_with(&[]));
@@ -362,7 +375,7 @@ fn suppression_is_isolated_per_player() {
     );
     settle_quiet(&mut f, batch, dispatch.clone(), plan.clone()).unwrap();
     assert_eq!(
-        *log.borrow(),
+        *log.lock().unwrap(),
         vec!["process"],
         "跨玩家的压制者键不压制本玩家"
     );

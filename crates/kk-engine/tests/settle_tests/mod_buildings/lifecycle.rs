@@ -114,14 +114,14 @@ fn completion_writes_declared_field_defaults() {
         stores: kk_mod_api::builtin::StoreRules::from_plan(plan.rules()).unwrap(),
         combat: kk_mod_api::builtin::CombatRanges::from_plan(plan.rules()).unwrap(),
         move_gate: Default::default(),
-        quotas: std::rc::Rc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
+        quotas: std::sync::Arc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
         static_passability: Default::default(),
-        resources: std::rc::Rc::new(kk_mod_api::resources::ResourceCatalog::from_plan(&plan)),
-        buildings: std::rc::Rc::new(
+        resources: std::sync::Arc::new(kk_mod_api::resources::ResourceCatalog::from_plan(&plan)),
+        buildings: std::sync::Arc::new(
             kk_mod_api::buildings::BuildingCatalog::from_plan(&plan).unwrap(),
         ),
-        contrib: std::rc::Rc::new(kk_engine::settle::contrib::ContributionDispatch::default()),
-        extensions: std::rc::Rc::new(kk_mod_api::extension::ExtensionCatalog::default()),
+        contrib: std::sync::Arc::new(kk_engine::settle::contrib::ContributionDispatch::default()),
+        extensions: std::sync::Arc::new(kk_mod_api::extension::ExtensionCatalog::default()),
         plan,
     };
     // 直接驱动完工（公式与家族测试同口径：进度推进由 WORK 效果结算）。
@@ -188,20 +188,20 @@ fn building_ticks_after_production_within_object_tick() {
             .unwrap(),
         );
         let mut e = kk_engine::Engine::new(kk_world::World::new(3));
-        let seen_store = std::rc::Rc::new(std::cell::RefCell::new(Vec::<i64>::new()));
+        let seen_store = std::sync::Arc::new(std::sync::Mutex::new(Vec::<i64>::new()));
         let seen_target = seen_store.clone();
         let observer = move |ctx: &kk_engine::settle::RoomCtx,
                              id: kk_world::ObjId,
                              _args: &Value|
               -> Result<(), String> {
-            let w = ctx.borrow();
+            let w = ctx.borrow_mut();
             let data: Value = match w.room.objects.get(&id) {
                 Some(RoomObject::Generic(g)) => {
                     serde_json::from_str(&g.data).map_err(|e| e.to_string())?
                 }
                 _ => return Ok(()),
             };
-            seen_target.borrow_mut().push(
+            seen_target.lock().unwrap().push(
                 data.pointer("/store/energy")
                     .and_then(Value::as_i64)
                     .unwrap_or(0),
@@ -240,7 +240,7 @@ fn building_ticks_after_production_within_object_tick() {
         e.tick_with_intents(IntentBatch::default()).unwrap();
         e.tick_with_intents(IntentBatch::default()).unwrap();
         assert_eq!(
-            *seen_store.borrow(),
+            *seen_store.lock().unwrap(),
             if tick_only { vec![0, 0] } else { vec![5, 10] },
             "tick_only={tick_only}：先产后 tick"
         );

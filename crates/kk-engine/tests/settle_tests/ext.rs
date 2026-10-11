@@ -195,10 +195,10 @@ fn frozen(contribution: Contribution) -> std::sync::Arc<kk_mod_api::Contribution
 }
 
 /// 记录链序并把 args.amount 累进 value 的 process 中心。
-fn counter_process(log: Rc<RefCell<Vec<String>>>) -> ExtSimple {
+fn counter_process(log: std::sync::Arc<std::sync::Mutex<Vec<String>>>) -> ExtSimple {
     Box::new(move |ctx, id, args| {
-        log.borrow_mut().push("process".into());
-        let mut fields = ctx.borrow().mod_fields(id).ok_or("目标不是 Mod 对象")?;
+        log.lock().unwrap().push("process".into());
+        let mut fields = ctx.borrow_mut().mod_fields(id).ok_or("目标不是 Mod 对象")?;
         let amount = args
             .get("amount")
             .and_then(Value::as_i64)
@@ -208,9 +208,9 @@ fn counter_process(log: Rc<RefCell<Vec<String>>>) -> ExtSimple {
     })
 }
 
-fn observer(log: Rc<RefCell<Vec<String>>>, tag: &'static str) -> ExtSimple {
+fn observer(log: std::sync::Arc<std::sync::Mutex<Vec<String>>>, tag: &'static str) -> ExtSimple {
     Box::new(move |_, _, _| {
-        log.borrow_mut().push(tag.into());
+        log.lock().unwrap().push(tag.into());
         Ok(())
     })
 }
@@ -219,7 +219,7 @@ fn observer(log: Rc<RefCell<Vec<String>>>, tag: &'static str) -> ExtSimple {
 fn settle_quiet(
     f: &mut Fixture,
     batch: IntentBatch,
-    dispatch: std::rc::Rc<ContributionDispatch>,
+    dispatch: std::sync::Arc<ContributionDispatch>,
     plan: std::sync::Arc<kk_mod_api::ContributionPlan>,
 ) -> Result<(), String> {
     let state = TickState::new(std::mem::take(&mut f.players), f.world.next_obj_id());
@@ -231,12 +231,12 @@ fn settle_quiet(
         stores: kk_world::place::builtin_store_rules(),
         combat: kk_world::place::builtin_combat_ranges(),
         move_gate: Default::default(),
-        quotas: std::rc::Rc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
+        quotas: std::sync::Arc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
         static_passability: Default::default(),
         buildings: Default::default(),
         resources: Default::default(),
         contrib: dispatch,
-        extensions: std::rc::Rc::new(kk_mod_api::extension::ExtensionCatalog::default()),
+        extensions: std::sync::Arc::new(kk_mod_api::extension::ExtensionCatalog::default()),
         plan,
     };
     let settled = settle_room(

@@ -30,7 +30,7 @@ impl Engine {
         let base = self
             .next_id
             .max(self.world.next_available_obj_id().map_err(SettleError)?);
-        let state = cand.state.inner.borrow();
+        let state = cand.state.inner.lock().expect("共享候选锁");
         if state.next_id < base {
             return Err(SettleError(format!(
                 "id 候选回退：{} < 基线 {base}",
@@ -633,7 +633,7 @@ mod invariant_tests {
                     txn.rooms[1].1.objects.insert(id, object);
                 }
                 1 => {
-                    txn.state.inner.borrow_mut().next_id = id.0;
+                    txn.state.inner.lock().expect("共享候选锁").next_id = id.0;
                 }
                 2 => {
                     txn.rooms[0].1.objects.get_mut(&id).unwrap().set_id(999);

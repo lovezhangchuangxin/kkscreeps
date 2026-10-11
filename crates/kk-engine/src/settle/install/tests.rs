@@ -117,10 +117,10 @@ fn late_binding_failure_preserves_every_installed_domain_and_committed_state() {
             rules
         );
         assert!(Arc::ptr_eq(&engine.plan, &old_plan));
-        assert!(Rc::ptr_eq(&engine.resources, &resources));
-        assert!(Rc::ptr_eq(&engine.buildings, &buildings));
-        assert!(Rc::ptr_eq(&engine.extensions, &extensions));
-        assert!(Rc::ptr_eq(&engine.contrib, &dispatch));
+        assert!(std::sync::Arc::ptr_eq(&engine.resources, &resources));
+        assert!(std::sync::Arc::ptr_eq(&engine.buildings, &buildings));
+        assert!(std::sync::Arc::ptr_eq(&engine.extensions, &extensions));
+        assert!(std::sync::Arc::ptr_eq(&engine.contrib, &dispatch));
         assert_eq!(
             serde_json::to_value(engine.checkpoint().unwrap()).unwrap(),
             original
@@ -155,10 +155,10 @@ fn both_installers_publish_rules_catalogs_dispatch_and_plan_together() {
             engine.buildings.get("installation:gauge").unwrap().hits_max,
             500
         );
-        assert!(!Rc::ptr_eq(&engine.resources, &resources));
-        assert!(!Rc::ptr_eq(&engine.buildings, &buildings));
-        assert!(!Rc::ptr_eq(&engine.extensions, &extensions));
-        assert!(!Rc::ptr_eq(&engine.contrib, &dispatch));
+        assert!(!std::sync::Arc::ptr_eq(&engine.resources, &resources));
+        assert!(!std::sync::Arc::ptr_eq(&engine.buildings, &buildings));
+        assert!(!std::sync::Arc::ptr_eq(&engine.extensions, &extensions));
+        assert!(!std::sync::Arc::ptr_eq(&engine.contrib, &dispatch));
         before["plan_hash"] = serde_json::json!(engine.plan_hash().hex());
         assert_eq!(
             serde_json::to_value(engine.checkpoint().unwrap()).unwrap(),

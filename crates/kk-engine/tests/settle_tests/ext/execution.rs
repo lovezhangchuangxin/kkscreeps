@@ -5,7 +5,7 @@ use super::*;
 /// 玩家校验矩阵——参数越界/接收者不符/非归属/未知键全部丢弃且结算成功。
 #[test]
 fn ext_intent_chain_and_player_gates() {
-    let log = Rc::new(RefCell::new(Vec::new()));
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let plan = frozen(counter_contribution(&[
         ("pre", HandlerKind::Before),
         ("post", HandlerKind::After),
@@ -32,7 +32,7 @@ fn ext_intent_chain_and_player_gates() {
         ext_processes,
     )
     .unwrap();
-    let dispatch = std::rc::Rc::new(dispatch);
+    let dispatch = std::sync::Arc::new(dispatch);
 
     let mut f = Fixture::new(11, terrain_with(&[]));
     let id = place_counter(&mut f, 10, 12, "p1", 5);
@@ -45,7 +45,7 @@ fn ext_intent_chain_and_player_gates() {
         plan.clone(),
     )
     .unwrap();
-    assert_eq!(*log.borrow(), vec!["before", "process", "after"]);
+    assert_eq!(*log.lock().unwrap(), vec!["before", "process", "after"]);
     assert_eq!(counter_value(&f, id)["value"], json!(8));
     // 位置字段同步：process 未改坐标，信封与 payload 一致。
     match f.world.get(id).unwrap().1 {
@@ -54,7 +54,7 @@ fn ext_intent_chain_and_player_gates() {
     }
 
     // 参数越界（amount=99 > 10）：丢弃，链不执行，结算成功。
-    log.borrow_mut().clear();
+    log.lock().unwrap().clear();
     settle_quiet(
         &mut f,
         ext_batch("p1", id, json!({ "amount": 99 })),
@@ -62,7 +62,7 @@ fn ext_intent_chain_and_player_gates() {
         plan.clone(),
     )
     .unwrap();
-    assert!(log.borrow().is_empty(), "越界参数不进链");
+    assert!(log.lock().unwrap().is_empty(), "越界参数不进链");
     assert_eq!(counter_value(&f, id)["value"], json!(8));
 
     // 非归属玩家：丢弃。
@@ -115,7 +115,7 @@ fn ext_intent_failure_and_partial_write_rejected() {
         processes,
     )
     .unwrap();
-    let dispatch = std::rc::Rc::new(dispatch);
+    let dispatch = std::sync::Arc::new(dispatch);
     let mut f = Fixture::new(12, terrain_with(&[]));
     let id = place_counter(&mut f, 5, 5, "p1", 1);
     let err = settle_quiet(
@@ -143,7 +143,7 @@ fn ext_intent_failure_and_partial_write_rejected() {
         processes,
     )
     .unwrap();
-    let dispatch = std::rc::Rc::new(dispatch);
+    let dispatch = std::sync::Arc::new(dispatch);
     let err = settle_quiet(
         &mut f,
         ext_batch("p1", id, json!({ "amount": 2 })),
@@ -196,7 +196,7 @@ fn link_slot_before_and_replace_failures_propagate() {
             ..kk_engine::intent::IntentData::bare()
         },
     );
-    let dispatch = std::rc::Rc::new(dispatch);
+    let dispatch = std::sync::Arc::new(dispatch);
     let err = settle_quiet(&mut f, batch, dispatch, plan.clone()).unwrap_err();
     assert!(err.contains("before 拒绝"), "{err}");
     let d1 = serde_json::from_str::<Value>(&link_data(&f, l1)).unwrap();
@@ -227,7 +227,7 @@ fn link_slot_before_and_replace_failures_propagate() {
             ..kk_engine::intent::IntentData::bare()
         },
     );
-    let dispatch = std::rc::Rc::new(dispatch);
+    let dispatch = std::sync::Arc::new(dispatch);
     let err = settle_quiet(&mut f, batch, dispatch, plan.clone()).unwrap_err();
     assert!(err.contains("replace 拒绝"), "{err}");
     let d1 = serde_json::from_str::<Value>(&link_data(&f, l1)).unwrap();
@@ -246,7 +246,7 @@ fn builtin_plan_keeps_vanilla_settle() {
     f.controller(1, None);
     let batch = IntentBatch::default();
     let dispatch = ContributionDispatch::default();
-    let dispatch = std::rc::Rc::new(dispatch);
+    let dispatch = std::sync::Arc::new(dispatch);
     settle_quiet(&mut f, batch, dispatch, plan.clone()).unwrap();
     assert_eq!(f.world.time(), 1);
 }
@@ -260,7 +260,7 @@ fn ext_intent_owner_absent_is_fail_closed() {
     ty.owner_field = None;
     // owner 字段保留（仍是合法声明字段），只是不再标记为归属字段。
     let plan = frozen(contribution);
-    let log = Rc::new(RefCell::new(Vec::new()));
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let mut processes = BTreeMap::new();
     processes.insert(
         Key::new("extmod:increment.process").unwrap(),
@@ -274,7 +274,7 @@ fn ext_intent_owner_absent_is_fail_closed() {
         processes,
     )
     .unwrap();
-    let dispatch = std::rc::Rc::new(dispatch);
+    let dispatch = std::sync::Arc::new(dispatch);
     let mut f = Fixture::new(15, terrain_with(&[]));
     let id = place_counter(&mut f, 5, 5, "p1", 2);
     settle_quiet(
@@ -284,7 +284,10 @@ fn ext_intent_owner_absent_is_fail_closed() {
         plan.clone(),
     )
     .unwrap();
-    assert!(log.borrow().is_empty(), "未声明归属字段：任何玩家不可执行");
+    assert!(
+        log.lock().unwrap().is_empty(),
+        "未声明归属字段：任何玩家不可执行"
+    );
     assert_eq!(counter_value(&f, id)["value"], json!(2));
 }
 
@@ -311,7 +314,7 @@ fn ext_intent_receiver_mismatch_between_mod_types() {
     }
     contribution.object_types.push(gauge);
     let plan = frozen(contribution);
-    let log = Rc::new(RefCell::new(Vec::new()));
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let mut processes = BTreeMap::new();
     processes.insert(
         Key::new("extmod:increment.process").unwrap(),
@@ -325,7 +328,7 @@ fn ext_intent_receiver_mismatch_between_mod_types() {
         processes,
     )
     .unwrap();
-    let dispatch = std::rc::Rc::new(dispatch);
+    let dispatch = std::sync::Arc::new(dispatch);
     let mut f = Fixture::new(16, terrain_with(&[]));
     let counter = place_counter(&mut f, 5, 5, "p1", 2);
     let gauge = f
@@ -349,7 +352,7 @@ fn ext_intent_receiver_mismatch_between_mod_types() {
     )
     .unwrap();
     assert!(
-        log.borrow().is_empty(),
+        log.lock().unwrap().is_empty(),
         "接收者不匹配：counter 意图不能作用于 gauge 对象"
     );
     let gauge_fields: Value = serde_json::from_str(&match f.world.get(gauge).unwrap().1 {
@@ -366,7 +369,7 @@ fn ext_intent_receiver_mismatch_between_mod_types() {
 fn ext_intent_position_write_syncs_envelope() {
     let plan = frozen(counter_contribution(&[]));
     let moved: ExtSimple = Box::new(|ctx, id, args| {
-        let mut fields = ctx.borrow().mod_fields(id).ok_or("目标不是 Mod 对象")?;
+        let mut fields = ctx.borrow_mut().mod_fields(id).ok_or("目标不是 Mod 对象")?;
         fields["value"] = json!(1);
         fields["x"] = json!(fields["x"].as_i64().unwrap() + args["amount"].as_i64().unwrap());
         ctx.borrow_mut().update_mod_fields(id, &fields)
@@ -381,7 +384,7 @@ fn ext_intent_position_write_syncs_envelope() {
         processes,
     )
     .unwrap();
-    let dispatch = std::rc::Rc::new(dispatch);
+    let dispatch = std::sync::Arc::new(dispatch);
     let mut f = Fixture::new(17, terrain_with(&[]));
     let id = place_counter(&mut f, 10, 10, "p1", 0);
     settle_quiet(
@@ -406,7 +409,7 @@ fn ext_intent_position_write_syncs_envelope() {
 /// （与 link 槽 before-Err 同语义的独立代码路径）。
 #[test]
 fn ext_slot_before_failure_aborts_center_and_after() {
-    let log = Rc::new(RefCell::new(Vec::new()));
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let plan = frozen(counter_contribution(&[
         ("gate", HandlerKind::Before),
         ("post", HandlerKind::After),
@@ -435,7 +438,7 @@ fn ext_slot_before_failure_aborts_center_and_after() {
         ext_processes,
     )
     .unwrap();
-    let dispatch = std::rc::Rc::new(dispatch);
+    let dispatch = std::sync::Arc::new(dispatch);
     let mut f = Fixture::new(18, terrain_with(&[]));
     let id = place_counter(&mut f, 5, 5, "p1", 1);
     let err = settle_quiet(
@@ -446,7 +449,7 @@ fn ext_slot_before_failure_aborts_center_and_after() {
     )
     .unwrap_err();
     assert!(err.contains("ext before 拒绝"), "{err}");
-    assert!(log.borrow().is_empty(), "中心与 after 均未执行");
+    assert!(log.lock().unwrap().is_empty(), "中心与 after 均未执行");
     assert_eq!(counter_value(&f, id)["value"], json!(1), "失败候选不落");
 }
 
@@ -454,7 +457,7 @@ fn ext_slot_before_failure_aborts_center_and_after() {
 /// 链以 Replace 为中心运行（自身 process 实现仍须提供且被允许残余）。
 #[test]
 fn ext_slot_replace_center_takes_over_process() {
-    let log = Rc::new(RefCell::new(Vec::new()));
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let plan = frozen(counter_contribution(&[("takeover", HandlerKind::Replace)]));
     let mut ext_handlers = BTreeMap::new();
     ext_handlers.insert(
@@ -474,7 +477,7 @@ fn ext_slot_replace_center_takes_over_process() {
         ext_processes,
     )
     .unwrap();
-    let dispatch = std::rc::Rc::new(dispatch);
+    let dispatch = std::sync::Arc::new(dispatch);
     let mut f = Fixture::new(19, terrain_with(&[]));
     let id = place_counter(&mut f, 5, 5, "p1", 7);
     settle_quiet(
@@ -485,7 +488,7 @@ fn ext_slot_replace_center_takes_over_process() {
     )
     .unwrap();
     assert_eq!(
-        *log.borrow(),
+        *log.lock().unwrap(),
         vec!["replace"],
         "Replace 中心执行，原 process 不跑"
     );
@@ -503,7 +506,7 @@ fn ext_slot_replace_center_takes_over_process() {
 /// after 只在内层成功后跑。
 #[test]
 fn ext_slot_wrap_chain_order_and_after_timing() {
-    let log = Rc::new(RefCell::new(Vec::new()));
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     // 冻结期按处理器键稳定排序，链上 wraps[0] 为最外层；这里用键序
     // （a-outer < b-inner）表达嵌套方向，不依赖声明顺序。
     let plan = frozen(counter_contribution(&[
@@ -517,11 +520,11 @@ fn ext_slot_wrap_chain_order_and_after_timing() {
         ext_handlers.insert(
             Key::new(format!("extmod:handler.{tag}")).unwrap(),
             ExtHandler::Wrap(Box::new(move |ctx, id, args, next| {
-                sink.borrow_mut().push(format!("{tag}-enter"));
+                sink.lock().unwrap().push(format!("{tag}-enter"));
                 next.call(id)?;
-                sink.borrow_mut().push(format!("{tag}-exit"));
+                sink.lock().unwrap().push(format!("{tag}-exit"));
                 // next 之后的 ctx 仍可用：借用已在 next 内释放。
-                let _ = ctx.borrow().mod_fields(id);
+                let _ = ctx.borrow_mut().mod_fields(id);
                 let _ = args;
                 Ok(())
             })),
@@ -536,7 +539,7 @@ fn ext_slot_wrap_chain_order_and_after_timing() {
         Key::new("extmod:increment.process").unwrap(),
         counter_process(log.clone()),
     );
-    let dispatch = std::rc::Rc::new(
+    let dispatch = std::sync::Arc::new(
         ContributionDispatch::assemble_with_ext(
             &plan,
             BTreeMap::new(),
@@ -557,7 +560,7 @@ fn ext_slot_wrap_chain_order_and_after_timing() {
     )
     .unwrap();
     assert_eq!(
-        *log.borrow(),
+        *log.lock().unwrap(),
         vec![
             "a-outer-enter",
             "b-inner-enter",
@@ -571,14 +574,14 @@ fn ext_slot_wrap_chain_order_and_after_timing() {
     assert_eq!(counter_value(&f, id)["value"], json!(8));
 
     // 内层 wrap 截断：中心不执行；槽成功返回时仍执行已安装的 after。
-    log.borrow_mut().clear();
+    log.lock().unwrap().clear();
     let plan2 = frozen(counter_contribution(&[("cut", HandlerKind::Wrap)]));
     let mut handlers2 = BTreeMap::new();
     let sink = log.clone();
     handlers2.insert(
         Key::new("extmod:handler.cut").unwrap(),
         ExtHandler::Wrap(Box::new(move |_ctx, _id, _args, _next| {
-            sink.borrow_mut().push("cut".into());
+            sink.lock().unwrap().push("cut".into());
             Ok(()) // 不调 next：取消内层
         })),
     );
@@ -587,7 +590,7 @@ fn ext_slot_wrap_chain_order_and_after_timing() {
         Key::new("extmod:increment.process").unwrap(),
         counter_process(log.clone()),
     );
-    let dispatch2 = std::rc::Rc::new(
+    let dispatch2 = std::sync::Arc::new(
         ContributionDispatch::assemble_with_ext(
             &plan2,
             BTreeMap::new(),
@@ -604,7 +607,7 @@ fn ext_slot_wrap_chain_order_and_after_timing() {
         plan2.clone(),
     )
     .unwrap();
-    assert_eq!(*log.borrow(), vec!["cut"], "截断后中心不执行");
+    assert_eq!(*log.lock().unwrap(), vec!["cut"], "截断后中心不执行");
     assert_eq!(counter_value(&f, id)["value"], json!(8), "截断后值不变");
 }
 
@@ -626,7 +629,7 @@ fn ext_slot_wrap_double_next_fails_candidate() {
         Box::new(|_ctx: &kk_engine::settle::RoomCtx, _id: ObjId, _a: &Value| Ok(()))
             as kk_engine::settle::contrib::ExtSimple,
     );
-    let dispatch = std::rc::Rc::new(
+    let dispatch = std::sync::Arc::new(
         ContributionDispatch::assemble_with_ext(
             &plan,
             BTreeMap::new(),
@@ -661,7 +664,7 @@ fn ext_caught_next_error_still_aborts_candidate() {
             ("guard", HandlerKind::Wrap),
             ("post", HandlerKind::After),
         ]));
-        let log = Rc::new(RefCell::new(Vec::new()));
+        let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let mut handlers = BTreeMap::new();
         handlers.insert(
             Key::new("extmod:handler.guard").unwrap(),
@@ -681,7 +684,7 @@ fn ext_caught_next_error_still_aborts_candidate() {
         processes.insert(
             Key::new("extmod:increment.process").unwrap(),
             Box::new(move |ctx, id, _| {
-                let mut fields = ctx.borrow().mod_fields(id).unwrap();
+                let mut fields = ctx.borrow_mut().mod_fields(id).unwrap();
                 fields["value"] = json!(8);
                 ctx.borrow_mut().update_mod_fields(id, &fields)?;
                 if duplicate {
@@ -691,7 +694,7 @@ fn ext_caught_next_error_still_aborts_candidate() {
                 }
             }),
         );
-        let dispatch = Rc::new(
+        let dispatch = std::sync::Arc::new(
             ContributionDispatch::assemble_with_ext(
                 &plan,
                 BTreeMap::new(),
@@ -716,6 +719,6 @@ fn ext_caught_next_error_still_aborts_candidate() {
             "process 故障"
         }));
         assert_eq!(counter_value(&f, id)["value"], json!(5));
-        assert!(log.borrow().is_empty(), "失败链不得运行 after");
+        assert!(log.lock().unwrap().is_empty(), "失败链不得运行 after");
     }
 }

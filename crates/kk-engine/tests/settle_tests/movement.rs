@@ -586,13 +586,13 @@ fn passability_plane(walls: bool) -> kk_engine::settle::Plane {
         stores: kk_world::place::builtin_store_rules(),
         combat: kk_world::place::builtin_combat_ranges(),
         move_gate: Default::default(),
-        quotas: std::rc::Rc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
+        quotas: std::sync::Arc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
         static_passability: kk_mod_api::builtin::StaticPassability {
             wall_passable: walls,
             ..Default::default()
         },
         resources: Default::default(),
-        contrib: std::rc::Rc::new(kk_engine::settle::contrib::ContributionDispatch::default()),
+        contrib: std::sync::Arc::new(kk_engine::settle::contrib::ContributionDispatch::default()),
         extensions: Default::default(),
         plan: kk_engine::settle::builtin_plan(),
     }

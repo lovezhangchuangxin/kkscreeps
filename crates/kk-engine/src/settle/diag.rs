@@ -40,6 +40,8 @@ pub struct TickDiag {
     /// 世界提交（commit_tick_rooms：逐槽替换与旧房 drop）。
     pub commit_ns: u128,
     pub counters: DiagCounters,
+    /// 本拍房间循环是否走了并行路径（串行回退重做记 false）。
+    pub parallel: bool,
     pub interroom_moves: u64,
     pub portal_moves: u64,
     pub events: u64,
@@ -96,6 +98,7 @@ impl crate::settle::Engine {
                 "claim_calls": sum(&|d| d.counters.claim_calls),
                 "gcl_adds": sum(&|d| d.counters.gcl_adds),
                 "power_adds": sum(&|d| d.counters.power_adds),
+                "parallel_room_ticks": sum(&|d| d.parallel as u64),
                 "interroom_moves": sum(&|d| d.interroom_moves),
                 "portal_moves": sum(&|d| d.portal_moves),
                 "events": sum(&|d| d.events),

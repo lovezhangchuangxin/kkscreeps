@@ -46,8 +46,8 @@ impl ContributionDispatch {
                 .resolve_slot(&key(slot))
                 .ok_or_else(|| format!("计划缺少槽 {slot}"))?;
             Ok(HostedSlot {
-                plan: Rc::new(plan.get_slot(handle).expect("句柄来自计划").clone()),
-                executor: executor.clone(),
+                plan: Arc::new(plan.get_slot(handle).expect("句柄来自计划").clone()),
+                executor: super::register_hosted_executor(executor.clone()),
             })
         };
         let transfer = match dispatch_of(plan, LINK_SLOT_KEYS[0])? {
@@ -362,7 +362,7 @@ fn assemble_ext_slots(
                 let center = processes
                     .remove(binding)
                     .ok_or_else(|| missing(&slot.key.to_string(), binding, "动作处理"))?;
-                result.insert(slot.key.clone(), ExtSlot::Process(Rc::new(center)));
+                result.insert(slot.key.clone(), ExtSlot::Process(Arc::new(center)));
             }
             Dispatch::Chained {
                 before,
@@ -374,7 +374,7 @@ fn assemble_ext_slots(
                 let mut before_fns = Vec::new();
                 for binding in before {
                     match handlers.remove(binding) {
-                        Some(ExtHandler::Before(f)) => before_fns.push(Rc::new(f)),
+                        Some(ExtHandler::Before(f)) => before_fns.push(Arc::new(f)),
                         Some(other) => {
                             return Err(kind_mismatch(binding, "before", other.label()));
                         }
@@ -386,7 +386,7 @@ fn assemble_ext_slots(
                 let mut wrap_fns = Vec::new();
                 for binding in wraps.iter() {
                     match handlers.remove(binding) {
-                        Some(ExtHandler::Wrap(f)) => wrap_fns.push(Rc::new(f)),
+                        Some(ExtHandler::Wrap(f)) => wrap_fns.push(Arc::new(f)),
                         Some(other) => {
                             return Err(kind_mismatch(binding, "wrap", other.label()));
                         }
@@ -395,11 +395,11 @@ fn assemble_ext_slots(
                 }
                 let after_fns = take_after(&slot_label, after, &mut handlers)?;
                 let center_fn = match handlers.remove(center) {
-                    Some(ExtHandler::Replace(f)) => Rc::new(f),
+                    Some(ExtHandler::Replace(f)) => Arc::new(f),
                     Some(other) => {
                         return Err(kind_mismatch(center, "replace", other.label()));
                     }
-                    None => Rc::new(
+                    None => Arc::new(
                         processes
                             .remove(center)
                             .ok_or_else(|| missing(&slot_label, center, "replace/动作处理"))?,
@@ -407,7 +407,7 @@ fn assemble_ext_slots(
                 };
                 result.insert(
                     slot.key.clone(),
-                    ExtSlot::Chained(Rc::new(ExtChained {
+                    ExtSlot::Chained(Arc::new(ExtChained {
                         before: before_fns,
                         wraps: wrap_fns,
                         center: center_fn,
@@ -480,11 +480,11 @@ fn take_after(
     slot: &str,
     after: &[Key],
     handlers: &mut BTreeMap<Key, ExtHandler>,
-) -> Result<Vec<Rc<ExtSimple>>, String> {
+) -> Result<Vec<Arc<ExtSimple>>, String> {
     let mut after_fns = Vec::new();
     for binding in after {
         match handlers.remove(binding) {
-            Some(ExtHandler::After(f)) => after_fns.push(Rc::new(f)),
+            Some(ExtHandler::After(f)) => after_fns.push(Arc::new(f)),
             Some(other) => return Err(kind_mismatch(binding, "after", other.label())),
             None => return Err(missing(slot, binding, "after")),
         }
@@ -613,10 +613,10 @@ fn assemble_action(
                     None => return Err(missing(slot, binding, "after")),
                 }
             }
-            let slot_result = ActionSlot::Chained(Rc::new(ActionChained {
+            let slot_result = ActionSlot::Chained(Arc::new(ActionChained {
                 before: before_fns,
-                wraps: wrap_fns.into_iter().map(Rc::new).collect(),
-                center: Rc::new(center_fn),
+                wraps: wrap_fns.into_iter().map(Arc::new).collect(),
+                center: Arc::new(center_fn),
                 after: after_fns,
             }));
             reject_leftover(slot, &handlers)?;
@@ -682,10 +682,10 @@ fn assemble_tick(
                     None => return Err(missing(slot, binding, "after")),
                 }
             }
-            let slot_result = TickSlot::Chained(Rc::new(TickChained {
+            let slot_result = TickSlot::Chained(Arc::new(TickChained {
                 before: before_fns,
-                wraps: wrap_fns.into_iter().map(Rc::new).collect(),
-                center: Rc::new(center_fn),
+                wraps: wrap_fns.into_iter().map(Arc::new).collect(),
+                center: Arc::new(center_fn),
                 after: after_fns,
             }));
             reject_leftover(slot, &handlers)?;

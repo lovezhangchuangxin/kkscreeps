@@ -93,14 +93,14 @@ fn working_with_gauge() -> (Working, ObjId) {
         TickState::new(BTreeMap::new(), 100),
         Plane {
             world_span: Plane::UNWRAPPED_SPAN,
-            buildings: std::rc::Rc::new(
+            buildings: std::sync::Arc::new(
                 kk_mod_api::buildings::BuildingCatalog::from_plan(&plan).unwrap(),
             ),
             links: engine.links,
             stores: engine.stores,
             combat: engine.combat,
             move_gate: Default::default(),
-            quotas: std::rc::Rc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
+            quotas: std::sync::Arc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
             static_passability: Default::default(),
             resources: engine.resources.clone(),
             contrib: engine.contrib,
@@ -222,7 +222,7 @@ fn write_face_rejects_undeclared_and_fieldless_buildings() {
     // 无字段建筑只读。
     let plan = bare_plan();
     w.plane.buildings =
-        std::rc::Rc::new(kk_mod_api::buildings::BuildingCatalog::from_plan(&plan).unwrap());
+        std::sync::Arc::new(kk_mod_api::buildings::BuildingCatalog::from_plan(&plan).unwrap());
     let bare = kk_mod_api::Key::new("bl:bare").unwrap();
     let bare_id = ObjId(4);
     w.room.objects.insert(
@@ -429,7 +429,7 @@ fn qualified_fields_normalize_nested_values_only_after_complete_validation() {
         nullable: false,
     };
     let (mut w, id) = working_with_gauge();
-    w.plane.buildings = std::rc::Rc::new(
+    w.plane.buildings = std::sync::Arc::new(
         kk_mod_api::buildings::BuildingCatalog::from_plan(&gauge_plan_with_fields(vec![
             heat,
             field("cycles", 10000, kk_mod_api::FieldDefault::Missing),

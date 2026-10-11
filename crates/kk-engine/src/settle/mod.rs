@@ -41,6 +41,9 @@ pub mod stronghold;
 pub mod structures;
 
 mod pipeline;
+
+#[cfg(test)]
+mod parallel_tests;
 pub use pipeline::{
     PlayerWriteback, RunState, SegmentWriteback, TickStage, TickState, WritebackStep,
 };
@@ -190,7 +193,7 @@ const NOTIFY_RECORD_CAP: usize = 100;
 pub enum ProcessorRandom {
     #[default]
     Derived,
-    Injected(std::rc::Rc<std::cell::RefCell<std::collections::VecDeque<f64>>>),
+    Injected(std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<f64>>>),
 }
 
 /// 本轮结算的外部输入；控制器签名与市场订单时间使用此墙钟。
@@ -270,17 +273,17 @@ pub struct Engine {
     pub(crate) static_passability: kk_mod_api::builtin::StaticPassability,
     /// 内建结构 RCL 配额快照（G11.a）：结算配额判定与玩家面
     /// CONTROLLER_STRUCTURES 常量注入同源消费；与计划一同装配。
-    pub(crate) quotas: Rc<kk_mod_api::builtin::StructureQuotaSnapshot>,
+    pub(crate) quotas: Arc<kk_mod_api::builtin::StructureQuotaSnapshot>,
     /// 本引擎生效的资源目录：内建 RESOURCES_ALL 加计划声明的命名空间
     /// 资源。搬运/掉落/领域能力按它校验；市场与跨房发送不读它（明确
     /// 只认内建资源）。与计划一同装配，不允许单独换。
-    pub(crate) resources: Rc<kk_mod_api::resources::ResourceCatalog>,
+    pub(crate) resources: Arc<kk_mod_api::resources::ResourceCatalog>,
     /// 本引擎生效的建筑目录：计划声明的可建造结构与配方。与计划一同装配。
-    pub(crate) buildings: Rc<kk_mod_api::buildings::BuildingCatalog>,
+    pub(crate) buildings: Arc<kk_mod_api::buildings::BuildingCatalog>,
     /// 内建与自有槽执行表；默认直连 native，装配计划后可携带贡献链。
-    pub(crate) contrib: Rc<contrib::ContributionDispatch>,
+    pub(crate) contrib: Arc<contrib::ContributionDispatch>,
     /// 扩展字段目录；默认为空（不接受扩展写入），with_plan 装配。
-    pub(crate) extensions: Rc<kk_mod_api::extension::ExtensionCatalog>,
+    pub(crate) extensions: Arc<kk_mod_api::extension::ExtensionCatalog>,
     /// 已提交的各 Mod 命名空间状态；每 tick 克隆为候选，发布时整体换回。
     /// 服务端私有，不进世界快照与玩家投影。
     pub(crate) mod_states: BTreeMap<String, serde_json::Value>,
@@ -294,6 +297,24 @@ pub struct Engine {
     /// 结算分段诊断开关（构造时按 KK_SETTLE_DIAG 环境变量定格，见 diag 模块）。
     pub(crate) settle_diag_on: bool,
     pub(crate) settle_diag_samples: Vec<diag::TickDiag>,
+    /// 逐房并行结算的工数覆盖（None=自适应；Some(0/1)=强制串行）。
+    /// 见 settle::pipeline 的 settle_workers_effective。
+    settle_workers_override: Option<usize>,
+    /// 最近一次成功结算的房间循环是否并行（测试探针）。
+    pub(crate) last_rooms_parallel: bool,
+    /// 本引擎登记的宿主执行器句柄守卫（drop 自动退役，防止泄漏已销毁
+    /// 的 V8 realm；换装时整体替换即触发旧句柄退役）。
+    pub(crate) hosted_registry_ids: HostedRegistryGuard,
+}
+
+/// 宿主执行器登记守卫：随引擎销毁自动退役句柄。realm 生命周期跟随
+/// 引擎，泄漏登记会让已销毁引擎的 V8 realm 保持存活并破坏后续 realm
+/// 的句柄作用域（冷重启测试复现过 HandleScope 崩溃）。
+pub(crate) struct HostedRegistryGuard(Vec<u64>);
+impl Drop for HostedRegistryGuard {
+    fn drop(&mut self) {
+        contrib::retire_hosted_executors(self.0.drain(..));
+    }
 }
 
 /// 内置 link 与仓库容量的冻结计划；无 Mod 引擎的默认贡献平面。
@@ -344,16 +365,19 @@ impl Engine {
             combat: kk_world::place::builtin_combat_ranges(),
             move_gate: kk_world::place::builtin_move_gate(),
             static_passability: kk_mod_api::builtin::StaticPassability::default(),
-            quotas: Rc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
-            resources: Rc::new(kk_mod_api::resources::ResourceCatalog::default()),
-            buildings: Rc::new(kk_mod_api::buildings::BuildingCatalog::default()),
-            contrib: Rc::new(contrib::ContributionDispatch::default()),
-            extensions: Rc::new(kk_mod_api::extension::ExtensionCatalog::default()),
+            quotas: Arc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
+            resources: Arc::new(kk_mod_api::resources::ResourceCatalog::default()),
+            buildings: Arc::new(kk_mod_api::buildings::BuildingCatalog::default()),
+            contrib: Arc::new(contrib::ContributionDispatch::default()),
+            extensions: Arc::new(kk_mod_api::extension::ExtensionCatalog::default()),
             mod_states: BTreeMap::new(),
             plan: builtin_plan(),
             room_settled_hook: None,
             settle_diag_on,
             settle_diag_samples: Vec::new(),
+            settle_workers_override: None,
+            last_rooms_parallel: false,
+            hosted_registry_ids: HostedRegistryGuard(Vec::new()),
         }
     }
 
@@ -384,6 +408,16 @@ impl Engine {
 
     /// 设置处理器随机源（tick({random}) 注入期间生效；调用方负责在调用
     /// 结束后——无论成败——复位为 Derived）。
+    /// 覆盖逐房并行结算工数（Some(0/1) 强制串行）；诊断与对照实验用。
+    pub fn set_settle_workers(&mut self, workers: Option<usize>) {
+        self.settle_workers_override = workers;
+    }
+
+    /// 最近一次结算的房间循环是否走了并行路径（测试探针）。
+    pub fn rooms_settled_in_parallel_for_test(&self) -> bool {
+        self.last_rooms_parallel
+    }
+
     pub fn set_processor_random(&mut self, random: ProcessorRandom) {
         self.processor_random = random;
     }

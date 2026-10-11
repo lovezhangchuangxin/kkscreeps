@@ -69,7 +69,7 @@ pub fn settle_power(
             match intent {
                 PowerIntent::SpawnPowerCreep { power_spawn, name } => {
                     let snapshot = {
-                        let shared = state.inner.borrow();
+                        let shared = state.inner.lock().expect("共享候选锁");
                         shared.players.get(player).cloned().unwrap_or_default()
                     };
                     spawn_power_creep(
@@ -98,12 +98,12 @@ pub fn settle_power(
                     }
                 }
                 PowerIntent::DeletePowerCreep { id, cancel } => {
-                    let mut shared = state.inner.borrow_mut();
+                    let mut shared = state.inner.lock().expect("共享候选锁");
                     delete_power_creep(&mut shared.players, player, *id, *cancel, now_ms);
                 }
                 PowerIntent::UpgradePowerCreep { id, power } => {
                     let snapshot = {
-                        let shared = state.inner.borrow();
+                        let shared = state.inner.lock().expect("共享候选锁");
                         shared.players.get(player).cloned().unwrap_or_default()
                     };
                     upgrade_power_creep(rooms, state, player, &snapshot, *id, *power);
@@ -112,7 +112,7 @@ pub fn settle_power(
                     create_power_creep(state, player, name, class_name)?;
                 }
                 PowerIntent::RenamePowerCreep { id, name } => {
-                    let mut shared = state.inner.borrow_mut();
+                    let mut shared = state.inner.lock().expect("共享候选锁");
                     rename_power_creep(&mut shared.players, player, *id, name);
                 }
             }
@@ -122,7 +122,7 @@ pub fn settle_power(
     // 全局阶段每 tick 检查，时点更及时）：删记录并按 GPL 插值降账号
     // power——把当前段进度比例折算到 (level-1, level) 段。
     let expired: Vec<(String, u64)> = {
-        let shared = state.inner.borrow();
+        let shared = state.inner.lock().expect("共享候选锁");
         shared
             .players
             .iter()
@@ -137,7 +137,7 @@ pub fn settle_power(
             .collect()
     };
     if !expired.is_empty() {
-        let mut shared = state.inner.borrow_mut();
+        let mut shared = state.inner.lock().expect("共享候选锁");
         for (player, id) in expired {
             let Some(p) = shared.players.get_mut(&player) else {
                 continue;
@@ -227,7 +227,14 @@ fn create_power_creep(
     name: &str,
     class_name: &str,
 ) -> Result<(), SettleError> {
-    let Some(mut p) = state.inner.borrow().players.get(player).cloned() else {
+    let Some(mut p) = state
+        .inner
+        .lock()
+        .expect("共享候选锁")
+        .players
+        .get(player)
+        .cloned()
+    else {
         return Ok(());
     };
     if used_levels(&p) >= gpl_level(p.power) {
@@ -256,7 +263,8 @@ fn create_power_creep(
     );
     state
         .inner
-        .borrow_mut()
+        .lock()
+        .expect("共享候选锁")
         .players
         .insert(player.to_string(), p);
     Ok(())
@@ -365,7 +373,7 @@ fn upgrade_power_creep(
         )
     };
     let (level, hits_max, store_capacity, power_level) = new_state;
-    let mut shared = state.inner.borrow_mut();
+    let mut shared = state.inner.lock().expect("共享候选锁");
     if let Some(p) = shared.players.get_mut(player)
         && let Some(record) = p.power_creeps.get_mut(&id.0)
     {
@@ -449,7 +457,12 @@ fn spawn_power_creep(
     if !record.spawn_cooldown_time.is_some_and(|t| t <= now_ms) {
         return;
     }
-    if let Some(p) = state.inner.borrow_mut().players.get_mut(player)
+    if let Some(p) = state
+        .inner
+        .lock()
+        .expect("共享候选锁")
+        .players
+        .get_mut(player)
         && let Some(r) = p.power_creeps.get_mut(&id)
     {
         r.spawn_cooldown_time = None;
@@ -613,7 +626,12 @@ fn die_power_creep(
             store_extra,
         }),
     );
-    if let Some(p) = state.inner.borrow_mut().players.get_mut(player)
+    if let Some(p) = state
+        .inner
+        .lock()
+        .expect("共享候选锁")
+        .players
+        .get_mut(player)
         && let Some(record) = p.power_creeps.get_mut(&id.0)
     {
         record.spawn_cooldown_time = Some(now_ms + c::POWER_CREEP_SPAWN_COOLDOWN as u64);

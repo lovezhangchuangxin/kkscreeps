@@ -66,7 +66,9 @@ impl ActionSlot {
                         }
                     }
                 };
-                let outcome = slot.executor.run(
+                let executor = super::hosted_executor(slot.executor)?;
+
+                let outcome = executor.run(
                     &slot.plan,
                     ctx,
                     SlotCall::Action {
@@ -123,17 +125,19 @@ impl TickSlot {
     pub(super) fn run(&self, ctx: &RoomCtx, id: ObjId) -> Result<(), String> {
         match self {
             TickSlot::Native(f) => native_tick(*f)(ctx, id),
-            TickSlot::Hosted(slot) => slot
-                .executor
-                .run(
-                    &slot.plan,
-                    ctx,
-                    SlotCall::Tick {
-                        id,
-                        native: crate::settle::economy::link_cooldown_tick,
-                    },
-                )
-                .and_then(require_completed),
+            TickSlot::Hosted(slot) => {
+                let executor = super::hosted_executor(slot.executor)?;
+                executor
+                    .run(
+                        &slot.plan,
+                        ctx,
+                        SlotCall::Tick {
+                            id,
+                            native: crate::settle::economy::link_cooldown_tick,
+                        },
+                    )
+                    .and_then(require_completed)
+            }
             TickSlot::Chained(chain) => {
                 for f in &chain.before {
                     f(ctx, id)?;
@@ -152,8 +156,8 @@ impl TickSlot {
 
 /// wraps[0] 最外层，中心最内；从中心向外逐层装箱。
 fn run_wrapped(
-    wraps: &[Rc<ActionWrap>],
-    center: &Rc<ActionCenter>,
+    wraps: &[Arc<ActionWrap>],
+    center: &Arc<ActionCenter>,
     ctx: &RoomCtx,
     id: ObjId,
     d: &IntentData,
@@ -175,7 +179,7 @@ fn run_wrapped(
 }
 
 fn run_center(
-    center: &Rc<ActionCenter>,
+    center: &Arc<ActionCenter>,
     ctx: &RoomCtx,
     id: ObjId,
     d: &IntentData,
@@ -186,7 +190,7 @@ fn run_center(
     }
 }
 
-fn run_tick_center(center: &Rc<TickCenter>, ctx: &RoomCtx, id: ObjId) -> Result<(), String> {
+fn run_tick_center(center: &Arc<TickCenter>, ctx: &RoomCtx, id: ObjId) -> Result<(), String> {
     match &**center {
         TickCenter::Native(f) => native_tick(*f)(ctx, id),
         TickCenter::Custom(f) => f(ctx, id),
@@ -194,7 +198,7 @@ fn run_tick_center(center: &Rc<TickCenter>, ctx: &RoomCtx, id: ObjId) -> Result<
 }
 
 /// 递归装箱内层链；每层 wrap 通过 [`Next`] 恰好调用一次内层。
-fn box_inner<'a>(wraps: &'a [Rc<ActionWrap>], center: &'a Rc<ActionCenter>) -> ActionChain<'a> {
+fn box_inner<'a>(wraps: &'a [Arc<ActionWrap>], center: &'a Arc<ActionCenter>) -> ActionChain<'a> {
     let Some((outer, rest)) = wraps.split_first() else {
         return Box::new(move |ctx: &RoomCtx, id: ObjId, d: &IntentData| {
             run_center(center, ctx, id, d)
@@ -218,8 +222,8 @@ fn box_inner<'a>(wraps: &'a [Rc<ActionWrap>], center: &'a Rc<ActionCenter>) -> A
 }
 
 fn run_tick_wrapped(
-    wraps: &[Rc<TickWrap>],
-    center: &Rc<TickCenter>,
+    wraps: &[Arc<TickWrap>],
+    center: &Arc<TickCenter>,
     ctx: &RoomCtx,
     id: ObjId,
 ) -> Result<(), String> {
@@ -239,7 +243,7 @@ fn run_tick_wrapped(
     }
 }
 
-fn box_tick_inner<'a>(wraps: &'a [Rc<TickWrap>], center: &'a Rc<TickCenter>) -> TickChain<'a> {
+fn box_tick_inner<'a>(wraps: &'a [Arc<TickWrap>], center: &'a Arc<TickCenter>) -> TickChain<'a> {
     let Some((outer, rest)) = wraps.split_first() else {
         return Box::new(move |ctx: &RoomCtx, id: ObjId| run_tick_center(center, ctx, id));
     };

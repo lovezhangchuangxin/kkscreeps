@@ -7,6 +7,8 @@ use crate::settle::{
     settle_room,
 };
 use kk_schema::room::RoomObject;
+use kk_world::ObjId;
+use kk_world::RoomState;
 use std::collections::BTreeMap;
 
 impl Engine {
@@ -41,7 +43,7 @@ impl Engine {
             nukes::settle_launches(&mut txn.rooms, &txn.state, txn.time, txn.input.now_ms)?;
             diag.nukes_ns = t_stage.elapsed().as_nanos();
             let t_stage = std::time::Instant::now();
-            let mut state = txn.state.inner.borrow_mut();
+            let mut state = txn.state.inner.lock().expect("共享候选锁");
             market::settle_market(
                 &mut txn.rooms,
                 &mut state.players,
@@ -70,7 +72,7 @@ impl Engine {
         cursor.enter(TickStage::Validate)?;
         {
             let t_stage = std::time::Instant::now();
-            let mut state = txn.state.inner.borrow_mut();
+            let mut state = txn.state.inner.lock().expect("共享候选锁");
             for (handle, patch) in writebacks {
                 let player = state.players.get_mut(&handle).ok_or_else(|| {
                     SettleError(format!("玩家写回候选不属于已注册玩家：{handle}"))
@@ -94,6 +96,7 @@ impl Engine {
         self.run_state = RunState::Prepared { tick: time };
         cursor.enter(TickStage::Publish)?;
         self.publish_tick(prepared, input.warmup, &mut diag)?;
+        self.last_rooms_parallel = diag.parallel;
         self.record_settle_diag(diag);
         Ok(())
     }
@@ -150,15 +153,76 @@ impl Engine {
     }
 
     /// 按房名结算副本，共用候选玩家与 ID 游标；任一房间失败均不写回。
+    /// 满足资格（工数 ≥2、随机源为派生、无 claim 意图）时先尝试逐房并行；
+    /// 并行段触碰依赖房序的共享路径（ID 分配/claim 读候选）即恢复共享态
+    /// 并走串行重做，语义与纯串行完全一致（R09-lite，B0 形态先行）。
     pub(super) fn settle_rooms_stage(
         &self,
         txn: &mut txn::OwnedTickTxn,
         diag: &mut TickDiag,
     ) -> Result<(), SettleError> {
+        let workers = self.settle_workers_effective(txn.room_names.len());
+        let (inter_room_moves, fresh_age) = if workers >= 2
+            && matches!(txn.state.random, crate::settle::ProcessorRandom::Derived)
+            && !self.contrib.any_hosted()
+            && !batch_has_claim_intents(&txn.batch)
+            && let Some(collections) = self.settle_rooms_parallel(txn, diag, workers)?
+        {
+            collections
+        } else {
+            diag.parallel = false;
+            self.settle_rooms_serial(txn, diag)?
+        };
+        self.apply_inter_room_tail(txn, diag, inter_room_moves, fresh_age)
+    }
+
+    /// 逐房并行结算的房间循环尾部之外的全局段：portal 收集与跨房移动
+    /// 应用（两条路径共用）。
+    fn apply_inter_room_tail(
+        &self,
+        txn: &mut txn::OwnedTickTxn,
+        diag: &mut TickDiag,
+        mut inter_room_moves: Vec<inter_room::InterRoomMove>,
+        fresh_age: std::collections::BTreeSet<ObjId>,
+    ) -> Result<(), SettleError> {
+        // portal 传送先于边缘过渡收集应用（官方两段式同 tick：creep tick
+        // 的 portal 标记覆盖 edge 标记——既在边缘格又在 portal 格的对象只
+        // 走传送；目的房未注册或 closed 时对象保持原位逐拍重试）。fresh_age
+        // 是本拍刚初始化寿命的 creep，官方门在其补设前求值故当拍豁免。
+        let t_tail = std::time::Instant::now();
+        let portal_moves =
+            portals::collect_portal_transports(&txn.rooms, &fresh_age, txn.input.now_ms);
+        let portal_ids: std::collections::BTreeSet<_> =
+            portal_moves.iter().map(|mv| mv.id).collect();
+        inter_room_moves.retain(|mv| !portal_ids.contains(&mv.id));
+        diag.portal_moves = portal_moves.len() as u64;
+        diag.interroom_moves = inter_room_moves.len() as u64;
+        inter_room::apply_inter_room_moves(&mut txn.rooms, &portal_moves, txn.input.now_ms);
+        // 跨房过渡随后应用到候选：到达对象不参与目的房本 tick 的结算
+        //（其对象 tick 已在来源房执行），发布后对下一轮可见。
+        inter_room::apply_inter_room_moves(&mut txn.rooms, &inter_room_moves, txn.input.now_ms);
+        diag.interroom_ns += t_tail.elapsed().as_nanos();
+        Ok(())
+    }
+
+    /// 原串行逐房结算：按世界目录房序克隆、结算并收集跨房移动；也是
+    /// 并行尝试触发串行回退时的重做路径。Plane 在循环外构建一次（房集
+    /// 在整轮结算内不变）。
+    fn settle_rooms_serial(
+        &self,
+        txn: &mut txn::OwnedTickTxn,
+        diag: &mut TickDiag,
+    ) -> Result<
+        (
+            Vec<inter_room::InterRoomMove>,
+            std::collections::BTreeSet<ObjId>,
+        ),
+        SettleError,
+    > {
         let mut inter_room_moves = Vec::new();
         let mut fresh_age = std::collections::BTreeSet::new();
-        // 世界房集在整轮结算内不变：span 只求一次，逐房 Plane 复用。
         let world_span = market::world_span(self.world.rooms().keys().map(String::as_str));
+        let plane = self.tick_plane(world_span);
         for name in &txn.room_names {
             if self.fail_room.as_deref() == Some(name.as_str()) {
                 return Err(SettleError(format!("故障注入：房间 {name} 结算失败")));
@@ -168,20 +232,6 @@ impl Engine {
             // 二进制房间快照不保存房名；结算指令按世界目录中的名称匹配。
             room.name.clone_from(name);
             diag.clone_ns += t_room.elapsed().as_nanos();
-            let plane = Plane {
-                links: self.links,
-                stores: self.stores,
-                combat: self.combat,
-                move_gate: self.move_gate,
-                static_passability: self.static_passability,
-                quotas: self.quotas.clone(),
-                resources: self.resources.clone(),
-                buildings: self.buildings.clone(),
-                contrib: self.contrib.clone(),
-                extensions: self.extensions.clone(),
-                world_span,
-                plan: self.plan.clone(),
-            };
             let t_settle = std::time::Instant::now();
             let SettledRoom {
                 room,
@@ -211,24 +261,167 @@ impl Engine {
                 txn.action_log.insert(name.clone(), action_log);
             }
         }
-        // portal 传送先于边缘过渡收集应用（官方两段式同 tick：creep tick
-        // 的 portal 标记覆盖 edge 标记——既在边缘格又在 portal 格的对象只
-        // 走传送；目的房未注册或 closed 时对象保持原位逐拍重试）。fresh_age
-        // 是本拍刚初始化寿命的 creep，官方门在其补设前求值故当拍豁免。
-        let t_tail = std::time::Instant::now();
-        let portal_moves =
-            portals::collect_portal_transports(&txn.rooms, &fresh_age, txn.input.now_ms);
-        let portal_ids: std::collections::BTreeSet<_> =
-            portal_moves.iter().map(|mv| mv.id).collect();
-        inter_room_moves.retain(|mv| !portal_ids.contains(&mv.id));
-        diag.portal_moves = portal_moves.len() as u64;
-        diag.interroom_moves = inter_room_moves.len() as u64;
-        inter_room::apply_inter_room_moves(&mut txn.rooms, &portal_moves, txn.input.now_ms);
-        // 跨房过渡随后应用到候选：到达对象不参与目的房本 tick 的结算
-        //（其对象 tick 已在来源房执行），发布后对下一轮可见。
-        inter_room::apply_inter_room_moves(&mut txn.rooms, &inter_room_moves, txn.input.now_ms);
-        diag.interroom_ns += t_tail.elapsed().as_nanos();
-        Ok(())
+        Ok((inter_room_moves, fresh_age))
+    }
+
+    /// 并行逐房结算尝试。Some 表示产物已按房序写入 txn 并返回跨房收集；
+    /// None 表示触发串行回退（共享态耦合量已恢复、房间产物已丢弃，调用
+    /// 方走串行重做）。Err 为确定性失败：取最低房序错误，与串行首失败
+    /// 同消息（候选由调用方整体丢弃）。
+    ///
+    /// 确定性依据（取证见 50x6-settle-phase-diag）：房间循环的跨房耦合仅
+    /// ID 分配、claim 读候选与 gcl/power 交换律累加——前两者触发串行
+    /// 回退，后者求和与顺序无关；事件按房序归并、跨房移动后置应用。
+    fn settle_rooms_parallel(
+        &self,
+        txn: &mut txn::OwnedTickTxn,
+        diag: &mut TickDiag,
+        workers: usize,
+    ) -> Result<Option<RoomCollections>, SettleError> {
+        let diag_entry = (diag.clone_ns, diag.settle_ns, diag.hook_ns);
+        let snapshot = txn.state.coupling_snapshot();
+        let hook = self.room_settled_hook.clone();
+        let fail_room = self.fail_room.clone();
+        let time = txn.time;
+        let now_ms = txn.input.now_ms;
+        // 主线程克隆房候选：World 非 Sync，克隆留在主线程（计时归 clone 段）。
+        let mut owned: Vec<RoomState> = Vec::with_capacity(txn.room_names.len());
+        for name in &txn.room_names {
+            if fail_room.as_deref() == Some(name.as_str()) {
+                return Err(SettleError(format!("故障注入：房间 {name} 结算失败")));
+            }
+            let t_room = std::time::Instant::now();
+            let mut room = self.world.room(name).expect("房间名来自键集").clone();
+            room.name.clone_from(name);
+            diag.clone_ns += t_room.elapsed().as_nanos();
+            owned.push(room);
+        }
+        // 连续块分片（归并时块序拼接即房序，免排序）。
+        let chunk = owned.len().div_ceil(workers);
+        let mut worker_inputs: Vec<Vec<RoomState>> = Vec::with_capacity(workers);
+        let mut rooms = std::mem::take(&mut owned);
+        while !rooms.is_empty() {
+            let take = chunk.min(rooms.len());
+            worker_inputs.push(rooms.drain(..take).collect());
+        }
+        struct Outcome {
+            settled: Result<SettledRoom, SettleError>,
+        }
+        let mut outcomes: Vec<Outcome> = Vec::with_capacity(txn.room_names.len());
+        let plane = self.tick_plane(market::world_span(
+            self.world.rooms().keys().map(String::as_str),
+        ));
+        let state = txn.state.clone();
+        let batch = &txn.batch;
+        std::thread::scope(|scope| {
+            let mut handles = Vec::with_capacity(worker_inputs.len());
+            for input in worker_inputs {
+                let state = &state;
+                let batch = &*batch;
+                let plane = &plane;
+                let hook = hook.as_deref();
+                handles.push(scope.spawn(move || {
+                    let mut out = Vec::with_capacity(input.len());
+                    let (mut settle_ns, mut hook_ns) = (0u128, 0u128);
+                    for room in input {
+                        let t = std::time::Instant::now();
+                        let settled = settle_room(room, time, now_ms, state, batch, plane);
+                        settle_ns += t.elapsed().as_nanos();
+                        if let Ok(sr) = &settled
+                            && let Some(hook) = hook
+                        {
+                            let t = std::time::Instant::now();
+                            hook(&sr.room.name, &sr.room);
+                            hook_ns += t.elapsed().as_nanos();
+                        }
+                        out.push(Outcome { settled });
+                    }
+                    (out, settle_ns, hook_ns)
+                }));
+            }
+            for handle in handles {
+                let (out, settle_ns, hook_ns) = handle.join().expect("结算工作线程 panic");
+                diag.settle_ns += settle_ns;
+                diag.hook_ns += hook_ns;
+                outcomes.extend(out);
+            }
+        });
+        debug_assert_eq!(
+            outcomes.len(),
+            txn.room_names.len(),
+            "连续块分片拼接必为房序全覆盖"
+        );
+        let mut inter_room_moves = Vec::new();
+        let mut fresh_age = std::collections::BTreeSet::new();
+        for (name, outcome) in txn.room_names.iter().zip(outcomes) {
+            let SettledRoom {
+                room,
+                events: mut room_events,
+                inter_room: mut moves,
+                fresh_age: mut fresh,
+                action_log,
+            } = outcome.settled?;
+            inter_room_moves.append(&mut moves);
+            fresh_age.append(&mut fresh);
+            txn.rooms.push((name.clone(), room));
+            txn.events.append(&mut room_events);
+            if !action_log.is_empty() {
+                txn.action_log.insert(name.clone(), action_log);
+            }
+        }
+        // 串行回退检查：并行段触碰了依赖房序的共享路径。恢复共享态耦合量
+        // 并丢弃房间产物；本拍分段计时回退到并行尝试前（串行重做重新累计）。
+        if txn.state.take_serial_only() {
+            diag.parallel = false;
+            txn.state.restore_coupling(snapshot);
+            txn.rooms.clear();
+            txn.events.clear();
+            txn.action_log.clear();
+            (diag.clone_ns, diag.settle_ns, diag.hook_ns) = diag_entry;
+            return Ok(None);
+        }
+        diag.parallel = true;
+        Ok(Some((inter_room_moves, fresh_age)))
+    }
+
+    /// 本轮逐房结算的规则平面（房集在整轮结算内不变）。
+    fn tick_plane(&self, world_span: i64) -> Plane {
+        Plane {
+            links: self.links,
+            stores: self.stores,
+            combat: self.combat,
+            move_gate: self.move_gate,
+            static_passability: self.static_passability,
+            quotas: self.quotas.clone(),
+            resources: self.resources.clone(),
+            buildings: self.buildings.clone(),
+            contrib: self.contrib.clone(),
+            extensions: self.extensions.clone(),
+            world_span,
+            plan: self.plan.clone(),
+        }
+    }
+
+    /// 逐房并行结算的有效工数：环境覆盖（KK_SETTLE_WORKERS，0/1=强制串行）
+    /// > 引擎覆盖（set_settle_workers）> 按房数自适应 min(4, rooms/16)。
+    fn settle_workers_effective(&self, rooms: usize) -> usize {
+        static ENV: std::sync::OnceLock<Option<usize>> = std::sync::OnceLock::new();
+        if let Some(n) = ENV.get_or_init(|| {
+            std::env::var("KK_SETTLE_WORKERS")
+                .ok()
+                .and_then(|v| v.trim().parse::<usize>().ok())
+        }) {
+            return *n;
+        }
+        if let Some(n) = self.settle_workers_override {
+            return n;
+        }
+        // 核数感知：并行结算以 CPU 换墙钟，小核机器（如 2 核轻量服务器）
+        // 不值得——为预编码线程与主线程保留产能后取可用工数。
+        let cores = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
+        std::cmp::min(4, std::cmp::min(rooms / 16, cores.saturating_sub(3).max(1)))
     }
 
     /// 将已校验候选发布到世界；World 在写入前检查所有可失败条件，
@@ -252,4 +445,21 @@ impl Engine {
         self.last_action_log = prepared.action_log;
         Ok(())
     }
+}
+
+/// 逐房结算的跨房收集（串行/并行两路径共用的返回形态）。
+type RoomCollections = (
+    Vec<inter_room::InterRoomMove>,
+    std::collections::BTreeSet<ObjId>,
+);
+
+/// 批内是否携带 claimController 意图：claim 读候选 gcl 的语义依赖房序
+///（同拍他房累加后占领门槛），携带即整拍走串行。频率上接近零
+///（仅在占领新房时出现）。
+fn batch_has_claim_intents(batch: &IntentBatch) -> bool {
+    batch.users.values().any(|user| {
+        user.objects
+            .values()
+            .any(|actions| actions.contains_key(&crate::intent::Action::ClaimController))
+    })
 }

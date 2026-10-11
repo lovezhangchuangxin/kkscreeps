@@ -525,12 +525,16 @@ pub fn mineral_tick(w: &mut Working, id: ObjId) -> Result<(), super::SettleError
         let mut rng = MineralRng::new(&w.room.name, id, w.time);
         let draw = |rng: &mut MineralRng| -> Result<f64, super::SettleError> {
             match &next_random {
-                Some(seq) => seq.borrow_mut().pop_front().ok_or_else(|| {
-                    super::SettleError(
+                Some(seq) => seq
+                    .lock()
+                    .expect("处理器随机队列锁")
+                    .pop_front()
+                    .ok_or_else(|| {
+                        super::SettleError(
                         "tick options.random 注入序列 exhausted：处理器随机调用次数超出注入值数"
                             .into(),
                     )
-                }),
+                    }),
                 None => Ok(rng.next_f64()),
             }
         };

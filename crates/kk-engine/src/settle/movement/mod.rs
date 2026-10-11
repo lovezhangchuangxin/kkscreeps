@@ -59,7 +59,7 @@ pub struct Movement {
     registration_blocks: BTreeSet<ObjId>,
     /// 静态放行只作用于同一请求；动态占格仍在取消链中即时复核。
     static_allowed: BTreeSet<ObjId>,
-    buildings: std::rc::Rc<kk_mod_api::buildings::BuildingCatalog>,
+    buildings: std::sync::Arc<kk_mod_api::buildings::BuildingCatalog>,
     /// 计划级静态通行快照；登记、仲裁/预演与默认寻路同源。
     /// 墙项只在仲裁消费，静态对象项同时用于登记。
     static_passability: kk_mod_api::builtin::StaticPassability,
@@ -111,7 +111,7 @@ impl Movement {
 
     /// 携带建筑目录与静态通行声明构造；仲裁期按它们扩展障碍判定。
     pub fn with_buildings(
-        buildings: std::rc::Rc<kk_mod_api::buildings::BuildingCatalog>,
+        buildings: std::sync::Arc<kk_mod_api::buildings::BuildingCatalog>,
         static_passability: kk_mod_api::builtin::StaticPassability,
     ) -> Self {
         Self {

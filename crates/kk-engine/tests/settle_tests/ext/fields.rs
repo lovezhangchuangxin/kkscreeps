@@ -197,12 +197,12 @@ fn extension_projection_applies_visibility() {
             stores: kk_world::place::builtin_store_rules(),
             combat: kk_world::place::builtin_combat_ranges(),
             move_gate: Default::default(),
-            quotas: std::rc::Rc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
+            quotas: std::sync::Arc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
             static_passability: Default::default(),
             buildings: Default::default(),
             resources: Default::default(),
-            contrib: std::rc::Rc::new(dispatch),
-            extensions: std::rc::Rc::new(catalog.clone()),
+            contrib: std::sync::Arc::new(dispatch),
+            extensions: std::sync::Arc::new(catalog.clone()),
             plan: plan.clone(),
         },
     );
@@ -326,11 +326,11 @@ fn extension_write_validates_against_catalog() {
                 stores: kk_world::place::builtin_store_rules(),
                 combat: kk_world::place::builtin_combat_ranges(),
                 move_gate: Default::default(),
-                quotas: std::rc::Rc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
+                quotas: std::sync::Arc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
                 static_passability: Default::default(),
                 resources: Default::default(),
-                contrib: std::rc::Rc::new(dispatch),
-                extensions: std::rc::Rc::new(catalog.clone()),
+                contrib: std::sync::Arc::new(dispatch),
+                extensions: std::sync::Arc::new(catalog.clone()),
                 plan: plan.clone(),
             },
         );
@@ -429,7 +429,7 @@ fn dangling_extension_reference_reconciles_on_publish() {
     handlers.insert(
         key("extmod:lifecycle"),
         ActionHandler::Wrap(Box::new(move |ctx, id, d, next| {
-            if ctx.borrow().time == 0 {
+            if ctx.borrow_mut().time == 0 {
                 // 第一轮：写指向 b 的合法引用并执行默认转移。
                 ctx.borrow_mut()
                     .set_extension(id, "extmod:target", json!(b.as_str()))?;
@@ -508,11 +508,11 @@ fn object_removal_clears_extensions_and_raw_writes_are_rejected() {
             stores: kk_world::place::builtin_store_rules(),
             combat: kk_world::place::builtin_combat_ranges(),
             move_gate: Default::default(),
-            quotas: std::rc::Rc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
+            quotas: std::sync::Arc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
             static_passability: Default::default(),
             resources: Default::default(),
-            contrib: std::rc::Rc::new(dispatch),
-            extensions: std::rc::Rc::new(catalog.clone()),
+            contrib: std::sync::Arc::new(dispatch),
+            extensions: std::sync::Arc::new(catalog.clone()),
             plan: plan.clone(),
         },
     );

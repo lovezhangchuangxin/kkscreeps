@@ -8,8 +8,10 @@
 //! 处理器键与实现由装配调用方提供；native 键固定指向内建实现。
 //! 本执行器不捕获 panic，也不提供跨线程共享；候选仍由引擎统一回滚。
 
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
+use std::sync::Arc;
 
 use kk_mod_api::{ContributionPlan, Dispatch, Key, SlotOutcome, SlotPlan};
 use kk_schema::room::RoomObject;
@@ -92,15 +94,17 @@ type TickChain<'a> = Box<dyn FnMut(&RoomCtx, ObjId) -> Result<(), String> + 'a>;
 /// 处理器收 `&RoomCtx` 而非 `&mut Working`：处理器自行管理短借用——
 /// 处理器自己取短借用，需要进入 JS 或调用 `next()` 时先释放，
 /// 内层链才能重新借用同一候选。
-type ActionSimple = Box<dyn Fn(&RoomCtx, ObjId, &IntentData) -> Result<(), String>>;
-type ActionWrap = Box<dyn Fn(&RoomCtx, ObjId, &IntentData, &mut Next<'_>) -> Result<(), String>>;
-type TickSimple = Box<dyn Fn(&RoomCtx, ObjId) -> Result<(), String>>;
-type TickWrap = Box<dyn Fn(&RoomCtx, ObjId, &mut TickNext<'_>) -> Result<(), String>>;
+type ActionSimple = Box<dyn Fn(&RoomCtx, ObjId, &IntentData) -> Result<(), String> + Send + Sync>;
+type ActionWrap =
+    Box<dyn Fn(&RoomCtx, ObjId, &IntentData, &mut Next<'_>) -> Result<(), String> + Send + Sync>;
+type TickSimple = Box<dyn Fn(&RoomCtx, ObjId) -> Result<(), String> + Send + Sync>;
+type TickWrap = Box<dyn Fn(&RoomCtx, ObjId, &mut TickNext<'_>) -> Result<(), String> + Send + Sync>;
 /// 自有槽的处理器签名：动作 args 已按 schema 校验，生命周期为 null；
 /// 目标对象读写由实现方经 Working 完成。
-pub type ExtSimple = Box<dyn Fn(&RoomCtx, ObjId, &Value) -> Result<(), String>>;
+pub type ExtSimple = Box<dyn Fn(&RoomCtx, ObjId, &Value) -> Result<(), String> + Send + Sync>;
 /// 自有槽的 wrap 处理器：`next` 续行到剩余 wrap 与中心。
-pub type ExtWrap = Box<dyn Fn(&RoomCtx, ObjId, &Value, &mut ExtNext<'_>) -> Result<(), String>>;
+pub type ExtWrap =
+    Box<dyn Fn(&RoomCtx, ObjId, &Value, &mut ExtNext<'_>) -> Result<(), String> + Send + Sync>;
 
 /// 把内建 native 中心适配成处理器形态：取一次短借用后调用。
 /// native 中心不回入 JS，单次借用安全。
@@ -170,9 +174,9 @@ type ExtInnerChain<'a> = Box<dyn FnMut(&RoomCtx, ObjId, &Value) -> Result<(), St
 
 /// 扩展槽 wrap 链：wraps[0] 最外层，中心最内；after 仅在内层成功后执行。
 fn run_ext_wrapped(
-    wraps: &[Rc<ExtWrap>],
-    center: &Rc<ExtSimple>,
-    after: &[Rc<ExtSimple>],
+    wraps: &[Arc<ExtWrap>],
+    center: &Arc<ExtSimple>,
+    after: &[Arc<ExtSimple>],
     ctx: &RoomCtx,
     id: ObjId,
     args: &Value,
@@ -186,7 +190,7 @@ fn run_ext_wrapped(
     result
 }
 
-fn box_ext_inner<'a>(wraps: &'a [Rc<ExtWrap>], center: &'a Rc<ExtSimple>) -> ExtInnerChain<'a> {
+fn box_ext_inner<'a>(wraps: &'a [Arc<ExtWrap>], center: &'a Arc<ExtSimple>) -> ExtInnerChain<'a> {
     let Some((outer, rest)) = wraps.split_first() else {
         return Box::new(move |ctx, id, args| (center)(ctx, id, args));
     };
@@ -240,17 +244,17 @@ impl ExtHandler {
 ///
 /// 载荷经 `Rc` 共享，与内建槽同一形态。
 enum ExtSlot {
-    Process(Rc<ExtSimple>),
-    Chained(Rc<ExtChained>),
+    Process(Arc<ExtSimple>),
+    Chained(Arc<ExtChained>),
     Hosted(HostedSlot),
 }
 
 struct ExtChained {
-    before: Vec<Rc<ExtSimple>>,
-    wraps: Vec<Rc<ExtWrap>>,
-    center: Rc<ExtSimple>,
+    before: Vec<Arc<ExtSimple>>,
+    wraps: Vec<Arc<ExtWrap>>,
+    center: Arc<ExtSimple>,
     /// 冻结时已按依赖逆序；执行器顺序调用，不再次反转。
-    after: Vec<Rc<ExtSimple>>,
+    after: Vec<Arc<ExtSimple>>,
 }
 
 impl ExtSlot {
@@ -258,8 +262,8 @@ impl ExtSlot {
         match self {
             ExtSlot::Process(f) => f(ctx, id, args).map(|()| SlotOutcome::Completed),
             ExtSlot::Hosted(slot) => {
-                slot.executor
-                    .run(&slot.plan, ctx, SlotCall::Extension { id, args })
+                let executor = hosted_executor(slot.executor)?;
+                executor.run(&slot.plan, ctx, SlotCall::Extension { id, args })
             }
             ExtSlot::Chained(chain) => {
                 for f in &chain.before {
@@ -275,22 +279,22 @@ impl ExtSlot {
 /// 一个槽的已装配 Rust 执行计划；载荷经 `Rc` 共享。
 struct ActionChained {
     before: Vec<ActionSimple>,
-    wraps: Vec<Rc<ActionWrap>>,
-    center: Rc<ActionCenter>,
+    wraps: Vec<Arc<ActionWrap>>,
+    center: Arc<ActionCenter>,
     /// 冻结时已按依赖逆序；执行器必须顺序调用，不能再次反转。
     after: Vec<ActionSimple>,
 }
 
 struct TickChained {
     before: Vec<TickSimple>,
-    wraps: Vec<Rc<TickWrap>>,
-    center: Rc<TickCenter>,
+    wraps: Vec<Arc<TickWrap>>,
+    center: Arc<TickCenter>,
     after: Vec<TickSimple>,
 }
 
 enum ActionSlot {
     Native(fn(&mut Working, ObjId, &IntentData)),
-    Chained(Rc<ActionChained>),
+    Chained(Arc<ActionChained>),
     Hosted {
         slot: HostedSlot,
         native: fn(&mut Working, ObjId, &IntentData),
@@ -299,7 +303,7 @@ enum ActionSlot {
 
 enum TickSlot {
     Native(fn(&mut Working, ObjId)),
-    Chained(Rc<TickChained>),
+    Chained(Arc<TickChained>),
     Hosted(HostedSlot),
 }
 
@@ -375,8 +379,52 @@ pub trait SlotExecutor {
 }
 
 struct HostedSlot {
-    plan: Rc<SlotPlan>,
-    executor: Rc<dyn SlotExecutor>,
+    plan: Arc<SlotPlan>,
+    /// 宿主执行器的本线程注册表句柄（见 [`register_hosted_executor`]）。
+    executor: u64,
+}
+
+// 宿主槽执行器的线程本地注册表：JS realm 不可跨线程，执行器只挂在装配
+// 线程（与结算同线程）的本地表上，派发表只携带查取句柄——类型因此可
+// Send+Sync 共享给逐房并行结算的工作线程；工作线程查表必空并报错，
+// 由并行资格判定（派发表含宿主槽即整拍串行）兜住，工作线程命中属于
+// 实现缺陷。条目随装配进程累加，不随引擎销毁清理（量级为每引擎一次）。
+thread_local! {
+    static HOSTED_EXECUTORS: RefCell<BTreeMap<u64, Rc<dyn SlotExecutor>>> =
+        RefCell::new(BTreeMap::new());
+}
+static NEXT_HOSTED_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+/// 在当前线程登记宿主执行器并返回句柄；装配与结算必须同线程。
+fn register_hosted_executor(executor: Rc<dyn SlotExecutor>) -> u64 {
+    let id = NEXT_HOSTED_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    HOSTED_EXECUTORS.with(|registry| registry.borrow_mut().insert(id, executor));
+    id
+}
+
+/// 当前登记水位（装配方在装配前后各取一次，差集即本次装配登记的句柄）。
+pub(crate) fn hosted_id_watermark() -> u64 {
+    NEXT_HOSTED_ID.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// 退役一批宿主执行器句柄（引擎销毁或换装时调用；realm 生命周期跟随
+/// 引擎，泄漏登记会让已销毁的 V8 realm 保持存活）。
+pub(crate) fn retire_hosted_executors(ids: impl Iterator<Item = u64>) {
+    HOSTED_EXECUTORS.with(|registry| {
+        let mut registry = registry.borrow_mut();
+        for id in ids {
+            registry.remove(&id);
+        }
+    });
+}
+
+/// 按句柄取本线程宿主执行器；他线程/未登记返回错误。
+fn hosted_executor(id: u64) -> Result<Rc<dyn SlotExecutor>, String> {
+    HOSTED_EXECUTORS.with(|registry| {
+        registry.borrow().get(&id).cloned().ok_or_else(|| {
+            "宿主执行器不在本线程（JS realm 单线程；逐房并行结算不得触碰宿主槽）".to_string()
+        })
+    })
 }
 
 /// 内建与自有槽的执行表。默认实例直连 native；
@@ -449,6 +497,37 @@ pub const LINK_SLOT_KEYS: [&str; 2] = [
 pub const BUILTIN_SLOT_KEYS: [&str; 21] = kk_mod_api::builtin::SLOT_KEYS;
 
 impl ContributionDispatch {
+    /// 派发表是否含任何宿主槽。宿主执行器绑定 JS realm（单线程），
+    /// 含宿主槽的 tick 整拍走串行结算（逐房并行的资格判定）。
+    pub fn any_hosted(&self) -> bool {
+        let hosted_action = |slot: &ActionSlot| matches!(slot, ActionSlot::Hosted { .. });
+        hosted_action(&self.transfer)
+            || matches!(self.tick, TickSlot::Hosted(_))
+            || hosted_action(&self.creep_transfer)
+            || hosted_action(&self.creep_withdraw)
+            || hosted_action(&self.creep_move)
+            || hosted_action(&self.creep_attack)
+            || hosted_action(&self.creep_ranged_attack)
+            || hosted_action(&self.creep_ranged_mass_attack)
+            || hosted_action(&self.creep_heal)
+            || hosted_action(&self.creep_ranged_heal)
+            || hosted_action(&self.creep_build)
+            || hosted_action(&self.creep_repair)
+            || hosted_action(&self.creep_dismantle)
+            || self.incoming.is_hosted()
+            || self.mod_incoming.is_hosted()
+            || self.move_contest.is_hosted()
+            || self.move_admission.is_hosted()
+            || self.move_obstacle.is_hosted()
+            || self.move_precheck.is_hosted()
+            || self.move_pull_registration.is_hosted()
+            || self.move_cost.is_hosted()
+            || self
+                .ext
+                .values()
+                .any(|slot| matches!(slot, ExtSlot::Hosted(_)))
+    }
+
     pub(crate) fn run_incoming(&self, ctx: &RoomCtx, id: ObjId) -> Result<Option<i64>, String> {
         self.incoming.run(ctx, id)
     }

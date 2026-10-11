@@ -1,5 +1,6 @@
 //! 内建处理链的装配、链序、next 纪律和不同 native 中心。
 use super::*;
+use std::sync::Arc;
 
 /// 装配拒绝：处理器声明存在但实现缺失；声明了未安装的绑定。
 #[test]
@@ -46,7 +47,8 @@ fn assembly_rejects_missing_handlers_and_unwired_bindings() {
 /// wrap 内可修改候选，修改对 native 可见。
 #[test]
 fn chained_handlers_execute_in_frozen_order() {
-    let log: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
+    let log: std::sync::Arc<std::sync::Mutex<Vec<String>>> =
+        std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let mut contribution = overrides_mod(&[]);
     let mut hook = |name: &str| {
         let key = Key::new(format!("testmod:{name}")).unwrap();
@@ -123,14 +125,14 @@ fn chained_handlers_execute_in_frozen_order() {
     handlers.insert(
         before.clone(),
         ActionHandler::Before(Box::new(move |_, _, _| {
-            log_before.borrow_mut().push("before1".into());
+            log_before.lock().unwrap().push("before1".into());
             Ok(())
         })),
     );
     handlers.insert(
         wrap,
         ActionHandler::Wrap(Box::new(move |ctx, _id, _d, next| {
-            log_wrap.borrow_mut().push("wrap-enter".into());
+            log_wrap.lock().unwrap().push("wrap-enter".into());
             // wrap 先把源能量改小，native 读到修改后的候选：
             // 写 250 时 native 余 50（读旧值 300 则余 100，可分辨）。
             if let Some(RoomObject::Generic(g)) = ctx.borrow_mut().room.objects.get_mut(&_id) {
@@ -139,21 +141,21 @@ fn chained_handlers_execute_in_frozen_order() {
                 g.data = v.to_string().into();
             }
             let result = next.call(_id, _d);
-            log_wrap.borrow_mut().push("wrap-exit".into());
+            log_wrap.lock().unwrap().push("wrap-exit".into());
             result
         })),
     );
     handlers.insert(
         after_a.clone(),
         ActionHandler::After(Box::new(move |_, _, _| {
-            log_after_a.borrow_mut().push("after_a".into());
+            log_after_a.lock().unwrap().push("after_a".into());
             Ok(())
         })),
     );
     handlers.insert(
         after_b.clone(),
         ActionHandler::After(Box::new(move |_, _, _| {
-            log_after_b.borrow_mut().push("after_b".into());
+            log_after_b.lock().unwrap().push("after_b".into());
             Ok(())
         })),
     );
@@ -171,10 +173,10 @@ fn chained_handlers_execute_in_frozen_order() {
             ..IntentData::bare()
         },
     );
-    f.settle_with_dispatch(batch, std::rc::Rc::new(dispatch));
+    f.settle_with_dispatch(batch, std::sync::Arc::new(dispatch));
 
     assert_eq!(
-        *log.borrow(),
+        *log.lock().unwrap(),
         vec!["before1", "wrap-enter", "wrap-exit", "after_b", "after_a"],
         "after 依赖序在冻结时逆序，执行器顺序调用"
     );
@@ -218,22 +220,22 @@ fn wrap_without_next_suppresses_default_but_not_after() {
     )
     .unwrap();
 
-    let seen = Rc::new(RefCell::new(false));
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(false));
     let seen_flag = seen.clone();
     let mut handlers = BTreeMap::new();
     handlers.insert(
         key.clone(),
         ActionHandler::Wrap(Box::new(move |_, _, _, _next| {
-            *seen_flag.borrow_mut() = true;
+            *seen_flag.lock().unwrap() = true;
             Ok(())
         })),
     );
-    let after_seen = Rc::new(std::cell::Cell::new(0));
+    let after_seen = std::sync::Arc::new(std::sync::Mutex::new(0));
     let sink = after_seen.clone();
     handlers.insert(
         after,
         ActionHandler::After(Box::new(move |_, _, _| {
-            sink.set(sink.get() + 1);
+            *sink.lock().unwrap() += 1;
             Ok(())
         })),
     );
@@ -277,14 +279,18 @@ fn wrap_without_next_suppresses_default_but_not_after() {
             ..IntentData::bare()
         },
     );
-    f.settle_with_dispatch(batch, std::rc::Rc::new(dispatch));
+    f.settle_with_dispatch(batch, std::sync::Arc::new(dispatch));
     let d1 = data_of(&f, l1);
     let d2 = data_of(&f, l2);
     assert_eq!(d1["store"]["energy"], json!(300), "native 未执行");
     assert_eq!(d2["store"]["energy"], json!(0));
     assert!(d1.get("cooldown").is_none(), "native 未执行，冷却从未写入");
-    assert!(*seen.borrow(), "wrap 处理器已执行");
-    assert_eq!(after_seen.get(), 1, "取消中心但链成功，after 恰好执行一次");
+    assert!(*seen.lock().unwrap(), "wrap 处理器已执行");
+    assert_eq!(
+        *after_seen.lock().unwrap(),
+        1,
+        "取消中心但链成功，after 恰好执行一次"
+    );
 }
 
 /// replace 替换中心：默认动作不执行，替换实现全权处理。
@@ -312,13 +318,19 @@ fn replace_supplants_native_transfer() {
         key.clone(),
         ActionHandler::Replace(Box::new(|ctx, id, _d| {
             // 替换实现：把源能量对半写回，不触碰目标。
-            let Some(src_e) = ctx.borrow().room.objects.get(&id).and_then(|o| match o {
-                RoomObject::Generic(g) => {
-                    let v: serde_json::Value = serde_json::from_str(&g.data).unwrap();
-                    v["store"]["energy"].as_i64()
-                }
-                _ => None,
-            }) else {
+            let Some(src_e) = ctx
+                .borrow_mut()
+                .room
+                .objects
+                .get(&id)
+                .and_then(|o| match o {
+                    RoomObject::Generic(g) => {
+                        let v: serde_json::Value = serde_json::from_str(&g.data).unwrap();
+                        v["store"]["energy"].as_i64()
+                    }
+                    _ => None,
+                })
+            else {
                 return Ok(());
             };
             if let Some(RoomObject::Generic(g)) = ctx.borrow_mut().room.objects.get_mut(&id) {
@@ -370,7 +382,7 @@ fn replace_supplants_native_transfer() {
             ..IntentData::bare()
         },
     );
-    f.settle_with_dispatch(batch, std::rc::Rc::new(dispatch));
+    f.settle_with_dispatch(batch, std::sync::Arc::new(dispatch));
     let d1 = data_of(&f, l1);
     let d2 = data_of(&f, l2);
     assert_eq!(d1["store"]["energy"], json!(150), "替换实现写半量");
@@ -483,7 +495,7 @@ fn double_next_fails_the_round_and_keeps_old_state() {
 /// 三个动作共用 Rust 安装表，仍须按槽分配函数与正确的 native 中心。
 #[test]
 fn builtin_resource_slots_partition_rust_handlers_and_use_distinct_native_steps() {
-    let log = Rc::new(RefCell::new(Vec::new()));
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let mut contribution = overrides_mod(&[]);
     let mut handlers = BTreeMap::new();
     for (name, slot) in [
@@ -504,7 +516,7 @@ fn builtin_resource_slots_partition_rust_handlers_and_use_distinct_native_steps(
         handlers.insert(
             binding,
             ActionHandler::Before(Box::new(move |_, _, _| {
-                log.borrow_mut().push(name);
+                log.lock().unwrap().push(name);
                 Ok(())
             })),
         );
@@ -562,8 +574,8 @@ fn builtin_resource_slots_partition_rust_handlers_and_use_distinct_native_steps(
             },
         );
     }
-    f.settle_with_dispatch(batch, Rc::new(dispatch));
-    assert_eq!(*log.borrow(), vec!["transfer", "withdraw", "link"]);
+    f.settle_with_dispatch(batch, Arc::new(dispatch));
+    assert_eq!(*log.lock().unwrap(), vec!["transfer", "withdraw", "link"]);
     let Some((_, RoomObject::Creep(creep))) = f.world.get(actor) else {
         panic!("执行 creep 消失")
     };
@@ -607,25 +619,26 @@ fn nested_wraps_execute_layer_by_layer() {
     )
     .unwrap();
 
-    let log: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
+    let log: std::sync::Arc<std::sync::Mutex<Vec<String>>> =
+        std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let log_outer = log.clone();
     let log_inner = log.clone();
     let mut handlers = BTreeMap::new();
     handlers.insert(
         outer.clone(),
         ActionHandler::Wrap(Box::new(move |_ctx, id, d, next| {
-            log_outer.borrow_mut().push("outer-enter".into());
+            log_outer.lock().unwrap().push("outer-enter".into());
             let result = next.call(id, d);
-            log_outer.borrow_mut().push("outer-exit".into());
+            log_outer.lock().unwrap().push("outer-exit".into());
             result
         })),
     );
     handlers.insert(
         inner.clone(),
         ActionHandler::Wrap(Box::new(move |_ctx, id, d, next| {
-            log_inner.borrow_mut().push("inner-enter".into());
+            log_inner.lock().unwrap().push("inner-enter".into());
             let result = next.call(id, d);
-            log_inner.borrow_mut().push("inner-exit".into());
+            log_inner.lock().unwrap().push("inner-exit".into());
             result
         })),
     );
@@ -667,9 +680,9 @@ fn nested_wraps_execute_layer_by_layer() {
             ..IntentData::bare()
         },
     );
-    f.settle_with_dispatch(batch, std::rc::Rc::new(dispatch));
+    f.settle_with_dispatch(batch, std::sync::Arc::new(dispatch));
     assert_eq!(
-        *log.borrow(),
+        *log.lock().unwrap(),
         vec!["outer-enter", "inner-enter", "inner-exit", "outer-exit"],
         "双层 wrap 由外到内包裹、由内到外退出"
     );
@@ -714,13 +727,14 @@ fn tick_slot_chained_wraps_native_cooldown() {
     )
     .unwrap();
 
-    let log: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
+    let log: std::sync::Arc<std::sync::Mutex<Vec<String>>> =
+        std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let mut tick_handlers = BTreeMap::new();
     let log_b = log.clone();
     tick_handlers.insert(
         before,
         TickHandler::Before(Box::new(move |_, _| {
-            log_b.borrow_mut().push("before".into());
+            log_b.lock().unwrap().push("before".into());
             Ok(())
         })),
     );
@@ -728,9 +742,9 @@ fn tick_slot_chained_wraps_native_cooldown() {
     tick_handlers.insert(
         wrap,
         TickHandler::Wrap(Box::new(move |_ctx, id, next| {
-            log_w.borrow_mut().push("wrap-enter".into());
+            log_w.lock().unwrap().push("wrap-enter".into());
             let result = next.call(id);
-            log_w.borrow_mut().push("wrap-exit".into());
+            log_w.lock().unwrap().push("wrap-exit".into());
             result
         })),
     );
@@ -738,7 +752,7 @@ fn tick_slot_chained_wraps_native_cooldown() {
     tick_handlers.insert(
         after,
         TickHandler::After(Box::new(move |_, _| {
-            log_a.borrow_mut().push("after".into());
+            log_a.lock().unwrap().push("after".into());
             Ok(())
         })),
     );
@@ -758,9 +772,9 @@ fn tick_slot_chained_wraps_native_cooldown() {
             "cooldown": 5,
         }),
     );
-    f.settle_with_dispatch(IntentBatch::default(), std::rc::Rc::new(dispatch));
+    f.settle_with_dispatch(IntentBatch::default(), std::sync::Arc::new(dispatch));
     assert_eq!(
-        *log.borrow(),
+        *log.lock().unwrap(),
         vec!["before", "wrap-enter", "wrap-exit", "after"]
     );
     let d1 = data_of(&f, l1);

@@ -8,7 +8,6 @@ use kk_mod_api::extension::ExtensionCatalog;
 use kk_mod_api::resources::ResourceCatalog;
 use kk_mod_api::{ContributionPlan, Key};
 use std::collections::BTreeSet;
-use std::rc::Rc;
 use std::sync::Arc;
 
 /// 只有所有装配步骤成功后才能构造；发布不再进行可失败的校验。
@@ -19,11 +18,11 @@ pub(super) struct Installation {
     combat: CombatRanges,
     move_gate: MoveGate,
     static_passability: StaticPassability,
-    quotas: Rc<StructureQuotaSnapshot>,
-    resources: Rc<ResourceCatalog>,
-    buildings: Rc<BuildingCatalog>,
-    contrib: Rc<ContributionDispatch>,
-    extensions: Rc<ExtensionCatalog>,
+    quotas: Arc<StructureQuotaSnapshot>,
+    resources: Arc<ResourceCatalog>,
+    buildings: Arc<BuildingCatalog>,
+    contrib: Arc<ContributionDispatch>,
+    extensions: Arc<ExtensionCatalog>,
 }
 
 impl Installation {
@@ -39,14 +38,14 @@ impl Installation {
         let combat = CombatRanges::from_plan(plan.rules())?;
         let move_gate = MoveGate::from_plan(plan.rules())?;
         let static_passability = StaticPassability::from_plan(plan.rules())?;
-        let quotas = Rc::new(StructureQuotaSnapshot::from_plan(plan.rules())?);
-        let resources = Rc::new(ResourceCatalog::from_plan(&plan));
-        let buildings = Rc::new(
+        let quotas = Arc::new(StructureQuotaSnapshot::from_plan(plan.rules())?);
+        let resources = Arc::new(ResourceCatalog::from_plan(&plan));
+        let buildings = Arc::new(
             BuildingCatalog::from_plan(&plan)
                 .map_err(|error| format!("建筑目录装配失败：{error}"))?,
         );
-        let contrib = Rc::new(assemble(&plan, &installed)?);
-        let extensions = Rc::new(ExtensionCatalog::from_plan(&plan)?);
+        let contrib = Arc::new(assemble(&plan, &installed)?);
+        let extensions = Arc::new(ExtensionCatalog::from_plan(&plan)?);
         installed.extend(extensions.field_bindings().cloned());
         // Mod 类型字段绑定由 payload 存储与写入门实现（创建/处理器回写/
         // 发布前校验）；建筑字段绑定由完工默认值与生命周期写面实现。
