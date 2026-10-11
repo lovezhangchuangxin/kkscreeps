@@ -415,6 +415,12 @@ impl EmbedEngine {
         })
     }
 
+    /// 结算相分段诊断报告（KK_SETTLE_DIAG=1 开启时含逐段中位数与耦合计数；
+    /// 未开启为 null）。见 kk_engine::Engine::settle_diag_report。
+    pub fn settle_diag_report(&self) -> Value {
+        self.engine.settle_diag_report().unwrap_or(Value::Null)
+    }
+
     /// 清空耗时样本，常用于排除预热调用。
     pub fn perf_reset(&mut self) {
         self.perf.ticks.clear();

@@ -21,6 +21,8 @@ pub(in crate::settle) struct SharedState {
     /// 各 Mod 命名空间的候选状态；随候选一起发布或丢弃。服务端私有，
     /// 不进玩家投影。
     pub(in crate::settle) mod_states: BTreeMap<String, Value>,
+    /// 跨房耦合计数（KK_SETTLE_DIAG 取证；随既有借用累加，不另加锁）。
+    pub(in crate::settle) diag: crate::settle::diag::DiagCounters,
 }
 
 /// 本轮共享的玩家候选和 ID 分配器，不引用引擎中的已提交数据。
@@ -50,6 +52,7 @@ impl TickState {
                 next_id,
                 players,
                 mod_states,
+                diag: crate::settle::diag::DiagCounters::default(),
             })),
             random: crate::settle::ProcessorRandom::default(),
         }
@@ -85,6 +88,7 @@ impl TickState {
             return Err(error.clone());
         }
         let id = state.next_id;
+        state.diag.id_allocs += 1;
         if id == 0 || id == u64::MAX {
             let error = SettleError("对象 ID 游标非法或已耗尽".into());
             state.fatal_error = Some(error.clone());
@@ -118,38 +122,39 @@ impl TickState {
     /// 否则会出现游标复用。游标只能回退到快照值，不得前进。
     pub(in crate::settle) fn restore_next_id(&self, snapshot: u64) {
         let mut state = self.inner.borrow_mut();
+        state.diag.id_restores += 1;
         if state.next_id > snapshot {
             state.next_id = snapshot;
         }
     }
 
     pub(in crate::settle) fn add_gcl(&self, player: &str, amount: i64) {
-        self.inner
-            .borrow_mut()
-            .players
-            .entry(player.into())
-            .or_default()
-            .gcl += amount;
+        let mut state = self.inner.borrow_mut();
+        state.diag.gcl_adds += 1;
+        state.players.entry(player.into()).or_default().gcl += amount;
     }
 
     /// powerSpawn.processPower 的账号 power 累计；房间相位直写共享候选，
     /// 与市场阶段消费同一份 players（发布或丢弃随整轮候选）。
     pub(in crate::settle) fn add_power(&self, player: &str, amount: i64) {
-        self.inner
-            .borrow_mut()
-            .players
-            .entry(player.into())
-            .or_default()
-            .power += amount;
+        let mut state = self.inner.borrow_mut();
+        state.diag.power_adds += 1;
+        state.players.entry(player.into()).or_default().power += amount;
     }
 
     pub(in crate::settle) fn claim_state(&self, player: &str) -> (usize, i64) {
-        self.inner
-            .borrow()
+        let mut state = self.inner.borrow_mut();
+        state.diag.claim_calls += 1;
+        state
             .players
             .get(player)
             .map(|p| (p.rooms.len(), p.gcl))
             .unwrap_or_default()
+    }
+
+    /// 拷贝本拍耦合计数（结算收尾时取走；共享候选本身随后被消费）。
+    pub(in crate::settle) fn diag_counters(&self) -> crate::settle::diag::DiagCounters {
+        self.inner.borrow().diag
     }
 
     /// 消费唯一持有者。仍有规则持有克隆时返回错误，不复制或发布共享候选。

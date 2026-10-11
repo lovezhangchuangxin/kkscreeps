@@ -23,6 +23,7 @@ pub mod nukes;
 pub mod powers;
 // 兼容旧调用路径，领域实现只维护在 movement 中。
 pub use movement::{admission, contest, move_cost, obstacle, precheck, pull_registration};
+pub mod diag;
 mod invader_core;
 mod invader_raid;
 mod keeper;
@@ -290,6 +291,9 @@ pub struct Engine {
     /// 借此把只读投影编码重叠进结算串行窗。回调必须非阻塞（自行异步）。
     /// 回调收到的房与最终候选可能因晚期阶段不同——消费侧深比较兜底。
     pub room_settled_hook: Option<RoomSettledHook>,
+    /// 结算分段诊断开关（构造时按 KK_SETTLE_DIAG 环境变量定格，见 diag 模块）。
+    pub(crate) settle_diag_on: bool,
+    pub(crate) settle_diag_samples: Vec<diag::TickDiag>,
 }
 
 /// 内置 link 与仓库容量的冻结计划；无 Mod 引擎的默认贡献平面。
@@ -318,6 +322,10 @@ impl Default for Engine {
 
 impl Engine {
     pub fn new(world: kk_world::World) -> Self {
+        /// KK_SETTLE_DIAG 环境开关：进程级一次读取，构造时定格。
+        static SETTLE_DIAG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        let settle_diag_on =
+            *SETTLE_DIAG.get_or_init(|| std::env::var_os("KK_SETTLE_DIAG").is_some());
         let next_id = world.next_obj_id();
         Self {
             world,
@@ -344,6 +352,8 @@ impl Engine {
             mod_states: BTreeMap::new(),
             plan: builtin_plan(),
             room_settled_hook: None,
+            settle_diag_on,
+            settle_diag_samples: Vec::new(),
         }
     }
 

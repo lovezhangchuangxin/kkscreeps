@@ -227,6 +227,7 @@ pub(crate) fn run(
                 "concurrency":e.player_concurrency(),"metadata":metadata(),"process":process,
                 "cpu_budget":{"limit":cpu_limit,"bucket":10000,"tick_limit":500},
                 "phases":phases,"embed_engine_wall":engine_wall,"interleave_ab":interleave_ab,
+                "settle_diag":e.settle_diag_report(),
                 "initial":initial,"before":before,"after":after,
                 "completion":players.iter().filter_map(Value::as_str).map(|id| (id.to_string(),e.capture_console_logs(id))).collect::<BTreeMap<_,_>>()
             }))?,

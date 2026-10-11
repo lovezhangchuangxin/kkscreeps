@@ -1,0 +1,90 @@
+{
+  "settle_diag": {
+    "ticks": 106,
+    "segments_p50_ms": {
+      "prepare": {
+        "p50_ms": 5.545083
+      },
+      "clone": {
+        "p50_ms": 11.383534
+      },
+      "settle": {
+        "p50_ms": 48.834709
+      },
+      "hook": {
+        "p50_ms": 8.960546
+      },
+      "interroom": {
+        "p50_ms": 4.640458
+      },
+      "nukes": {
+        "p50_ms": 5.386417
+      },
+      "market": {
+        "p50_ms": 4.791709
+      },
+      "power": {
+        "p50_ms": 4.165291
+      },
+      "writeback": {
+        "p50_ms": 0.017458
+      },
+      "validate": {
+        "p50_ms": 9.318166
+      },
+      "into_prepared": {
+        "p50_ms": 0.478542
+      },
+      "commit": {
+        "p50_ms": 19.124917
+      }
+    },
+    "counters_total": {
+      "id_allocs": 0,
+      "id_restores": 0,
+      "claim_calls": 0,
+      "gcl_adds": 23400,
+      "power_adds": 600,
+      "interroom_moves": 0,
+      "portal_moves": 0,
+      "events": 138900,
+      "rooms": 31800
+    }
+  },
+  "phases": {
+    "phases": {
+      "project": {
+        "count": 100,
+        "p50_ms": 39.088795,
+        "p95_ms": 45.328079,
+        "p99_ms": 75.392957,
+        "max_ms": 176.45012,
+        "total_ms": 4122.3265839999995
+      },
+      "run": {
+        "count": 100,
+        "p50_ms": 109.202998,
+        "p95_ms": 213.221332,
+        "p99_ms": 251.067462,
+        "max_ms": 347.590206,
+        "total_ms": 12772.860169
+      },
+      "settle": {
+        "count": 100,
+        "p50_ms": 126.196708,
+        "p95_ms": 152.05025,
+        "p99_ms": 192.236834,
+        "max_ms": 276.791042,
+        "total_ms": 12896.567085000002
+      },
+      "wall": {
+        "count": 100,
+        "p50_ms": 278.640958,
+        "p95_ms": 407.027125,
+        "p99_ms": 481.534042,
+        "max_ms": 513.55125
+      }
+    }
+  },
+  "note": "console 完成/KKDIAG 日志裁剪；完整窗口报告见 /tmp/settle-diag-b0.json（会话期）"
+}

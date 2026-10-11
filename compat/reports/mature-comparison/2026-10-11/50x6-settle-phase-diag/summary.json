@@ -1,0 +1,41 @@
+{
+  "binary": "release, settle-diag slice working tree (post d03c7f67 + KK_SETTLE_DIAG)",
+  "window": {
+    "warmup": 5,
+    "ticks": 100,
+    "concurrency": 4,
+    "fixture": "/tmp/l1b-fixture.json (B0 50x6)"
+  },
+  "phases_p50_ms": {
+    "project": 39.088795,
+    "run": 109.202998,
+    "settle": 126.196708,
+    "wall": 278.640958
+  },
+  "settle_segments_p50_ms": {
+    "prepare": 5.545083,
+    "clone": 11.383534,
+    "settle": 48.834709,
+    "hook": 8.960546,
+    "interroom": 4.640458,
+    "nukes": 5.386417,
+    "market": 4.791709,
+    "power": 4.165291,
+    "writeback": 0.017458,
+    "validate": 9.318166,
+    "into_prepared": 0.478542,
+    "commit": 19.124917
+  },
+  "settle_segments_sum_ms": 122.65,
+  "coupling_per_tick": {
+    "id_allocs": 0.0,
+    "id_restores": 0.0,
+    "claim_calls": 0.0,
+    "gcl_adds": 220.75,
+    "power_adds": 5.66,
+    "interroom_moves": 0.0,
+    "portal_moves": 0.0,
+    "events": 1310.38,
+    "rooms": 300.0
+  }
+}

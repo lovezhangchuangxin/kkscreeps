@@ -479,3 +479,12 @@ RSS 采样中位数均值下降 12.09%，峰值均值仅下降 1.80%；首对新
 【测试面】kk-world 104（新增字节锁）、kk-runner 全套、kk-runtime embed 102（双通道等价+分组重叠探针保持）、mod_chain 495、sim 106、棘轮 2905/9/0 转红 0。
 
 【对目标的含义】0.9×（本窗口径 199.2ms）还差 −48ms。settle 111.6 为最大相且成本分散（复采样无单点杠杆）——**结构性相位重叠（P4 依赖调度/R03 底座）是剩余主路径**；project 残余 36.1（片段拼接+可见集查表+束装配+market/power）与 run 97.7（V8 玩家代码为主）次之。信封路径已无逐玩家全量重建，投影侧小片空间收窄。
+
+## 2026-10-11 补记：settle 相分段取证——R09 房间并行可行性裁定（KK_SETTLE_DIAG 现行探针）
+
+【背景】信封直构后标尺 1.1177×，距 0.9× 差 −48ms，settle 111.6ms 最大相且成本分散。本片为引擎装 `KK_SETTLE_DIAG`（构造时环境变量定格；逐拍分段 Instant 差分——prepare/clone/settle/hook/interroom/nukes/market/power/writeback/validate/into_prepared/commit，耦合计数随共享候选既有借用累加零额外锁），B0 短窗取子相位构成。[证据](../../compat/reports/mature-comparison/2026-10-11/50x6-settle-phase-diag/README.md)。
+
+【读数】settle 126.2ms = 规则执行 48.8 + commit 19.1 + 候选克隆 11.4 + validate 全对象扫 9.3 + 预编码快照克隆 9.0 + prepare 5.6 + nukes/market/power 14.3 + interroom 4.6（分段和 122.65 交叉核对一致，差为房循环脚手架）。**耦合面：id_allocs=0、claim_calls=0、interroom_moves=0、portal_moves=0——B0 稳态顺序敏感耦合为零**；gcl 220.8 次/拍、power 5.7 次/拍均交换律累加；事件按房序拼接且引擎外无消费者；mod namespace 房相零写入；随机源生产路径本就房名+ID+tick 派生。
+
+【裁定】房间循环（clone+settle+hook=69.2ms，55%）四路并行预算 ~50ms——**恰好覆盖至 0.9× 的差距**；通用语义需两处确定性构造：ID 按房预分区（B0 零触发但通用路径必须）、claim 串行窗（同拍他房 gcl 累加后 claim 的读窗）。附加发现：① 预编码 hook 的快照克隆是每拍第二次整树克隆（并行后隐藏、远期 Arc 房消除）；② prepare 内安全模式持有人为全对象扫（160k，可索引化）；③ validate 9.3/commit 19.1 各自成后续小片。下一片：R09-lite 逐房并行结算原型（先 B0 形态：并行 worker 池 + 房序确定性归并 + 交换律累加合并；ID/claim 通用构造随后补）。
+
