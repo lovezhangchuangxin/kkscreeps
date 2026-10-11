@@ -8,14 +8,14 @@ use std::path::{Path, PathBuf};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct Mods {
-    pub(super) root: PathBuf,
+pub(crate) struct Mods {
+    pub(crate) root: PathBuf,
     #[serde(default)]
-    configs: BTreeMap<String, Value>,
+    pub(crate) configs: BTreeMap<String, Value>,
     /// 新世界启动期的显式内容选择；省略表示安装全部发现的包。
     /// 与宿主注册选项、mod inspect 共用同一选择语义。
     #[serde(default)]
-    selection: ContentSelection,
+    pub(crate) selection: ContentSelection,
 }
 
 /// 场景声明的中途包切换：世界提交完第 `after_tick` 轮后，在同一根目录
@@ -24,7 +24,7 @@ pub(super) struct Mods {
 /// 拒绝（残留/内容变更/开放轮次）时旧计划继续运行，记录进报告。
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct ModsSwitch {
+pub(crate) struct ModsSwitch {
     after_tick: u64,
     #[serde(default)]
     configs: BTreeMap<String, Value>,
@@ -33,12 +33,12 @@ pub(super) struct ModsSwitch {
 }
 
 impl ModsSwitch {
-    pub(super) fn after_tick(&self) -> u64 {
+    pub(crate) fn after_tick(&self) -> u64 {
         self.after_tick
     }
 
     /// 以初始 mods 的根目录构造切换后的装载输入。
-    pub(super) fn to_mods(&self, root: PathBuf) -> Mods {
+    pub(crate) fn to_mods(&self, root: PathBuf) -> Mods {
         Mods {
             root,
             configs: self.configs.clone(),
@@ -47,13 +47,13 @@ impl ModsSwitch {
     }
 }
 
-pub(super) struct Loaded {
+pub(crate) struct Loaded {
     pub packages: BTreeMap<String, ModPackage>,
     pub options: RegisterOptions,
     pub metadata: Value,
 }
 
-pub(super) fn load(base: &Path, input: &Mods) -> anyhow::Result<Loaded> {
+pub(crate) fn load(base: &Path, input: &Mods) -> anyhow::Result<Loaded> {
     anyhow::ensure!(!input.root.as_os_str().is_empty(), "mods.root 不能为空");
     let root = std::fs::canonicalize(base.join(&input.root)).context("读取 Mod 包根目录")?;
     let packages = discover_packages(&root)?;

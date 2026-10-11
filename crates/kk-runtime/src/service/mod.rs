@@ -1,14 +1,17 @@
-//! 常驻服务域：目录基座、身份、检查点发布/选择与（后续切片的）宿主调度。
+//! 常驻服务域：目录基座、身份、检查点发布/选择与宿主调度。
 //!
-//! 现行范围（S1.1）：文件与目录基座——发布原语在 kk-storage，本模块定义
-//! 服务目录布局（[`dir`]、目录身份 [`identity`]、检查点内服务元数据
-//! [`metadata`] 与无日志恢复选择 [`checkpoints`]）。宿主调度、命令边界
-//! 与 outbox 随 S1.2/S2 切片接入；方案见
+//! S1.1 交付文件与目录基座（发布原语在 kk-storage：[`dir`]、
+//! [`identity`]、[`metadata`]、[`checkpoints`]）；S1.2 交付常驻宿主
+//! （[`host`] 的状态机/调度/周期保存/停止）与严格版本化运行配置
+//! （[`config`]）。命令边界与 outbox 随 S2 切片接入；方案见
 //! docs/plans/service-playable-batches.md。
 pub mod checkpoints;
+pub mod config;
 pub mod dir;
+pub mod host;
 pub mod identity;
 pub mod metadata;
 
 pub use dir::ServiceDir;
+pub use host::{Fault, HostParameters, Phase, ServiceHost};
 pub use identity::{SERVICE_FORMAT_VERSION, ServiceIdentity};

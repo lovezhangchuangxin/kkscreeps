@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub(super) enum Comparison {
+pub(crate) enum Comparison {
     Eq,
     Gte,
     DeltaGte,
@@ -14,7 +14,7 @@ pub(super) enum Comparison {
 
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct Assertion {
+pub(crate) struct Assertion {
     pub(super) pointer: String,
     pub(super) op: Comparison,
     #[serde(default)]

@@ -10,44 +10,44 @@ use std::path::PathBuf;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct Scene {
-    pub(super) version: u32,
-    pub(super) shard: Shard,
-    pub(super) bots: Vec<Bot>,
+pub(crate) struct Scene {
+    pub(crate) version: u32,
+    pub(crate) shard: Shard,
+    pub(crate) bots: Vec<Bot>,
     /// 世界种子：随机流域与确定性时间的派生根；缺省 0 保持既有场景行为。
     #[serde(default)]
-    pub(super) seed: u64,
+    pub(crate) seed: u64,
     #[serde(default)]
-    pub(super) mods: Option<mods::Mods>,
+    pub(crate) mods: Option<mods::Mods>,
     #[serde(default)]
-    pub(super) mods_switch: Option<mods::ModsSwitch>,
+    pub(crate) mods_switch: Option<mods::ModsSwitch>,
     /// 创建分片时全体玩家的 V8 堆上限（字节，16MiB..=4GiB）；缺省用引擎
     /// 整卡默认。只对新建世界生效；检查点续跑以载荷内工作者身份为准，
     /// 声明值与任一恢复工作者不一致时启动前拒绝。
     #[serde(default)]
-    pub(super) player_heap_limit_bytes: Option<u64>,
+    pub(crate) player_heap_limit_bytes: Option<u64>,
     #[serde(default)]
-    pub(super) objects: Vec<Object>,
+    pub(crate) objects: Vec<Object>,
     #[serde(default)]
-    pub(super) assertions: Vec<Assertion>,
+    pub(crate) assertions: Vec<Assertion>,
 }
 
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct Shard {
-    pub(super) players: Vec<Value>,
-    pub(super) rooms: Vec<Value>,
+pub(crate) struct Shard {
+    pub(crate) players: Vec<Value>,
+    pub(crate) rooms: Vec<Value>,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct Bot {
-    pub(super) player: String,
-    pub(super) modules: PathBuf,
+pub(crate) struct Bot {
+    pub(crate) player: String,
+    pub(crate) modules: PathBuf,
     #[serde(default = "main_entry")]
-    pub(super) entry: String,
+    pub(crate) entry: String,
     #[serde(default = "empty_memory")]
-    pub(super) memory: Value,
+    pub(crate) memory: Value,
 }
 
 fn main_entry() -> String {
@@ -59,14 +59,14 @@ fn empty_memory() -> Value {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct Object {
-    pub(super) alias: String,
-    pub(super) room: String,
-    pub(super) kind: String,
-    pub(super) spec: Value,
+pub(crate) struct Object {
+    pub(crate) alias: String,
+    pub(crate) room: String,
+    pub(crate) kind: String,
+    pub(crate) spec: Value,
 }
 
-pub(super) fn validate(scene: &Scene) -> anyhow::Result<()> {
+pub(crate) fn validate(scene: &Scene) -> anyhow::Result<()> {
     anyhow::ensure!(
         scene.version == 1,
         "不支持的场景 version {}（仅支持 1）",

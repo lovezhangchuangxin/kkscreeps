@@ -8,6 +8,7 @@ mod embed_main;
 mod export_fixtures;
 mod mod_tools;
 mod probes;
+mod serve;
 mod sim;
 mod support;
 
@@ -18,7 +19,8 @@ fn main() {
     let cli = Cli::parse();
     match cli.command {
         Command::Mod { command } => std::process::exit(command.run()),
-        Command::Serve | Command::Test | Command::Import => {
+        Command::Serve { command } => std::process::exit(crate::serve::dispatch(command)),
+        Command::Test | Command::Import => {
             eprintln!("该子命令尚未实装（见 docs/roadmap.md 的里程碑规划）");
             std::process::exit(2);
         }

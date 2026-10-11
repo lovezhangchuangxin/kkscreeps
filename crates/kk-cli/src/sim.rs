@@ -8,10 +8,10 @@ mod auto_checkpoint;
 mod checkpoint;
 mod command;
 mod execution;
-mod mods;
+pub(crate) mod mods;
 mod observation;
 mod replay;
-mod scene;
+pub(crate) mod scene;
 pub(crate) use command::SimCommand;
 
 pub struct Options {

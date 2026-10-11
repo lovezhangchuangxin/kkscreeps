@@ -4,7 +4,7 @@
 
 ## 当前接手位置
 
-- 更新日期：2026-10-12；S1.1（文件与目录基座）已实现并通过 3 路 subagent review 闭环：kk-storage 提供原子发布/信封分类/单写者租约，kk-runtime::service 提供服务目录/身份/检查点元数据与无日志恢复选择（见下方实施记录）。下一实施入口为 S1.2 常驻宿主；G27.b/G28.a 等父项状态不变。
+- 更新日期：2026-10-12；S1.1（文件与目录基座，54db7774）与 S1.2（常驻宿主，本次提交）已实现：serve init/run、严格版本化配置、纯函数调度（不补拍/不漂移）、Paused/Persistence 故障语义、周期保存与收尾保存、stdio 控制、SIGTERM 优雅退出与租约互斥（见下方实施记录）。下一实施入口为 S1.3 连续运行与冷恢复验收；G27.b/G28.a 等父项状态不变。
 - 性能主线已按用户要求暂缓：50 玩家×6 个 RCL8 满功能成熟房，共 300 房。已交付 KKPV 共享编码/视图复用、信封直构、条件逐房并行、克隆-结算重叠、预校验 commit 与融合校验；完整紧凑存储/变化集/列式共享直读仍为目标。旧投影预取两版已撤回，恢复时从 run 注入协议重新核验归因，最终验收未完成。
 - 最新标尺记录为 kk/xxs 耗时比中枢 1.0492、热窗 0.9859，来源为[归档接手记录](archive/mod-history-2026-10.md#接手位置沿革)；未找到随最新两片入库的同口径双端标尺明细，不能据此声称本轮独立复算或已正式领先。热态、分段收益及原始窗口须一起判断。
 - 默认玩法：19/19 powers 已接通；[兼容机器报告](../../compat/reports/kkscreeps.json)为 2905/2914 passed、9 failed、0 pending，原始 success=false，按既有差异登记通过棘轮不等于套件全绿或 M2B 整体完成。地图生成、stronghold 战术 AI/create-creep、bot 对战、多房扩张运营与 Overmind 旗标出兵仍有缺口。
@@ -18,7 +18,7 @@
 
 | 顺位 | 任务 | 首片与完成条件 |
 |---|---|---|
-| 1（进行中：S1.1 已交付） | S1 常驻运行与无日志检查点恢复 | S1.1 已交付（发布原语提取 kk-storage、服务目录/身份/metadata.service v1、无日志恢复选择、完整版本保留）；S1.2 常驻宿主（init/run、严格配置、调度状态机、周期保存、控制入口、停止）为当前入口 → S1.3 连跑/冷恢复；默认关闭审计日志，恢复后同目录续存；此片不标 G27.b 或 M3 完成 |
+| 1（进行中：S1.1/S1.2 已交付） | S1 常驻运行与无日志检查点恢复 | S1.1（54db7774）与 S1.2（本次提交：serve init/run、调度/故障/停止语义、stdio 控制与信号）已交付；S1.3 连跑/冷恢复验收（两玩家/多房/Mod、JSON/KKPV 双通道、世界/Memory/CPU/模块/Mod 状态核对）为当前入口；默认关闭审计日志，恢复后同目录续存；此片不标 G27.b 或 M3 完成 |
 | 2（设计完成，依赖 S1） | S2/G27.b 耐久输入/outbox | S2.1 inbox/屏障/恢复下限 → S2.2 代码边界事务 → S2.3 表达式/受限 Mod 输入 → S2.4 幂等投递；最终确认与外部投递等待耐久屏障，恢复不跨已确认下限；不等待 JS storage provider |
 | 3（设计完成，写入依赖 S2） | S3/G28.a → G29.b 最小真实联网闭环 | S3.1 认证/命令/DTO → S3.2 授权房间订阅 → S3.3 两玩家实际客户端 → S3.4 分发/只读 provider；固定地图/预建玩家首片，官方 HTTP/sockjs 兼容另验，不标 M3 或 G21 全域完成 |
 | 随服务验证 | Linux 服务容量与恢复验收（2GB 参考） | 50 玩家×6 房、300 占用房，另覆盖目标 9 区块地图的注册地形规模；短探针只覆盖 300 房，不能代表整幅地图或成熟 bot 负载。长窗观察 RSS/GC、tick 延迟、保存峰值与冷启动，区分合成 worker 与真实 bot；同机 xxscreeps 正式对照另按性能验收口径完成 |
@@ -159,6 +159,16 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - 复核闭环：A/B 两路 reviewer 对修复后最终改动逐项复核 PASS（A 侧另实证九种信封形态分类无漏网；唯一残留形态“完整信封+尾部垃圾归 Broken”仅外部篡改可造、已注释说明不阻塞）。C 路初审提出的台账更新（本条）与 AGENTS.md 模块树同步亦已落地。
 - 平台证据：macOS XNU 的 flock“快速加锁/释放循环 × 并发 fork”会留无持有者残锁（约 250ms 自愈、约 4% 循环命中；两线程探针实证并记录在 lease.rs 注释）——生产形态每进程单次取锁不受影响，测试经串行化规避；Linux 侧未实证。
 - 挂账到 S1.2：宿主在租约持有期内收编 publish/select/enforce_keep/remove_stale_temporaries 调用并清理残留临时文件；init 组合函数（先初始检查点耐久后写 identity）与 init 各阶段崩溃矩阵测试；发布“耐久未知”错误的可判别形态（PersistenceFault 映射）。
+
+
+### 2026-10-12 S1.2 常驻宿主实施记录
+
+- 交付内容：`kk-runtime::service::{config, host}`——严格版本化服务配置 v1（未知字段/未来版本/越界拒绝，相对路径相对配置文件解析）；宿主状态机（Running/Draining/Stopped + Paused{Settle,Execution}/Persistence 故障冻结推进）、纯函数调度器 `next_deadline`（网格锚+间隔锁定快速拍零漂移、超时延后一个间隔、不补拍不追积压；驱动两点接线 anchor/pending——等待中截止点命令打断保持不滑动、消费后记网格锚，组合级测试三件套锁定）、周期保存（tick/墙钟先到 + 脏拍门，序号按目录实况分配不缓存）、发布失败的目标文件实证判别（耐久未知 vs 旧版未受影响）、停止流程（Draining→无失败轮按需收尾保存→关引擎；失败轮不保存不丢弃；exit_wait 看门狗强制退出如实报告）；`EmbedEngine::pending_round_kind()` 区分结算失败/执行故障。`kk-cli::serve::{init,run,control}`——init 组合（目录校验→骨架→租约→清理残留→身份值→场景装载→初始检查点耐久→identity 最后写）、run 装配（validate_for_run→identity→租约覆盖全程→清理残留→恢复选择→堆一致性→替代引擎恢复→宿主）、逐行 JSON stdio 控制（status/retry/stop）、SIGTERM/SIGINT 原子标志、退出码 0/1/2。CLI 集成测试 5 项（真实子进程）：init→SIGTERM 保存退出 0→二次运行恢复续存（控制通道查询/停止）、半初始化目录 run/init 双拒、运行中目录第二进程租约被拒、只读检查点目录的持久化故障 SIGTERM 退出 2（权限恢复后收尾保存成功仍 2）、控制通道非法行/无故障 retry 得 ok:false 且继续推进。共享 sim 场景/Mod 装载（scene/mods 升 pub(crate)，行为不变）。
+- 实际验证：`cargo test -p kk-runtime --lib service`（24 项：调度网格与驱动组合周期/命令打断不滑动/高频命令流不饿死/玩家错误继续/结算失败重试不重跑（Memory 单次执行证明）/执行故障重建重试/保存判定/保留推进/持久化冻结与实证/停止三态/init 校验临时残留清理复核）；`cargo test -p kk-cli --test serve_tests`（5 项子进程链路）；sim_tests 106 项回归通过（场景共享无行为变化）；完整 `pnpm run check` 通过；新架构文档 docs/architecture/service-host.md（现行契约）+ overall/README 索引同步。
+- Review 闭环（3 路 subagent，A 行为正确性/B 持久化与崩溃恢复/C 边界与测试，修复后经提出方复核）：P1 调度缺陷两级——初审网格漂移（A/C 双实测：40ms 配置实测 47.83ms/34.6ms，原 target>now 分支在拍路径永不可达，每拍以拍后时刻为锚累积执行耗时）修为 previous+interval 网格后，A 复核又抓到命令打断滑动：等待前写入 target 使未消费截止点被当作已消费，每条窗口内命令把拍推后一个整间隔（A 实测 50ms 轮询 2s 仅 26 拍、20ms 命令流 0 拍），且首拍前无锚点时命令流可无限推迟首拍（我方第一版修复的新测试抓出）；终态为 anchor/pending 两点接线（pending 命令打断保持+首拍锚定、anchor 网格锚消费后记录），A 以同构虚拟时间模拟实证 20ms 命令流/40ms 间隔 2s 内 50 拍恒周期、命令处理越过网格点一次性损失一个间隔无追赶突发。P2 修复：最终 status 的 live_tick 停止冻结（teardown 后不归零，仅首次冻结）；持久化故障 stderr 同因只打印一次；退出码 2 语义补齐"曾在持久化故障下停止（即使收尾保存成功）"并修复驱动循环顶部停止码不按故障归类的竞态（权限恢复后暴露，集成测试锁定）；retry 增加 Running 阶段门；Paused 无缓存轮形态单列 Infrastructure（重试直接重进拍入口，run_players 内部 rebuild_mod_realm；C 核实此形态玩家未执行、世界为上一已提交拍）；watchdog 到点后 250ms 二次确认；控制通道非法输入/无故障 retry 的 ok:false 应答与继续推进入集成测试；serve_tests 全部子进程加 kill-on-drop 守卫、chmod 恢复提前；init 校验放行仅含协议临时残留的 checkpoints 并在清理后复核非空即拒（原清理为死代码）；next_deadline 兜底臂溢出处理与网格臂一致；AGENTS.md kk-cli 行补 serve init/run；service-host.md 补 mods.root 与场景模块的相对基准差异。
+- P3 挂账（后续切片处理）：Settle 重试中写回构造失败转 Execution 重跑的边角归类；watchdog 不覆盖在途拍（由 exit_wait 窗容纳，文档已注明）；status 的 next_publish_seq 为诊断值可能过期；probe_checkpoint 假设无外部干预（注释已说明）；已提交后输入日志 IO 失败会被归为 Infrastructure 且脏拍少计 1（serve 未启用 input_log 当前不可达，S2 接线 CommittedLogError 时必须先处理）；stdio 控制行无长度上限（S3 网络入口一并设界）；stdout 管道断裂时 println panic（进程由调用方管理，S3 前无网络面）；`engine()` 访问器仅限装配后只读诊断的约束已注明；tick_interval_ms 下限未单设（25ms 轮询粒度为实际分辨率）。
+- S1.1 挂账三项已收编：宿主 init/run 在租约持有期内收编全部存储调用并清理协议残留临时文件；init 组合函数固化“初始检查点耐久→identity 最后写”顺序；发布失败以目标文件实证消息提供耐久未知判别（PersistenceFault）。
+- 遗留到后续切片：S1.3 将补两玩家/多房/Mod 场景与 JSON/KKPV 双通道冷恢复的完整状态等值验收（本批单玩家链路已覆盖机制正确性）；状态摘要含 `world_id/run_epoch/live_tick/durable_tick/publish_seq/dirty_ticks/last_save_ms/last_error/recovery_selected/skipped_broken`（方案字段齐全，snake_case）。
 
 ## 台账维护与每批验收
 

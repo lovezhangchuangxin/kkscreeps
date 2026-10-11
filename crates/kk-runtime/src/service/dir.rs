@@ -100,11 +100,23 @@ impl ServiceDir {
             if name == CHECKPOINTS_DIR {
                 let path = entry.path();
                 anyhow::ensure!(path.is_dir(), "checkpoints 不是目录");
-                let non_empty = std::fs::read_dir(&path)?.next().is_some();
-                anyhow::ensure!(
-                    !non_empty,
-                    "checkpoints/ 非空但没有初始化标记：init 中途崩溃或来源不明（处置=确认无价值后删除整个目录重新 init；不会自动复用或覆盖）"
-                );
+                // 与根目录同口径：仅允许协议临时残留（可清理），任何
+                // 非临时内容都算来源不明。清理后是否真正清空由 init
+                // 在租约内复核，此处只做无权写入的门。
+                for checkpoint_entry in std::fs::read_dir(&path)
+                    .with_context(|| format!("清点检查点目录 {}", path.display()))?
+                {
+                    let checkpoint_name = checkpoint_entry?
+                        .file_name()
+                        .into_string()
+                        .unwrap_or_default();
+                    if kk_storage::publish::is_temporary_name(&checkpoint_name) {
+                        continue;
+                    }
+                    anyhow::bail!(
+                        "checkpoints/ 含非临时内容 {checkpoint_name} 且无初始化标记：init 中途崩溃或来源不明（处置=确认无价值后删除整个目录重新 init；不会自动复用或覆盖）"
+                    );
+                }
                 continue;
             }
             anyhow::bail!(
@@ -157,10 +169,17 @@ mod tests {
         // 残留，不阻塞重新 init。
         std::fs::write(root.join(".identity.json.123.4.tmp"), b"torn")?;
         ServiceDir::new(&root).validate_for_init()?;
-        // 半初始化（checkpoints 非空、无 identity）→ 拒绝。
+        // checkpoints 仅含协议临时残留 → 允许（init 持租约清理后复核）。
+        std::fs::write(
+            root.join(CHECKPOINTS_DIR).join(".cp-1.json.123.4.tmp"),
+            b"torn",
+        )?;
+        ServiceDir::new(&root).validate_for_init()?;
+        // 半初始化（checkpoints 含非临时内容、无 identity）→ 拒绝。
         std::fs::write(root.join(CHECKPOINTS_DIR).join("cp-1.json"), b"x")?;
         assert!(ServiceDir::new(&root).validate_for_init().is_err());
         std::fs::remove_file(root.join(CHECKPOINTS_DIR).join("cp-1.json"))?;
+        std::fs::remove_file(root.join(CHECKPOINTS_DIR).join(".cp-1.json.123.4.tmp"))?;
         // 已初始化 → 拒绝。
         std::fs::write(root.join(IDENTITY_FILE), b"x")?;
         assert!(ServiceDir::new(&root).validate_for_init().is_err());

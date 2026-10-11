@@ -16,7 +16,8 @@
 | `mod init/test/inspect/types/services` | 作者包模板、场景测试、组合诊断、玩家类型生成与独立后台服务探针，见[本地模拟](local-simulation.md)、[组合诊断](mod-composition.md)、[类型生成](mod-types.md)和[后台服务](background-services.md) |
 | `sim run` | 加载版本化 JSON 场景与玩家模块，推进真实世界、检查断言并写报告，见[本地场景模拟](local-simulation.md) |
 | `export-fixtures` | 只读导出渲染器夹具：固定 seed 的脚本世界推进 N tick，逐 tick 落 world_json（JSONL，确定性输出，前端 build-fixtures 消费） |
-| `serve`、`test`、`import` | 预留入口，调用时返回“尚未实现”和退出码 2 |
+| `serve init/run` | 常驻服务：显式初始化与无日志恢复运行（S1.2 现行；网络接入随 S3） |
+| `test`、`import` | 预留入口，调用时返回“尚未实现”和退出码 2 |
 
 `embed` 使用自定义的 `{id, method, params}` / `{id, ok, result或error}` 消息格式，不是标准 JSON-RPC 2.0，也不提供网络监听。接入方式见 [兼容性验收](../../compat/README.md)。
 

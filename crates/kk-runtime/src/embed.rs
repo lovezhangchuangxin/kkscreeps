@@ -37,6 +37,15 @@ pub struct PlayerRun {
     pub console: Vec<String>,
 }
 
+/// 失败轮类别（`pending_round_kind` 返回值）：决定宿主的重试处置。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PendingRoundKind {
+    /// 结算失败：整轮候选已缓存，重试只重结算，不重跑玩家代码。
+    Settle,
+    /// 执行故障：玩家线程/协议层失败，禁止自动重派，需显式重建工作者。
+    Execution,
+}
+
 /// 世界结算失败后保留的整轮候选。重试复用结果和墙钟，不再运行玩家代码。
 struct PendingRound {
     /// 玩家意图、Memory、segments、CPU 用量和 console，均已脱离线程本地计费状态。
@@ -548,6 +557,19 @@ impl EmbedEngine {
     /// 是否有等待重试或丢弃的玩家失败轮缓存。
     pub fn has_pending_round(&self) -> bool {
         self.pending.is_some() || self.execution_failure.is_some()
+    }
+
+    /// 当前失败轮的类别：结算失败（整轮候选已缓存，重试只重结算、不
+    /// 重跑玩家）或执行故障（线程/协议层，禁止自动重派，需显式重建）。
+    /// 服务宿主据此区分暂停原因与 retry 处置；无失败轮为 None。
+    pub fn pending_round_kind(&self) -> Option<PendingRoundKind> {
+        if self.pending.is_some() {
+            Some(PendingRoundKind::Settle)
+        } else if self.execution_failure.is_some() {
+            Some(PendingRoundKind::Execution)
+        } else {
+            None
+        }
     }
 
     /// Mod VM 已因结算错误销毁；独立于玩家缓存和引擎恢复状态。

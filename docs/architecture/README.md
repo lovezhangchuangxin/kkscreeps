@@ -42,6 +42,7 @@
 | [mod-switching.md](mod-switching.md) | 无开放轮次的包集合切换：残留分诊、停用投影、工作者重注入与 sim mods_switch |
 | [gameplay-determinism.md](gameplay-determinism.md) | 确定性玩法时间与随机协议：无状态随机流、种子生命周期、Date 映射与非确定边界 |
 | [input-log.md](input-log.md) | 持久输入与玩家结果日志：逐轮提交后追加的可校验回放输入源与结算回放核对（G25.a 写入面；G25.b 回放） |
+| [service-host.md](service-host.md) | 常驻服务宿主现行契约：serve init/run、配置、调度状态机、周期保存与停止 |
 | [storage.md](storage.md) | 二进制快照、检查点、网络传输与持久化的目标设计 |
 | [snapshot-contract.md](snapshot-contract.md) | 现行房间快照/KKPV 共享块边界，以及共享直读目标的布局、生命周期和恢复要求 |
 | [performance-acceptance.md](performance-acceptance.md) | 端到端性能场景、测量方法和验收目标 |

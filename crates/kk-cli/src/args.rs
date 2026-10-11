@@ -3,7 +3,7 @@
 
 use clap::{Parser, Subcommand};
 
-use crate::{mod_tools::ModCommand, probes::mod_chain, sim::SimCommand};
+use crate::{mod_tools::ModCommand, probes::mod_chain, serve::ServeCommand, sim::SimCommand};
 
 #[derive(Parser)]
 #[command(name = "kkscreeps", about = "Screeps 服务端的 Rust 重写版", version)]
@@ -19,8 +19,11 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: ModCommand,
     },
-    /// 运行游戏服务器（尚未实现）
-    Serve,
+    /// 常驻游戏服务：显式初始化与恢复运行（网络接入随 S3）
+    Serve {
+        #[command(subcommand)]
+        command: ServeCommand,
+    },
     /// 加载 bot 模块并逐轮执行真实世界结算
     Sim {
         #[command(subcommand)]

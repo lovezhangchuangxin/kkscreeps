@@ -17,7 +17,7 @@ kkscreeps/
 │   ├── kk-mod-api/         玩法声明、校验与冻结计划
 │   ├── kk-mod-host/        可信 JS Mod 包装载与注册
 │   ├── kk-pathfinder/      原生 C++ 寻路封装，经 kk-runner op 供玩家面搜索
-│   ├── kk-cli/             embed、sim run、mod inspect、bot-check 与性能命令入口
+│   ├── kk-cli/             embed、serve init/run、sim run、mod inspect、bot-check 与性能命令入口
 │   ├── kk-storage-bench/   存储引擎选型基准
 │   ├── kk-storage/         本地文件原子发布、信封校验与目录单写者租约
 │   └── kk-backend/         网络服务预留模块

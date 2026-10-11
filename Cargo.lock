@@ -998,6 +998,7 @@ dependencies = [
  "kk-runner",
  "kk-runtime",
  "kk-schema",
+ "kk-storage",
  "kk-world",
  "libc",
  "serde",
