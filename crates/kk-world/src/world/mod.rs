@@ -5,7 +5,7 @@
 //! World 的目录和投影缓存依靠 generation、terrain_epoch 失效，修改状态须维护版本。
 
 use std::cell::RefCell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 pub mod checkpoint;
@@ -230,6 +230,11 @@ pub struct World {
     /// 共享编码缓存：可共享房一次编码、跨查看者复用（audience 置零，
     /// 装配时改写）。失效与清空口径同可见性索引。
     pub(crate) room_block_cache: RefCell<Option<RoomBlockCacheEntry>>,
+    /// 行级脏位的上一拍保留（房名 → 建索引的共享 full 块）。键为房名，
+    /// 值自带 tick/generation：过期保留（换代、跳拍后复用）在编码端
+    /// 不产脏段、在解码端由基准拍号校验兜底，至多退化为全量更新，
+    /// 因此无需随代际主动失效；条目量以房间数为上界。
+    pub(crate) room_block_dirty: RefCell<HashMap<String, Arc<kk_schema::kkpv::PrevEncodedBlock>>>,
 }
 
 // 独立副本拥有新身份；受控编辑发布时 adopt_edit 保留原世界身份。
@@ -249,6 +254,7 @@ impl Clone for World {
             max_id_cache: self.max_id_cache.clone(),
             visibility_cache: self.visibility_cache.clone(),
             room_block_cache: self.room_block_cache.clone(),
+            room_block_dirty: self.room_block_dirty.clone(),
         }
     }
 }
@@ -303,6 +309,7 @@ impl World {
             max_id_cache: RefCell::new((0, 0)),
             visibility_cache: RefCell::new(None),
             room_block_cache: RefCell::new(None),
+            room_block_dirty: RefCell::new(HashMap::new()),
         }
     }
 

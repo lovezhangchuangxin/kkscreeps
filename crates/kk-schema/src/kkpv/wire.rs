@@ -19,7 +19,13 @@ pub(crate) const OFF_TERRAIN: usize = 112;
 pub(crate) const OFF_DIRECTORY: usize = 120;
 pub(crate) const OFF_BUCKETS: usize = 128;
 pub(crate) const OFF_ARENA: usize = 136;
-pub(crate) const OFF_RESERVED: usize = 144;
+/// 脏位段（逐桶行脏位图，桶秩序拼接）的段偏移对；FLAG_DIRTY 置位时
+/// 存在，此时段是块内第五段（arena 之后）。
+pub(crate) const OFF_DIRTY: usize = 144;
+/// 脏位基准拍号（u64）：脏位所比对的上一拍编码块的 tick。解码端只有
+/// 自身上一拍解码 tick 与之一致时才信任干净行；FLAG_DIRTY 未置位时
+/// 保留为零。
+pub(crate) const OFF_DIRTY_BASE_TICK: usize = 152;
 
 pub(crate) const DIRECTORY_ENTRY: usize = 16;
 pub(crate) const BUCKET_HEADER: usize = 16;

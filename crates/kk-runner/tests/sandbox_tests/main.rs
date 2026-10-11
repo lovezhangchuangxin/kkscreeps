@@ -184,6 +184,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
         kkpv_channel_equivalence_impl,
     )?;
     scenarios.run("kkpv_ref_decode_impl", kkpv_ref_decode_impl)?;
+    scenarios.run("kkpv_dirty_resident_impl", kkpv_dirty_resident_impl)?;
     scenarios.run("kkpv_empty_bundle_impl", kkpv_empty_bundle_impl)?;
     scenarios.run(
         "kkpv_truncated_bundle_fails_impl",
@@ -198,7 +199,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
         "movement_codec_capture_and_cache_lifetime",
         movement_codec_capture_and_cache_lifetime,
     )?;
-    scenarios.finish(61)?;
+    scenarios.finish(62)?;
     assert_eq!(kk_runner::lifo_violations(), 0, "全流程 LIFO 纪律零违规");
     Ok(())
 }

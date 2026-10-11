@@ -26,6 +26,18 @@
 //! 键序对玩家可见（如 Object.keys(creep.store)），编码不重排。
 //!
 //! 公开块与私有块只能在相同 tick/generation/计划指纹下经 [`merge`] 合并。
+//!
+//! ## 行级脏位（FLAG_DIRTY）
+//!
+//! [`encode_with_dirty`] 在编码时与上一拍同源保留块（[`PrevEncodedBlock`]，
+//! 字节加结构索引）逐格比对，把逐格等值的行以脏位图写入块内第五段
+//! （arena 之后，逐桶位图按桶秩序拼接、脏行置位），并在头部
+//! `OFF_DIRTY_BASE_TICK` 记录比对基准拍号。脏位是保守标记：任何
+//! 不确定（字段无配对、列类型变化、变长内容不同）都判脏，判脏只损失
+//! 解码端跳过机会、不影响语义。解码端只有自身上一拍解码拍号与基准
+//! 一致时才可对干净行跳过就地更新（跳拍、重试等错位自动回退全量）；
+//! 未参与跟踪的块（[`encode_ref`] 与首次编码）不置位、不携带该段，
+//! 字节与 v1 无脏位产物逐字节一致。
 //! audience_hash 由宿主生成，本模块不解释、不校验（merge 亦不比较它）；
 //! 它不是授权凭证。设计上的一致性校验与缓存分组用途见
 //! docs/designs/domain-projection.md §6，当前仓库内尚无对应实现。
@@ -42,6 +54,11 @@ pub const VERSION: u16 = 1;
 pub const HEADER_LEN: usize = 160;
 /// flags 中标记私有块的位；其余位写入零，读取时非零即拒绝。
 pub const FLAG_PRIVATE: u16 = 1;
+/// flags 中标记块携带行脏位段的位（见 [`crate::kkpv`] 模块注释的
+/// "行级脏位"）。置位时头部 `OFF_DIRTY` 段对指向逐桶行脏位图
+/// （桶秩序拼接、脏行置位），`OFF_DIRTY_BASE_TICK` 记录脏位所比对
+/// 的上一拍编码拍号；未置位时两处保留字节为零。
+pub const FLAG_DIRTY: u16 = 2;
 
 /// 块内一个对象的待编码形态。字段序任意，编码按键排序并拒绝重复；
 /// 对象 ID 只进入目录，`fields` 中的 `id` 键会被拒绝。
@@ -356,12 +373,14 @@ impl std::fmt::Display for KkpvError {
 
 impl std::error::Error for KkpvError {}
 
+mod dirty;
 mod encode;
 mod merge;
 mod view;
 mod wire;
 
-pub use encode::{encode, encode_bundle, encode_ref, validate_bundle};
+pub use dirty::PrevEncodedBlock;
+pub use encode::{encode, encode_bundle, encode_ref, encode_with_dirty, validate_bundle};
 /// 头部 audience_hash 字段的字节偏移（32 字节宽）。见 [`patch_block_audience`]。
 pub const AUDIENCE_HASH_OFFSET: usize = OFF_AUDIENCE_HASH;
 /// 把块的 audience_hash 改写为给定值。与以目标 audience 直接编码的产物
@@ -420,5 +439,7 @@ pub fn bundle_block_slices(data: &[u8]) -> Result<Vec<&[u8]>, KkpvError> {
 pub use view::KkpvView;
 use wire::*;
 
+#[cfg(test)]
+mod dirty_tests;
 #[cfg(test)]
 mod tests;

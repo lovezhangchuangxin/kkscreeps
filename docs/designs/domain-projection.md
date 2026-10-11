@@ -119,9 +119,9 @@ Generic 未知字段不自动获得公共权限。已支持类型逐字段核对
 | room_name | 8 | UTF-8 arena 的 offset/length |
 | object_count、type_count | 各 4 | 对象数、类型桶数 |
 | terrain、object_directory、type_buckets、variable_arena | 每项 8 | 各段 offset/length；不存在则长度为零 |
-| reserved | 16 | 编码为零，版本 1 拒绝非零值 |
+| row_dirty、dirty_base_tick | 8、8 | FLAG_DIRTY 置位时指向第五段（arena 后逐桶行脏位图，桶秩序拼接）与比对基准拍号；未置位时两处编码为零并拒绝非零 |
 
-对象目录按 ID 升序，记录 `(id: u64, type_handle: u32, row: u32)`。类型桶含行数与字段目录；字段目录标识句柄、编码、缺失/null 位图及数值列或变长描述符位置。定长值按行定位，字符串/数组惰性解码。内建与扩展遵守同一目录，不能附加未授权 Generic 原文。
+对象目录按 ID 升序，记录 `(id: u64, type_handle: u32, row: u32)`。行级脏位（FLAG_DIRTY）是解码端跳过优化的保守标记：编码端与上一拍同源保留块逐格比对，逐格等值的行位图清零，解码端仅当自身上一拍解码拍号与基准一致时对干净行跳过就地更新——错位（跳拍、重试、基准过期）自动回退全量，任何不确定判脏。类型桶含行数与字段目录；字段目录标识句柄、编码、缺失/null 位图及数值列或变长描述符位置。定长值按行定位，字符串/数组惰性解码。内建与扩展遵守同一目录，不能附加未授权 Generic 原文。
 
 缺失、null、零和空数组分别编码，缺省与 JS 暴露由字段描述决定。u64 ID 保持精确，玩家仍用字符串，不经过 JS Number。浮点拒绝 NaN/Infinity，引用与集合使用有界结构编码。
 

@@ -14,7 +14,7 @@
 
 use kk_schema::kkpv::{
     KkpvBlockInput, KkpvBlockRef, KkpvLimits, KkpvObject, KkpvRow, KkpvVal, KkpvValue, KkpvView,
-    encode_bundle, encode_ref, patch_block_audience,
+    PrevEncodedBlock, encode_bundle, encode_ref, encode_with_dirty, patch_block_audience,
 };
 use kk_schema::room::RoomObject;
 use serde_json::Value;
@@ -25,13 +25,14 @@ use crate::domain::room::room_energy;
 use crate::projection::{ext_entries_json, object_exported_for, object_json};
 use crate::world::{ObjId, World};
 
+mod dirty_tests;
 mod generic_scan;
 mod objects;
 use objects::{RoomBlockMeta, encode_room_block, type_key_cow};
 
 /// 同代际同计划下可跨查看者共享的房间私有块字节。块头 audience 置零，
 /// 装配时按查看者改写（[`kk_schema::kkpv::patch_block_audience`]），
-/// 产物与按查看者直接编码逐字节一致。
+/// 产物与按查看者直接编码逐字节一致（脏位段与基准拍号不在改写范围）。
 ///
 /// 共享条件（构建时判定）：房内无归属旗（他人旗逐查看者裁切）、无
 /// Mod 对象（对象/字段级权限）、无扩展字段（Owner 字段裁切）。归属
@@ -39,7 +40,9 @@ use objects::{RoomBlockMeta, encode_room_block, type_key_cow};
 /// 空块含归属者自己的工地，故 `empty` 仅在无归属工地时共享。
 #[derive(Debug)]
 pub(crate) struct SharedRoomBlock {
-    pub(crate) full: Arc<Vec<u8>>,
+    /// full 块携带行级脏位（跨拍保留在 [`World::room_block_dirty`]），
+    /// 以建索引形态存放。
+    pub(crate) full: Arc<PrevEncodedBlock>,
     pub(crate) empty: Option<Arc<Vec<u8>>>,
 }
 
@@ -87,8 +90,11 @@ impl World {
                 continue;
             }
             let controller = state.controller();
-            // 共享构建失败不缓存半成品：该房回退逐查看者路径，由真实
-            // 调用方报出原始错误。
+            // full 块走行级脏位：与上一拍保留块逐格比对，并把本拍块
+            // 存回保留表（同源字节即各查看者上一拍所收字节，基准拍号
+            // 由解码端校验衔接）。共享构建失败不缓存半成品：该房回退
+            // 逐查看者路径，由真实调用方报出原始错误。
+            let prev = self.room_block_dirty.borrow().get(name).cloned();
             let Ok(full) = encode_room_block(
                 name,
                 state,
@@ -100,11 +106,20 @@ impl World {
                 None,
                 &empty_catalog,
                 None,
+                prev.as_deref(),
+                true,
             ) else {
                 continue;
             };
+            // 保留表与共享缓存共用同一 Arc：保留字节即各查看者本拍所收
+            // 字节，下一拍脏位比对与解码端基准校验同源。
+            let full = Arc::new(full);
+            self.room_block_dirty
+                .borrow_mut()
+                .insert(name.clone(), full.clone());
             // 不可见查看者的空块：无归属工地即可共享（空 user 下导出门
             // 排除全部对象，产物是零行块）；失败同样回退逐查看者路径。
+            // 空块零行无脏位可发，走纯编码。
             let empty = if has_owned_site {
                 None
             } else {
@@ -119,17 +134,13 @@ impl World {
                     None,
                     &empty_catalog,
                     None,
+                    None,
+                    false,
                 )
                 .ok()
-                .map(Arc::new)
+                .map(|block| Arc::new(block.into_bytes()))
             };
-            map.insert(
-                name.clone(),
-                SharedRoomBlock {
-                    full: Arc::new(full),
-                    empty,
-                },
-            );
+            map.insert(name.clone(), SharedRoomBlock { full, empty });
         }
         map
     }
@@ -158,8 +169,8 @@ impl World {
         let limits = KkpvLimits::default();
         // 先逐房定字节来源与长度，再一次性装配：共享块拷贝后原位改写
         // audience，回退块以真实查看者编码（audience 已正确）。
-        enum Source {
-            Shared { bytes: Arc<Vec<u8>> },
+        enum Source<'a> {
+            Shared(&'a [u8]),
             Fresh(Vec<u8>),
         }
         let mut sources = Vec::with_capacity(self.rooms.len());
@@ -169,13 +180,12 @@ impl World {
             let use_shared = match shared.get(name) {
                 Some(entry) => {
                     if room_visible {
-                        Some(Source::Shared {
-                            bytes: entry.full.clone(),
-                        })
+                        Some(Source::Shared(entry.full.bytes()))
                     } else {
-                        entry.empty.as_ref().map(|bytes| Source::Shared {
-                            bytes: bytes.clone(),
-                        })
+                        entry
+                            .empty
+                            .as_ref()
+                            .map(|bytes| Source::Shared(bytes.as_slice()))
                     }
                 }
                 None => None,
@@ -184,30 +194,36 @@ impl World {
                 Some(source) => source,
                 None => {
                     // 不可共享（或空块不可共享）：逐查看者直写编码，输出与
-                    // 逐查看者全量构造同源。
+                    // 逐查看者全量构造同源。Fresh 路径不参与行级脏位
+                    // （无跨拍保留，全量更新语义不变）。
                     let candidates = if room_visible {
                         None
                     } else {
                         index.invisible_room_candidates(name, user)
                     };
                     let candidates = candidates.as_deref();
-                    Source::Fresh(encode_room_block(
-                        name,
-                        state,
-                        state.controller(),
-                        self.time,
-                        RoomBlockMeta {
-                            tick: self.time,
-                            generation: self.generation(),
-                            plan_hash,
-                            audience_hash,
-                        },
-                        user,
-                        room_visible,
-                        candidates,
-                        catalog,
-                        surface,
-                    )?)
+                    Source::Fresh(
+                        encode_room_block(
+                            name,
+                            state,
+                            state.controller(),
+                            self.time,
+                            RoomBlockMeta {
+                                tick: self.time,
+                                generation: self.generation(),
+                                plan_hash,
+                                audience_hash,
+                            },
+                            user,
+                            room_visible,
+                            candidates,
+                            catalog,
+                            surface,
+                            None,
+                            false,
+                        )?
+                        .into_bytes(),
+                    )
                 }
             };
             sources.push(source);
@@ -217,7 +233,7 @@ impl World {
             + sources
                 .iter()
                 .map(|source| match source {
-                    Source::Shared { bytes } => bytes.len(),
+                    Source::Shared(bytes) => bytes.len(),
                     Source::Fresh(bytes) => bytes.len(),
                 })
                 .sum::<usize>();
@@ -232,16 +248,16 @@ impl World {
         out.extend_from_slice(&fits(sources.len())?.to_le_bytes());
         for source in &sources {
             let len = match source {
-                Source::Shared { bytes } => bytes.len(),
+                Source::Shared(bytes) => bytes.len(),
                 Source::Fresh(bytes) => bytes.len(),
             };
             out.extend_from_slice(&fits(len)?.to_le_bytes());
         }
         for source in sources {
             match source {
-                Source::Shared { bytes } => {
+                Source::Shared(bytes) => {
                     let start = out.len();
-                    out.extend_from_slice(&bytes);
+                    out.extend_from_slice(bytes);
                     patch_block_audience(&mut out[start..], &audience_hash)
                         .map_err(|e| e.to_string())?;
                 }
@@ -286,18 +302,23 @@ impl World {
                 index.invisible_room_candidates(name, user)
             };
             let candidates = candidates.as_deref();
-            blocks.push(encode_room_block(
-                name,
-                state,
-                state.controller(),
-                self.time,
-                meta,
-                user,
-                room_visible,
-                candidates,
-                catalog,
-                surface,
-            )?);
+            blocks.push(
+                encode_room_block(
+                    name,
+                    state,
+                    state.controller(),
+                    self.time,
+                    meta,
+                    user,
+                    room_visible,
+                    candidates,
+                    catalog,
+                    surface,
+                    None,
+                    false,
+                )?
+                .into_bytes(),
+            );
         }
         let total = 4 + blocks.len() * 4 + blocks.iter().map(Vec::len).sum::<usize>();
         let fits = |v: usize| u32::try_from(v).map_err(|_| "束长度超出 u32 框架".to_string());

@@ -228,6 +228,9 @@ impl World {
         *draft.max_id_cache.borrow_mut() = (u64::MAX, 0);
         *draft.visibility_cache.borrow_mut() = None;
         *draft.room_block_cache.borrow_mut() = None;
+        // 脏位保留随受控编辑清空：旧保留不再可能对上编辑后的世界，
+        // 留着只会钉住字节（正确性另由基准拍号兜底）。
+        draft.room_block_dirty.borrow_mut().clear();
         draft.instance = self.instance.clone();
         *self = draft;
         Ok(())

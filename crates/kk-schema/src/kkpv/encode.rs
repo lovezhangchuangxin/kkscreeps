@@ -44,17 +44,17 @@ pub fn encode(input: &KkpvBlockInput, limits: &KkpvLimits) -> Result<Vec<u8>, Kk
 /// （`col_base..col_base+rows`，行主序），变长字段的 arena 单元则是
 /// `cells_all` 平铺缓冲的区间（`cells_base..+rows`；usize::MAX 表示
 /// 定宽字段没有单元）。
-struct FieldPlan<'o> {
-    key: &'o str,
+pub(super) struct FieldPlan<'o> {
+    pub(super) key: &'o str,
     key_desc: (u32, u32),
-    kind: u8,
-    col_base: usize,
-    rows: u32,
-    cells_base: usize,
+    pub(super) kind: u8,
+    pub(super) col_base: usize,
+    pub(super) rows: u32,
+    pub(super) cells_base: usize,
 }
-struct BucketPlan<'o> {
-    rows: u32,
-    fields: Vec<FieldPlan<'o>>,
+pub(super) struct BucketPlan<'o> {
+    pub(super) rows: u32,
+    pub(super) fields: Vec<FieldPlan<'o>>,
 }
 
 /// FNV-1a 字符串哈希：编码热路径的键短且高度重复，符号表只用于
@@ -142,6 +142,33 @@ struct SymBucket {
 /// 值域或限额违规、对象 ID 或字段键重复、同键值编码不一致时返回错误，
 /// 不产出部分数据。
 pub fn encode_ref(input: &KkpvBlockRef<'_>, limits: &KkpvLimits) -> Result<Vec<u8>, KkpvError> {
+    encode_impl(input, limits, None, false).map(|(bytes, _)| bytes)
+}
+
+/// [`encode_ref`] 的行级脏位版：与上一拍保留块逐格比对（见 [`super::dirty`]），
+/// 逐格等值的行写入块内脏位段供解码端跳过就地更新；同时返回本拍的
+/// 结构索引供下一拍保留。`prev` 传索引缺失的块（纯编码产物）等同无
+/// 基准——只建索引不产脏段。首次编码（prev 为 None）同样只建索引，
+/// 从下一拍起产生脏位。
+///
+/// # Errors
+/// 与 [`encode_ref`] 同源。
+pub fn encode_with_dirty(
+    input: &KkpvBlockRef<'_>,
+    limits: &KkpvLimits,
+    prev: Option<&PrevEncodedBlock>,
+) -> Result<PrevEncodedBlock, KkpvError> {
+    let (bytes, index) = encode_impl(input, limits, prev, true)?;
+    let index = index.expect("want_index 时总是构建索引");
+    Ok(PrevEncodedBlock::new(bytes, index))
+}
+
+fn encode_impl(
+    input: &KkpvBlockRef<'_>,
+    limits: &KkpvLimits,
+    prev: Option<&PrevEncodedBlock>,
+    want_index: bool,
+) -> Result<(Vec<u8>, Option<dirty::PrevBlockIndex>), KkpvError> {
     if input.room_name.is_empty() {
         return Err(KkpvError::RoomNameMissing);
     }
@@ -348,6 +375,31 @@ pub fn encode_ref(input: &KkpvBlockRef<'_>, limits: &KkpvLimits) -> Result<Vec<u
         return Err(KkpvError::LimitExceeded("max_arena_bytes"));
     }
 
+    // 行级脏位：与上一拍同源保留块逐格比对（无基准或基准无索引则不
+    // 产脏段，解码端按全量更新处理，语义等同全脏）。基准拍号取保留
+    // 块拍号，由解码端校验自身衔接；保留不按世代过滤——跨代际保留
+    // 的内容比对仍保守正确，基准拍号不衔接时解码端自动回退全量。
+    let type_keys: Vec<&str> = buckets.iter().map(|b| syms.name(b.type_sym)).collect();
+    let (dirty_maps, dirty_base_tick) = match prev.and_then(PrevEncodedBlock::parts) {
+        Some((index, bytes)) => (
+            dirty::compute(
+                index,
+                bytes,
+                input,
+                &plans,
+                &type_keys,
+                &columns_all,
+                &cells_all,
+                &arena.bytes,
+                &order,
+                &row_bucket,
+            ),
+            Some(index.tick),
+        ),
+        _ => (Vec::new(), None),
+    };
+    let dirty_len: usize = dirty_maps.iter().map(Vec::len).sum();
+
     let directory_len = order.len() * DIRECTORY_ENTRY;
     let mut bucket_bytes = Vec::new();
     let mut bitmap: Vec<u8> = Vec::new();
@@ -433,7 +485,12 @@ pub fn encode_ref(input: &KkpvBlockRef<'_>, limits: &KkpvLimits) -> Result<Vec<u
     }
 
     let terrain_len = terrain.map_or(0, |t| t.len());
-    let total = HEADER_LEN + terrain_len + directory_len + bucket_bytes.len() + arena.bytes.len();
+    let total = HEADER_LEN
+        + terrain_len
+        + directory_len
+        + bucket_bytes.len()
+        + arena.bytes.len()
+        + dirty_len;
     if total > limits.max_bytes {
         return Err(KkpvError::LimitExceeded("max_bytes"));
     }
@@ -452,11 +509,16 @@ pub fn encode_ref(input: &KkpvBlockRef<'_>, limits: &KkpvLimits) -> Result<Vec<u
     let directory_off = terrain_off + terrain_len;
     let buckets_off = directory_off + directory_len;
     let arena_off = buckets_off + bucket_bytes.len();
+    let dirty_off = arena_off + arena.bytes.len();
 
     let mut out = vec![0u8; total];
     out[..4].copy_from_slice(&MAGIC);
     out[OFF_VERSION..OFF_VERSION + 2].copy_from_slice(&VERSION.to_le_bytes());
-    let flags = u16::from(input.private) * FLAG_PRIVATE;
+    let dirty_present = dirty_len > 0;
+    let mut flags = u16::from(input.private) * FLAG_PRIVATE;
+    if dirty_present {
+        flags |= FLAG_DIRTY;
+    }
     out[OFF_FLAGS..OFF_FLAGS + 2].copy_from_slice(&flags.to_le_bytes());
     out[OFF_BYTE_LEN..OFF_BYTE_LEN + 4].copy_from_slice(&fits(total)?.to_le_bytes());
     out[OFF_HEADER_LEN..OFF_HEADER_LEN + 4].copy_from_slice(&(HEADER_LEN as u32).to_le_bytes());
@@ -484,6 +546,14 @@ pub fn encode_ref(input: &KkpvBlockRef<'_>, limits: &KkpvLimits) -> Result<Vec<u
     let (arena_o, arena_l) = seg_pair(arena_off, arena.bytes.len())?;
     out[OFF_ARENA..OFF_ARENA + 4].copy_from_slice(&arena_o.to_le_bytes());
     out[OFF_ARENA + 4..OFF_ARENA + 8].copy_from_slice(&arena_l.to_le_bytes());
+    // 脏位段（第五段，桶秩序拼接的逐桶行位图）与基准拍号只在
+    // FLAG_DIRTY 置位时携带；其余情形保留区保持零，与无脏位产物一致。
+    let (dirty_o, dirty_l) = seg_pair(dirty_off, dirty_len)?;
+    out[OFF_DIRTY..OFF_DIRTY + 4].copy_from_slice(&dirty_o.to_le_bytes());
+    out[OFF_DIRTY + 4..OFF_DIRTY + 8].copy_from_slice(&dirty_l.to_le_bytes());
+    if dirty_present && let Some(base) = dirty_base_tick {
+        out[OFF_DIRTY_BASE_TICK..OFF_DIRTY_BASE_TICK + 8].copy_from_slice(&base.to_le_bytes());
+    }
     // 目录按对象（已按 ID 升序）写入；句柄是桶在类型键序中的秩（行→桶
     // 整数查表），行号是对象在其桶内按 ID 的序（逐桶计数器累加）。
     let mut row_counters = vec![0u32; buckets.len()];
@@ -498,7 +568,24 @@ pub fn encode_ref(input: &KkpvBlockRef<'_>, limits: &KkpvLimits) -> Result<Vec<u
     }
     out[buckets_off..buckets_off + bucket_bytes.len()].copy_from_slice(&bucket_bytes);
     out[arena_off..arena_off + arena.bytes.len()].copy_from_slice(&arena.bytes);
-    Ok(out)
+    let mut dirty_cursor = dirty_off;
+    for bitmap in &dirty_maps {
+        out[dirty_cursor..dirty_cursor + bitmap.len()].copy_from_slice(bitmap);
+        dirty_cursor += bitmap.len();
+    }
+    let index = want_index.then(|| {
+        dirty::build_index(
+            input.tick,
+            input,
+            &plans,
+            &type_keys,
+            &order,
+            &row_bucket,
+            buckets_off,
+            arena_off,
+        )
+    });
+    Ok((out, index))
 }
 
 /// 把多房间块序列编码为单一传输缓冲：`u32` 块数、逐块 `u32` 字节

@@ -795,6 +795,11 @@ fn object_row<'a>(
 /// `candidates` 为 None 表示可见房全对象枚举；Some 表示不可见房的
 /// 候选对象（索引给出，ID 升序），与全量枚举的相对顺序一致。
 ///
+/// `prev` 与 `track` 服务行级脏位：`track` 为真时走
+/// `encode_with_dirty` 并返回建索引的块（供下一拍保留），`prev` 给出
+/// 上一拍保留块时逐格比对产脏位段；`track` 为假走纯编码（无索引、
+/// 无脏位），产物字节与旧路径逐字节一致。
+///
 /// # Errors
 /// 对象记录无法映射为 KKPV 值形态或编码超限时返回错误。
 #[allow(clippy::too_many_arguments)]
@@ -809,7 +814,9 @@ pub(super) fn encode_room_block(
     candidates: Option<&[ObjId]>,
     catalog: &kk_mod_api::extension::ExtensionCatalog,
     surface: Option<&kk_mod_api::player_surface::PlayerSurface>,
-) -> Result<Vec<u8>, String> {
+    prev: Option<&kk_schema::kkpv::PrevEncodedBlock>,
+    track: bool,
+) -> Result<kk_schema::kkpv::PrevEncodedBlock, String> {
     // 第一遍：门与解析。Generic 优先走受限文法零拷贝扫描（语义与参考
     // 路径逐位一致，见 generic_scan.rs），扫描不收的载荷回退 serde 解析
     // 保活；Mod 始终走参考记录；ext 对同序预计算。
@@ -956,5 +963,11 @@ pub(super) fn encode_room_block(
         terrain: None,
         rows,
     };
-    encode_ref(&block, &KkpvLimits::default()).map_err(|e| e.to_string())
+    let limits = KkpvLimits::default();
+    let encoded = if track {
+        encode_with_dirty(&block, &limits, prev)
+    } else {
+        encode_ref(&block, &limits).map(kk_schema::kkpv::PrevEncodedBlock::from_plain)
+    };
+    encoded.map_err(|e| e.to_string())
 }

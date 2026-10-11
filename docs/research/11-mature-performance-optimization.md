@@ -362,3 +362,20 @@ RSS 采样中位数均值下降 12.09%，峰值均值仅下降 1.80%；首对新
 【剩余杠杆结构（更新）】热稳态 wall ~515-660ms = proj 174-218（主线程串行）+ run 253-306（worker 吞吐）+ settle 109-148（主线程串行）。xxs 以 6.26× 并行度跑全部相位；kk 受 4P+6E 功率密度约束（L1a/并发扫帚双证）。达标 0.9×（~253-319ms）的可行序：① V8 注入面 row-dirty 跳过（Rust 编码器逐格比对标脏 + 束带行脏位，JS 端免 updateResident 全量——~30-60 core-ms）；② 结算相 109ms 的可并行成分采样归因后分片；③ 相位重叠/并行化的 L1a 仲裁路径（"CPU 小超+wall 大赢"→2 核亲和窗，用户已确认细则）。
 
 【settle 相细分（同批 sample）】1635 样本（~140ms/拍）：tick_with_writebacks ~1100（settle_room 仅 154 ~13ms；BTreeMap 克隆/迭代/drop 胶水 ~350 ~30ms；commit_tick_rooms 124 ~11ms；其余为引擎簿记）+ **publish_tick 299 ~26ms**。可并行成分候选：commit/adopt 的逐房 BTreeMap 重建与 publish_tick 内部结构（下片采样后定）。
+
+
+## 2026-10-11 补记：row-dirty 行级脏位落地（现行实现）
+
+【现行实现】投影侧每拍重编码 300 房 ×535 对象，而解码端每拍对 ~60% 行做全量 `updateResident`（急读字段重写 + 变长访问器重装）——值未变的行是纯浪费。落地**行级脏位**三层：
+
+1. **编码端逐格比对**（`kk-schema/kkpv/dirty.rs`）：`encode_with_dirty` 与上一拍同源保留块（`PrevEncodedBlock`：块字节 + 结构索引）比对——桶按 type_key 配对、字段按键+列类型配对（含 prev-only 字段"上一拍缺失才干净"补判）、行按目录 ID 双指针对位（行号漂移/桶行数变化不影响）、定宽 8 字节位比对、变长 cells 在两拍 arena 内字节比对。**保守判脏**：任何不确定（无配对/类型变/内容异）判脏，判脏只损失跳过机会；首拍（无基准）产物与 `encode_ref` 逐字节一致。
+2. **束格式第五段**：FLAG_DIRTY（头部 144..152 段对 + 152..160 基准拍号，保留区语义更新）；脏位段=逐桶行位图按桶秩序拼接；Rust 视图与 JS 解码端同步扩校验（段/旗一致性、段长与桶行数精确、尾位为零、基准拍号≤本拍）。
+3. **解码端干净行跳过**（`kkpv.js`）：块脏位基准与常驻表上一拍成功解码拍号衔接（`mergeState.lastTick`）时，干净行只重指 `DECODE_CTX`（防旧束 backing store 被未物化惰性字段钉住）跳过全字段循环；跳拍/重试/基准过期自动回退全量（安全性不依赖编码端保留新鲜度）。保留挂在 kk-world 共享 full 块（`room_block_dirty`，与共享缓存同 Arc——保留字节即各查看者上一拍所收字节），Fresh 逐查看者路径不参与（内存有界）。
+
+【两个实现期陷阱（入档防错）】① build_index 首版每桶偏移从 buckets_off 重算未累计前序桶字节——第二桶起全错；由"索引偏移 vs 独立走查交叉验证"测试当场抓住。② 世代门初版用 `prev.generation == input.generation` 拦过期保留——但世界每拍变异都换代，门永远不匹配；正确性本就由"保留字节==解码端上一拍所收字节 + 基准拍号校验"保证，世代门既多余又有害，已移除（跨代际保留至多退化为全脏）。
+
+【ABBA 与方法论教训】首版 ABBA 误用 **debug 构建**作 new 对照 **release** 冻结基线，得 3.7× 假回退（project/settle 全膨胀、逐段插桩定位无果后 HEAD 干净对照复现同量级——同码不同构才暴露：冻结基线 72MB=release，误冻 124MB=debug）。**冻结二进制基线固定 release 口径**。正式 ABBA（丢弃窗热协议 O,N,N,O）：两对相邻窗方向一致（0.787/1.149），均值 **wall P50 −17.6%（0.824）、P95 −10.9%、run −36.0%、settle −13.0%、project ±0（比对成本被共享装配吸收）、CPU core-ms −22.6%（公平门②显著改善）、RSS 峰值 +5.0%（每房保留 ~40KB+索引）**。[摘要与四轮报告](../../compat/reports/mature-comparison/2026-10-11/50x6-row-dirty/summary.json)。机理：run 相免 ~60% 行的全字段更新；settle 同步受益于解码端分配/存活垃圾减少（V8 GC 压力外溢，与 L4b GC 归因一致）。
+
+【验证链】kk-schema 40 单测（偏移交叉验证/脏位语义/拒变体/首拍字节等价）+ kk-world 脏位语义锁（第二拍带脏位与全 fresh 编码逐对象逐字段等值、插入行脏/存量行净）+ kk-runner sandbox 62 场景（新增 `kkpv_dirty_resident`：连拍干净行懒字段重指后可读 + 基准错位回退全量）+ sim 106 + kk-mod-host + 棘轮 2905/9 豁免零转红 + 完整无参数 `pnpm run check`。
+
+【剩余杠杆结构（更新）】热稳态 wall 降至 ~500-570ms = proj ~185-227 + run ~170-191 + settle ~117-141；达标 0.9×（热稳态 xxs×0.9 ≈ 253-319ms）已进入射程——run 相尚有变长字段重物化削减（cell 级复用）与 settle 可并行成分（BTreeMap 重建 ~30ms、publish_tick ~26ms、commit_rooms ~11ms）两线；另需安静机热稳态标尺复测确认对 xxs 的实际比值。

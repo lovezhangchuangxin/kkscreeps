@@ -4,6 +4,8 @@
 
 ## 当前接手位置
 
+- 2026-10-11 row-dirty 行级脏位交付（随本提交交付）：编码端逐格比对标脏（`PrevEncodedBlock` 跨拍保留字节+结构索引、桶按 type_key/字段按键配对含 prev-only 补判、行按 ID 双指针对位、保守判脏）+ 束第五段 FLAG_DIRTY/脏位图/基准拍号（Rust 视图与 JS 解码端同步扩校验）+ 解码端干净行只重指 DECODE_CTX 跳过 updateResident（基准拍号与常驻表 lastTick 衔接才启用，跳拍/重试自动回退全量）；保留挂共享 full 块（与共享缓存同 Arc），Fresh 路径不参与。ABBA（丢弃窗热协议 O,N,N,O，release 冻结对 release）：**wall P50 −17.6%（0.824）、run −36.0%、settle −13.0%（解码端垃圾减少的 GC 外溢）、project ±0、CPU core-ms −22.6%（公平门②大幅改善）、RSS 峰值 +5.0%（每房保留 ~40KB+索引）**，两对相邻窗方向一致（0.787/1.149）。[证据](../../compat/reports/mature-comparison/2026-10-11/50x6-row-dirty/summary.json)。**方法论教训**：首版误用 debug 构建对照 release 基线得 3.7× 假回退——冻结二进制基线固定 release 口径；两个实现陷阱（索引偏移未累计前序桶、世代门挡住每拍换代的世界）由交叉验证测试与"保留字节==解码端所收字节"不变式抓住。验证链：kk-schema 40 单测 + kk-world 脏位语义锁 + sandbox 62 场景（新增 kkpv_dirty_resident）+ sim 106 + mod-host + 棘轮 2905 零转红 + 完整无参数 check。热稳态 wall 降至 ~500-570ms，0.9×（~253-319ms）进入射程；下一片：安静机热稳态标尺复测（确认对 xxs 实际比值）或 settle 可并行成分（BTreeMap ~30ms/publish_tick ~26ms）或变长重物化 cell 级复用。
+
 - 2026-10-11 L3 结构试验：两项证伪入档（随本提交交付）：**并发重标定关闭**（6/8 并发下 run −26/−57ms 但主线程串行相被功率密度拖慢 40-50ms、CPU +29%/+35%，wall 反劣——L5 按实证关闭）；**就绪队列前瞻撤回**（假说"worker 空泡=投影派发延迟"被 interleaved 对照证伪，+1.5% 噪声级；空泡主源更可能是 V8 GC 停顿与调度唤醒，run 相确系 worker 吞吐约束）。主线程 sample 归因：78.6% run_players（44% 等回执 + 31.6% 投影编码）、结算 21%。剩余杠杆序：① row-dirty 跳过（Rust 逐格标脏+束行脏位+JS 免全量 updateResident，~30-60 core-ms）；② settle 109ms 可并行成分归因；③ 相位重叠 L1a 仲裁路径（2 核亲和窗，用户已确认细则）。
 
 - 2026-10-11 热稳态标尺校准（随本提交交付）：丢弃窗热协议重测 xxs 对照——**真实比值 ~1.84×**（1.85/1.83 两独立窗复现）、**CPU 已达平价（1.00-1.06×）**、RSS 0.69-0.70×。晨读 2.35× 系冷机伪影反向面：xxs 热敏感性（+50%）远高于 kk（+18%），冷窗给 xxs 放水——**此后正式验收窗必须两侧丢弃窗预热**。等价性分歧签名与晨窗一致（既有登记项）。剩余差距：run 相（~283-296ms，主线程等待 ~295ms）是最大单块，L3 重叠为下一主片。[证据](../../compat/reports/mature-comparison/2026-10-11/50x6-thermal-yardstick/summary.json)。

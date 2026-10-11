@@ -6,6 +6,9 @@
  * 视图由可信闭包按索引读取（getRawBuffer 经构造器拷出，不返还视图）。
  * 块布局与 crates/kk-schema/src/kkpv.rs 的 v1 编码一致：160 字节头、
  * ID 升序目录、按类型分桶的列式字段、集中 arena 与单字节嵌套标签。
+ * FLAG_DIRTY 块在 arena 后携带逐桶行脏位段与基准拍号（行级脏位，
+ * 见 kkpv.rs 模块注释）；基准与上一拍成功解码衔接时，干净行（与基准
+ * 拍逐格等值）只重指惰性上下文、跳过全字段就地更新。
  * 束框架是 u32 块数 + 逐块 u32 长度目录 + 顺序拼接的块字节。
  * 记录字段解码：定宽列（bool/int/uint/float/ref）急切读取为普通数据
  * 属性；变长列（str/array/object）经共享惰性访问器首读解码并固化为值
@@ -331,12 +334,19 @@
     if (u32(dv, start) !== 0x56504b4b) fail('魔数不符');
     if (u16(dv, start + 4) !== 1) fail('版本不支持');
     const flags = u16(dv, start + 6);
-    if ((flags & ~1) !== 0) fail('未知 flags 位');
+    if ((flags & ~3) !== 0) fail('未知 flags 位');
     if (u32(dv, start + 8) !== len) fail('byte_len 不符');
     if (u32(dv, start + 12) !== HEADER_LEN) fail('header_len 不符');
-    for (let r = 144; r < 160; r++) {
-      if (u8(dv, start + r) !== 0) fail('保留字节非零');
+    // 保留区 144..160 承载行脏位段对（FLAG_DIRTY 置位时为块内第五段，
+    // 逐桶位图按桶秩序拼接）与基准拍号；未置位时整区必须为零。
+    const dirty = [u32(dv, start + 144), u32(dv, start + 148)];
+    const baseTick = readUint(dv, start + 152);
+    if ((flags & 2) === 0) {
+      if (dirty[0] !== 0 || dirty[1] !== 0 || baseTick !== 0) fail('保留字节非零');
+    } else if (baseTick > expectedTick) {
+      fail('脏位基准拍号晚于本块拍号');
     }
+    if (((flags & 2) !== 0) !== (dirty[1] > 0)) fail('脏位段与 FLAG_DIRTY 不一致');
     if (readUint(dv, start + 16) !== expectedTick) fail('块头 tick 与信封不一致');
     const objectCount = u32(dv, start + 104);
     const typeCount = u32(dv, start + 108);
@@ -344,7 +354,7 @@
     const directory = [u32(dv, start + 120), u32(dv, start + 124)];
     const buckets = [u32(dv, start + 128), u32(dv, start + 132)];
     const arena = [u32(dv, start + 136), u32(dv, start + 140)];
-    const segs = [terrain, directory, buckets, arena];
+    const segs = [terrain, directory, buckets, arena, dirty];
     for (let s = 0; s < segs.length; s++) {
       const o = segs[s][0];
       const l = segs[s][1];
@@ -371,6 +381,8 @@
       arena,
       arenaBase: start + arena[0],
       arenaLen: arena[1],
+      dirty,
+      baseTick,
     };
   }
 
@@ -382,7 +394,10 @@
   // （公开块出现在私有束说明通道装配有误）。resident 非 null 时启用
   // 跨 tick 记录常驻：id 命中且布局签名一致就就地更新（ctx 重指新块、
   // 急读属性重写、变长属性重装共享访问器），目录外的 id 由调用方清扫。
-  function decodeBlockInto(dv, records, his, los, start, len, expectedTick, resident, prev) {
+  // lastTick 是该常驻表上一拍成功解码的拍号；块携带脏位段且基准拍号
+  // 与之衔接时，干净行（与基准拍逐格等值）只重指 ctx、跳过全字段更新
+  // ——错位（跳拍、重试、基准过期）自动回退全量路径。
+  function decodeBlockInto(dv, records, his, los, start, len, expectedTick, resident, prev, lastTick) {
     const h = checkBlockHeader(dv, start, len, expectedTick);
     if ((h.flags & 1) !== 1) fail('私有束要求私有块');
     if (h.terrain[1] !== 0) fail('私有对象块不带地形段');
@@ -390,12 +405,16 @@
     const arenaBase = h.arenaBase;
     const arenaLen = h.arenaLen;
     if (objectCount * 16 !== h.directory[1]) fail('目录长度与对象数不符');
+    const cleanEnabled =
+      (h.flags & 2) !== 0 && resident !== null && h.baseTick === lastTick;
 
     // 类型桶：16 字节桶头 + 12 字节字段项 + 缺失/null 位图 + 定宽列，
     // 消费量须与桶段长度精确一致。
     let cur = start + h.buckets[0];
     const bucketsEnd = cur + h.buckets[1];
     const bucketList = [];
+    // 脏位段按桶秩序拼接，桶走查同步推进每桶位图偏移。
+    let dirtyCursor = start + h.dirty[0];
     for (let t = 0; t < h.typeCount; t++) {
       if (cur + 16 > bucketsEnd) fail('桶头越界');
       const rows = u32(dv, cur + 8);
@@ -424,6 +443,8 @@
       }
       // 位图长度不用 (rows+7)>>>3：rows 接近 2^32 时加法先回绕。
       const bmLen = (rows >>> 3) + ((rows & 7) !== 0 ? 1 : 0);
+      const dirtyAt = dirtyCursor;
+      dirtyCursor += bmLen;
       for (let f = 0; f < fieldCount; f++) {
         fields[f].missingAt = cur;
         cur += bmLen;
@@ -460,9 +481,12 @@
         }
         sig = parts.join('\u0000');
       }
-      bucketList[bucketList.length] = { rows, fields, lazyAccessors, sig };
+      bucketList[bucketList.length] = { rows, fields, lazyAccessors, sig, dirtyAt };
     }
     if (cur !== bucketsEnd) fail('桶段消费不符');
+    if (h.dirty[1] > 0 && dirtyCursor !== start + h.dirty[0] + h.dirty[1]) {
+      fail('脏位段长度与桶行数不符');
+    }
 
     // 目录：ID 升序；句柄与行号须落在已解析桶内。
     const dirAt = start + h.directory[0];
@@ -505,10 +529,18 @@
       }
       // 常驻命中：布局签名一致（访问器的字段索引语义不变）就就地更新，
       // 免去每拍重建记录对象；布局变化（字段增删/列类型变/换桶）重建。
+      // 干净行（脏位清零且基准拍衔接）只重指 ctx 跳过全字段更新——
+      // 编码端逐格比对保证值等价，重指 ctx 同时避免旧束缓冲被钉住。
       if (existing !== null) {
         if (existing[RESIDENT_SIG] === bucket.sig) {
           existing[SEEN_TICK] = expectedTick;
-          updateResident(existing, dv, bucket, row, arenaBase, arenaLen);
+          if (cleanEnabled && !bitAt(dv, bucket.dirtyAt, row)) {
+            if (bucket.lazyAccessors !== null) {
+              rePointCtx(existing, dv, row, arenaBase, arenaLen, bucket.fields);
+            }
+          } else {
+            updateResident(existing, dv, bucket, row, arenaBase, arenaLen);
+          }
           records[records.length] = existing;
           his[his.length] = hi;
           los[los.length] = lo;
@@ -523,7 +555,13 @@
         if (found !== undefined) {
           if (found[RESIDENT_SIG] === bucket.sig) {
             found[SEEN_TICK] = expectedTick;
-            updateResident(found, dv, bucket, row, arenaBase, arenaLen);
+            if (cleanEnabled && !bitAt(dv, bucket.dirtyAt, row)) {
+              if (bucket.lazyAccessors !== null) {
+                rePointCtx(found, dv, row, arenaBase, arenaLen, bucket.fields);
+              }
+            } else {
+              updateResident(found, dv, bucket, row, arenaBase, arenaLen);
+            }
             records[records.length] = found;
             his[his.length] = hi;
             los[los.length] = lo;
@@ -569,17 +607,24 @@
     }
   }
 
+  // 惰性解码上下文重指：干净行跳过全字段更新时仍把 ctx 指向本拍束，
+  // 未物化的变长字段首读走新缓冲（值等价由编码端逐格比对保证），旧束
+  // backing store 不再被常驻记录引用。
+  function rePointCtx(rec, dv, row, arenaBase, arenaLen, fields) {
+    const ctx = rec[DECODE_CTX];
+    ctx.dv = dv;
+    ctx.row = row;
+    ctx.arenaBase = arenaBase;
+    ctx.arenaLen = arenaLen;
+    ctx.fields = fields;
+  }
+
   // 常驻记录的就地更新：ctx 换指新块（复用对象免分配），急读属性按新值
   // 重写、缺失字段删除残留，变长字段重装共享访问器（顶掉已物化的旧值）。
   // 调用前已由布局签名保证字段集、顺序与列类型不变。
   function updateResident(rec, dv, bucket, row, arenaBase, arenaLen) {
     if (bucket.lazyAccessors !== null) {
-      const ctx = rec[DECODE_CTX];
-      ctx.dv = dv;
-      ctx.row = row;
-      ctx.arenaBase = arenaBase;
-      ctx.arenaLen = arenaLen;
-      ctx.fields = bucket.fields;
+      rePointCtx(rec, dv, row, arenaBase, arenaLen, bucket.fields);
     }
     const fields = bucket.fields;
     for (let f = 0; f < fields.length; f++) {
@@ -624,7 +669,7 @@
     const his = [];
     const los = [];
     forEachBlock(dv, total, (start, len) => {
-      decodeBlockInto(dv, records, his, los, start, len, expectedTick, null, null);
+      decodeBlockInto(dv, records, his, los, start, len, expectedTick, null, null, undefined);
     });
     return records;
   }
@@ -647,6 +692,8 @@
     const state = __reflectApply(__weakGet, mergeState, [resident]);
     // 块数一致才启用归并对位（束块序=投影房间序，房间集稳定时逐拍一致）
     const prevEnds = state !== undefined ? state.ends : null;
+    // 上一拍成功解码的拍号：块脏位基准与之一致时干净行才可跳过更新。
+    const lastTick = state !== undefined ? state.lastTick : undefined;
     let blockIndex = 0;
     const ends = [];
     forEachBlock(dv, total, (start, len) => {
@@ -660,13 +707,16 @@
           pe: prevEnds[blockIndex],
         };
       }
-      decodeBlockInto(dv, records, his, los, start, len, expectedTick, resident, prev);
+      decodeBlockInto(dv, records, his, los, start, len, expectedTick, resident, prev, lastTick);
       ends[ends.length] = records.length;
       blockIndex++;
     });
     // 无论本轮块数是否变动都存回本轮记录序：变动轮的错位已由慢路径
     // 自愈，下一拍以本轮真实布局为基线恢复全量对位。
-    __reflectApply(__weakSet, mergeState, [resident, { records, ends, his, los }]);
+    __reflectApply(__weakSet, mergeState, [
+      resident,
+      { records, ends, his, los, lastTick: expectedTick },
+    ]);
     __reflectApply(__mapForEach, resident, [
       (rec, id) => {
         if (rec[SEEN_TICK] !== expectedTick) __reflectApply(__mapDelete, resident, [id]);

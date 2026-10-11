@@ -1,6 +1,6 @@
 use super::*;
 
-fn obj(id: u64, type_key: &str, fields: &[(&str, KkpvValue)]) -> KkpvObject {
+pub(super) fn obj(id: u64, type_key: &str, fields: &[(&str, KkpvValue)]) -> KkpvObject {
     KkpvObject {
         id,
         type_key: type_key.into(),
@@ -11,7 +11,7 @@ fn obj(id: u64, type_key: &str, fields: &[(&str, KkpvValue)]) -> KkpvObject {
     }
 }
 
-fn input(objects: Vec<KkpvObject>) -> KkpvBlockInput {
+pub(super) fn input(objects: Vec<KkpvObject>) -> KkpvBlockInput {
     KkpvBlockInput {
         private: false,
         tick: 7,
@@ -24,7 +24,7 @@ fn input(objects: Vec<KkpvObject>) -> KkpvBlockInput {
     }
 }
 
-fn enc(input: &KkpvBlockInput) -> Vec<u8> {
+pub(super) fn enc(input: &KkpvBlockInput) -> Vec<u8> {
     encode(input, &KkpvLimits::default()).expect("编码成功")
 }
 
@@ -32,18 +32,18 @@ fn dec(data: &[u8]) -> KkpvView<'_> {
     KkpvView::decode(data, &KkpvLimits::default()).expect("解码成功")
 }
 
-fn dec_err(data: &[u8]) -> KkpvError {
+pub(super) fn dec_err(data: &[u8]) -> KkpvError {
     match KkpvView::decode(data, &KkpvLimits::default()) {
         Err(e) => e,
         Ok(_) => panic!("期望解码失败"),
     }
 }
 
-fn put_u16(data: &mut [u8], at: usize, value: u16) {
+pub(super) fn put_u16(data: &mut [u8], at: usize, value: u16) {
     data[at..at + 2].copy_from_slice(&value.to_le_bytes());
 }
 
-fn put_u32(data: &mut [u8], at: usize, value: u32) {
+pub(super) fn put_u32(data: &mut [u8], at: usize, value: u32) {
     data[at..at + 4].copy_from_slice(&value.to_le_bytes());
 }
 
@@ -439,8 +439,8 @@ fn decode_rejects_header_mutation() {
     put_u16(&mut v2, OFF_VERSION, 2);
     assert_eq!(dec_err(&v2), KkpvError::UnsupportedVersion(2));
     let mut flags = base.clone();
-    put_u16(&mut flags, OFF_FLAGS, 2);
-    assert_eq!(dec_err(&flags), KkpvError::UnknownFlags(2));
+    put_u16(&mut flags, OFF_FLAGS, 4);
+    assert_eq!(dec_err(&flags), KkpvError::UnknownFlags(4));
     let mut byte_len = base.clone();
     put_u32(&mut byte_len, OFF_BYTE_LEN, base.len() as u32 + 1);
     assert!(matches!(dec_err(&byte_len), KkpvError::ByteLen { .. }));
@@ -448,7 +448,7 @@ fn decode_rejects_header_mutation() {
     put_u32(&mut header_len, OFF_HEADER_LEN, 32);
     assert_eq!(dec_err(&header_len), KkpvError::HeaderLen(32));
     let mut reserved = base.clone();
-    reserved[OFF_RESERVED] = 1;
+    reserved[OFF_DIRTY] = 1;
     assert_eq!(dec_err(&reserved), KkpvError::ReservedNonZero);
     let short = &base[..base.len() - 1];
     assert!(matches!(dec_err(short), KkpvError::ByteLen { .. }))

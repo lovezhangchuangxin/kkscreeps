@@ -38,12 +38,14 @@ pub struct KkpvView<'a> {
     limits: KkpvLimits,
     objects: Vec<DirectoryEntry>,
     buckets: Vec<BucketView<'a>>,
+    /// FLAG_DIRTY 块的逐桶行脏位图切片（桶序）；未携带时为空。
+    dirty_bitmaps: Vec<&'a [u8]>,
 }
 
 /// 检查段表：各段完整落在块内、不与头部及彼此重叠；零长度段豁免重叠检查。
 fn check_segments(
     data_len: usize,
-    segments: [(&'static str, usize, usize); 4],
+    segments: [(&'static str, usize, usize); 5],
 ) -> Result<(), KkpvError> {
     // 零长度段不存在内容，offset 必须为零；与头部保留字节同一规范形。
     if segments
@@ -201,7 +203,7 @@ impl<'a> KkpvView<'a> {
             return Err(KkpvError::UnsupportedVersion(version));
         }
         let flags = u16::from_le_bytes([data[OFF_FLAGS], data[OFF_FLAGS + 1]]);
-        if flags & !FLAG_PRIVATE != 0 {
+        if flags & !(FLAG_PRIVATE | FLAG_DIRTY) != 0 {
             return Err(KkpvError::UnknownFlags(flags));
         }
         let declared_len = read_u32_at(data, OFF_BYTE_LEN);
@@ -215,8 +217,15 @@ impl<'a> KkpvView<'a> {
         if header_len as usize != HEADER_LEN {
             return Err(KkpvError::HeaderLen(header_len));
         }
-        if data[OFF_RESERVED..HEADER_LEN].iter().any(|&b| b != 0) {
-            return Err(KkpvError::ReservedNonZero);
+        // 保留区 144..160 承载脏位段对与基准拍号：FLAG_DIRTY 未置位时
+        // 整段保留区必须为零（与无脏位产物同规范形）；置位时基准拍号
+        // 不得晚于本块拍号。
+        if flags & FLAG_DIRTY == 0 {
+            if data[OFF_DIRTY..HEADER_LEN].iter().any(|&b| b != 0) {
+                return Err(KkpvError::ReservedNonZero);
+            }
+        } else if read_u64_at(data, OFF_DIRTY_BASE_TICK) > read_u64_at(data, OFF_TICK) {
+            return Err(KkpvError::Malformed("脏位基准拍号晚于本块拍号".into()));
         }
         let object_count = read_u32_at(data, OFF_OBJECT_COUNT) as usize;
         let type_count = read_u32_at(data, OFF_TYPE_COUNT) as usize;
@@ -236,6 +245,10 @@ impl<'a> KkpvView<'a> {
         let (directory_off, directory_len) = segment(OFF_DIRECTORY);
         let (buckets_off, buckets_len) = segment(OFF_BUCKETS);
         let (arena_off, arena_len) = segment(OFF_ARENA);
+        let (dirty_off, dirty_len) = segment(OFF_DIRTY);
+        if (flags & FLAG_DIRTY != 0) != (dirty_len > 0) {
+            return Err(KkpvError::Malformed("脏位段与 FLAG_DIRTY 不一致".into()));
+        }
         check_segments(
             data.len(),
             [
@@ -243,6 +256,7 @@ impl<'a> KkpvView<'a> {
                 ("directory", directory_off, directory_len),
                 ("buckets", buckets_off, buckets_len),
                 ("arena", arena_off, arena_len),
+                ("dirty", dirty_off, dirty_len),
             ],
         )?;
         if arena_len == 0 {
@@ -490,6 +504,29 @@ impl<'a> KkpvView<'a> {
                 segment: buckets_len,
             });
         }
+        // 脏位段内容：长度须精确等于逐桶位图之和（桶秩序拼接），每桶
+        // 越行尾位为零——与缺失/null 位图同一规范形。
+        let mut dirty_bitmaps = Vec::new();
+        if dirty_len > 0 {
+            let mut cursor = dirty_off;
+            for bucket in &buckets {
+                let bm = bitmap_bytes(bucket.rows);
+                let slice = &data[cursor..cursor + bm];
+                let valid_bits: u8 = if bucket.rows.is_multiple_of(8) {
+                    0xFF
+                } else {
+                    (1u8 << (bucket.rows % 8)) - 1
+                };
+                if slice[bm - 1] & !valid_bits != 0 {
+                    return Err(KkpvError::BitmapTailBits);
+                }
+                dirty_bitmaps.push(slice);
+                cursor += bm;
+            }
+            if cursor != dirty_off + dirty_len {
+                return Err(KkpvError::Malformed("脏位段长度与桶行数不符".into()));
+            }
+        }
         // 行占用不变式：每桶的每行恰被一个目录项引用。重复引用使
         // 一行数据以多个 ID 显形，未引用行是幻影数据，两者都拒绝。
         let mut occupied: Vec<Vec<bool>> = buckets
@@ -539,6 +576,7 @@ impl<'a> KkpvView<'a> {
             limits: limits.clone(),
             objects,
             buckets,
+            dirty_bitmaps,
         })
     }
 
@@ -658,6 +696,20 @@ impl<'a> KkpvView<'a> {
             .filter(|field| !bit_set(field.missing, entry.row))
             .map(|field| field.key)
             .collect()
+    }
+
+    /// 对象的行脏位（编码端逐格比对结论；置位=须按全量更新处理）。
+    /// 块未携带脏位段时返回 None。测试与语义锁的主要消费面。
+    ///
+    /// # Panics
+    /// index 越界时 panic；调用方先以 [`Self::object_count`] 约束。
+    pub fn row_dirty(&self, index: usize) -> Option<bool> {
+        if self.dirty_bitmaps.is_empty() {
+            return None;
+        }
+        let entry = &self.objects[index];
+        let bitmap = self.dirty_bitmaps[entry.handle as usize];
+        Some(bit_set(bitmap, entry.row))
     }
 
     /// 原始块字节。

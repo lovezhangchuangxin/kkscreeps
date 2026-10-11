@@ -813,3 +813,165 @@ pub fn kkpv_shared_bundle_cross_thread_impl() -> anyhow::Result<()> {
     }
     Ok(())
 }
+
+/// 行级脏位的常驻解码端到端：拍 1 无脏位建基线，拍 2 携带脏位（一对象
+/// 变、一对象净），断言变化行更新到位、干净行的急读字段与懒字段（嵌套
+/// structure，经 rePointCtx 重指新束）都读出正确值；拍 3 手工把基准拍号
+/// 改错模拟解码端错位（跳拍/重试形态），回退全量更新后值仍正确。
+pub fn kkpv_dirty_resident_impl() -> anyhow::Result<()> {
+    use kk_schema::kkpv::{KkpvBlockInput, KkpvLimits, KkpvObject, KkpvValue, encode_with_dirty};
+    let block_input = |tick: u64, moving_death: u64| KkpvBlockInput {
+        private: true,
+        tick,
+        generation: 1,
+        plan_hash: [0; 32],
+        audience_hash: [0; 32],
+        room_name: "W1N1".into(),
+        terrain: None,
+        objects: vec![
+            KkpvObject {
+                id: 0x1a,
+                type_key: "builtin:tombstone".into(),
+                fields: vec![
+                    ("room".into(), KkpvValue::Str("W1N1".into())),
+                    ("type".into(), KkpvValue::Str("tombstone".into())),
+                    ("x".into(), KkpvValue::Uint(27)),
+                    ("y".into(), KkpvValue::Uint(27)),
+                    ("creepId".into(), KkpvValue::Ref(0x05)),
+                    // 每拍变化：恒脏行。
+                    ("deathTime".into(), KkpvValue::Uint(moving_death)),
+                    ("ticksToDecay".into(), KkpvValue::Uint(5)),
+                ],
+            },
+            KkpvObject {
+                id: 0x1b,
+                type_key: "builtin:ruin".into(),
+                fields: vec![
+                    ("room".into(), KkpvValue::Str("W1N1".into())),
+                    ("type".into(), KkpvValue::Str("ruin".into())),
+                    ("x".into(), KkpvValue::Uint(28)),
+                    ("y".into(), KkpvValue::Uint(28)),
+                    (
+                        "structure".into(),
+                        KkpvValue::Object(vec![
+                            ("id".into(), KkpvValue::Ref(0x06)),
+                            ("type".into(), KkpvValue::Str("extension".into())),
+                            ("x".into(), KkpvValue::Uint(12)),
+                            ("y".into(), KkpvValue::Uint(12)),
+                        ]),
+                    ),
+                    ("destroyTime".into(), KkpvValue::Uint(6)),
+                    ("ticksToDecay".into(), KkpvValue::Uint(10)),
+                ],
+            },
+        ],
+    };
+    fn to_ref(input: &KkpvBlockInput) -> kk_schema::kkpv::KkpvBlockRef<'_> {
+        kk_schema::kkpv::KkpvBlockRef {
+            private: input.private,
+            tick: input.tick,
+            generation: input.generation,
+            plan_hash: input.plan_hash,
+            audience_hash: input.audience_hash,
+            room_name: input.room_name.as_str(),
+            terrain: None,
+            rows: input
+                .objects
+                .iter()
+                .map(|object| kk_schema::kkpv::KkpvRow {
+                    id: object.id,
+                    type_key: std::borrow::Cow::Borrowed(object.type_key.as_str()),
+                    fields: object
+                        .fields
+                        .iter()
+                        .map(|(key, value)| (key.as_str(), value.as_val()))
+                        .collect(),
+                })
+                .collect(),
+        }
+    }
+    let limits = KkpvLimits::default();
+    let first = encode_with_dirty(&to_ref(&block_input(1, 5)), &limits, None)
+        .map_err(|e| anyhow::anyhow!("拍 1 编码失败：{e}"))?;
+    assert!(first.bytes()[6] & 2 == 0, "首拍不带脏位段");
+    let second = encode_with_dirty(&to_ref(&block_input(2, 9)), &limits, Some(&first))
+        .map_err(|e| anyhow::anyhow!("拍 2 编码失败：{e}"))?;
+    assert_ne!(second.bytes()[6] & 2, 0, "次拍携带脏位段");
+    // 拍 3：内容与拍 2 相同，基准拍号改错（模拟解码端上一拍不衔接）。
+    let mut third_bytes = encode_with_dirty(&to_ref(&block_input(3, 9)), &limits, Some(&second))
+        .map_err(|e| anyhow::anyhow!("拍 3 编码失败：{e}"))?
+        .into_bytes();
+    third_bytes[152..160].copy_from_slice(&1u64.to_le_bytes());
+
+    let envelope = |time: u64| {
+        json!({
+            "time": time,
+            "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+            "user": "p1",
+            "visibleRooms": ["W1N1"],
+            "rooms": { "W1N1": { "name": "W1N1" } },
+        })
+    };
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    let probe = r#"(function () {
+  var t = Game.getObjectById('kk000000000000001a');
+  var r = Game.getObjectById('kk000000000000001b');
+  return JSON.stringify({
+    deathTime: t && t.deathTime,
+    decay: t && t.ticksToDecay,
+    destroyTime: r && r.destroyTime,
+    structureType: r && r.structure && r.structure.structureType,
+    structureId: r && r.structure && r.structure.id,
+  });
+})()"#;
+    // 束框架：u32 块数 + 逐块 u32 长度 + 顺序拼接（与 encode_bundle 同口径）。
+    let frame = |block: &[u8]| -> Vec<u8> {
+        let mut out = Vec::with_capacity(8 + block.len());
+        out.extend_from_slice(&1u32.to_le_bytes());
+        out.extend_from_slice(&(block.len() as u32).to_le_bytes());
+        out.extend_from_slice(block);
+        out
+    };
+    let check = |sb: &mut Sandbox, time: u64, private: &[u8], expected_death: u64| {
+        let bundle = SharedKkpvBundle::from_vec(frame(private));
+        let public = SharedKkpvBundle::from_vec(
+            kk_world::kkpv::kkpv_public_bundle_from_world_json(
+                &json!({
+                    "time": time,
+                    "rooms": { "W1N1": { "name": "W1N1", "terrain": vec![0u8; 2500] } },
+                }),
+                [0; 32],
+                [0; 32],
+            )
+            .map_err(|e| anyhow::anyhow!("公开束转换失败：{e}"))?,
+        );
+        assert!(matches!(
+            sb.begin_tick_kkpv(&envelope(time), &public, &bundle)?,
+            TickPlan::Run { .. }
+        ));
+        let out = sb.run_expr(probe)?;
+        sb.end_tick()?;
+        sb.settle_bill();
+        let value = serde_json::from_str::<serde_json::Value>(
+            out["value"].as_str().expect("表达式返回字符串"),
+        )?;
+        assert_eq!(value["deathTime"], json!(expected_death), "变化行急读字段");
+        assert_eq!(value["decay"], json!(5), "变化行未变字段");
+        assert_eq!(value["destroyTime"], json!(6), "干净行急读字段");
+        assert_eq!(
+            value["structureType"],
+            json!("extension"),
+            "干净行懒字段（ctx 重指）"
+        );
+        assert_eq!(
+            value["structureId"],
+            json!("kk0000000000000006"),
+            "干净行懒字段 Ref"
+        );
+        Ok::<(), anyhow::Error>(())
+    };
+    check(&mut sb, 1, first.bytes(), 5)?;
+    check(&mut sb, 2, second.bytes(), 9)?;
+    check(&mut sb, 3, &third_bytes, 9)?;
+    Ok(())
+}
