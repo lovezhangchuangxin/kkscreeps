@@ -7,8 +7,9 @@
 | 文档 | 内容 |
 |---|---|
 | [overall.md](overall.md) | 当前运行入口、模块职责、实际依赖和数据表示；区分预留模块与目标服务 |
-| [performance-target.md](performance-target.md) | 2026-10-11 推荐的未实现重构目标：紧凑房间存储、受控变化集、增量视图、依赖调度与完整 Mod 能力 |
+| [performance-target.md](performance-target.md) | 完整重构目标：紧凑房间存储、受控变化集、增量视图、依赖调度与完整 Mod；局部交付不等于整体完成 |
 | [source-organization.md](source-organization.md) | 当前源码模块导航、测试分组与文件规模门禁 |
+| [state-editing.md](state-editing.md) | 权威编辑、候选发布与 Rust API 迁移 |
 | [game-loop.md](game-loop.md) | 当前玩家执行与结算流程，以及并行流水线的目标 |
 | [background-services.md](background-services.md) | G27.a 独立后台线程/V8、受控异步生命周期、有限只读探针和作者 CLI；耐久/网络仍待后续 |
 | [mod-execution.md](mod-execution.md) | JS/native 组合链、候选访问与当前支持范围 |
@@ -42,9 +43,9 @@
 | [gameplay-determinism.md](gameplay-determinism.md) | 确定性玩法时间与随机协议：无状态随机流、种子生命周期、Date 映射与非确定边界 |
 | [input-log.md](input-log.md) | 持久输入与玩家结果日志：逐轮提交后追加的可校验回放输入源与结算回放核对（G25.a 写入面；G25.b 回放） |
 | [storage.md](storage.md) | 二进制快照、检查点、网络传输与持久化的目标设计 |
-| [snapshot-contract.md](snapshot-contract.md) | 共享视图的布局、生命周期、校验和恢复要求 |
+| [snapshot-contract.md](snapshot-contract.md) | 现行房间快照/KKPV 共享块边界，以及共享直读目标的布局、生命周期和恢复要求 |
 | [performance-acceptance.md](performance-acceptance.md) | 端到端性能场景、测量方法和验收目标 |
-| [frontend.md](frontend.md) | 尚未实现的 Web 客户端、渲染器与协议类型设计 |
+| [frontend.md](frontend.md) | 已实现的独立渲染器及 R7 剩余验收，尚未实现的 Web 客户端和联网协议 |
 
 ## 当前调用链
 
@@ -67,5 +68,3 @@
 4. 完整服务以单进程为默认目标；沙箱进程隔离和跨机部署需要额外的通信、故障恢复与安全设计，当前尚未实现。
 
 技术选择的原因见[决策记录](../decisions/README.md)，实验依据见[研究记录](../research/README.md)。
-
-- [权威编辑、候选发布与 Rust API 迁移](state-editing.md)

@@ -5,6 +5,7 @@
 | 当前计划 | 用途 |
 |---|---|
 | [完整 Mod 玩法](mod-complete-gameplay.md) | 长期目标、领域范围与最终验收 |
+| [性能重构与验收](performance-rearchitecture.md) | R00–R12 依赖和 B0 验收口径；切片交付状态仍只维护在任务台账 |
 | [贡献平面方向](mod-plane-batches.md) | ADR-014 后续方向；具体执行以任务台账为准 |
 
 ## 历史归档

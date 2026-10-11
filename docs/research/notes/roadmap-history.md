@@ -141,3 +141,47 @@
 - **2026-09-29（B0 收口）**：B0 正确性清偿批五片全部落地（切片执行与清偿记录 [b0-slices.md](../../plans/archive/b0-slices.md)）——①LIFO 纠偏为每线程（evict_idle 快照式全表回收+乱序销毁压力测试）②墙钟入 TickInput（signController datetime 注入值+Fixture/引擎级双房重放一致性回归）③`__kk` 宿主面收口（Rust 私有 v8::Global 句柄、set_raw_memory 私有通道、.call 家族 21 行全迁 Reflect.apply、信封 error 16K 闸、near-heap 全路径恢复、PerfRecorder cap；strict 帧与 near-heap 恢复两把回归锁）④新 crate **kk-runtime**（PlayerExecutor/ThreadExecutor、Sandbox trait 统一执行接口、RunResult 四形态结局分类）⑤**统一提交点**（CPU 计费与 RawMemory 候选化、每 tick 从 PlayerState 注入、失败缓存重试不重跑玩家、注入失败玩家级恢复；部分提交三连回归全绿=ADR-013 复现场景①②③全部转回归）；embed 编排迁 kk-runtime，**kk-engine 编译期摆脱 kk-runner/deno_core**（验收关卡 3）；perf-probe 同口径 run 相 p50 -52.8%（句柄通道替代脚本拼接）、四相无显著劣化；灰区表 B0 相关注记七条销账十余条新登记。
 - **2026-09-27（M0 完成）**：全部验收关卡达成，报告归档于 compat/reports/；适配器桥接与哑世界等四项决策记入 ADR-010。
 - **2026-09-27（全面 review）**：① M0 重定义——原验收"机器人原样运行 / screeps-ok 首批用例通过"存在依赖倒置（都需要引擎存在，M0 时还没有），改为"环境兼容性 + 适配器能测并出报告"；② M2 内部拆出 2A/2B 两道关卡（最长杆需要中间检查点）；③ M2 通过率从模糊的"达标"定量为 ≥95% + 缺口登记（锚点：xxscreeps 91%）；④ CI 基建从隐含变为 M0 显式条目；⑤ M3 补上"账号与多用户"，端点明确"核心先行、市场随 M4"；⑥ M5 的 soak 定量（72 小时）、安全加固标注为公网部署前置条件；⑦ 路线图从 README 拆出为独立文档；⑧ screeps-ok 深度评估后（ADR-006），M0 增加『独立复现 parity 数字』前置项。
+
+## 2026-10-12 从现行路线图归档的阶段记录
+
+以下保留整理前的逐批说明，包含当时的未完成范围；现行进度以[接手台账](../../plans/mod-next-batches.md)为准，接口以 architecture 为准。
+
+### JS Mod 阶段沿革
+
+官方内容将按可选包和玩法预设交付，其中一部分直接使用公共 JS SDK，见 [ADR-016](../../decisions/ADR-016-official-content-packs.md)和[内容包设计](../../designs/content-packs.md)。首个生命周期/生产示例作为官方内容候选，用真实玩法验证公共接口、依赖组合与恢复；已有原生玩法逐族迁移，尚未提供完整内容选择。完整默认预设保持兼容性，精简/自定义组合发布实际能力；故障停用不等同于卸载内容。
+
+独立 JS 包创造完整玩法、覆盖调研版本 xxscreeps 扩展领域，并提供更完善的组合、恢复和开发工具，是已确认的目标，见 [ADR-007](../../decisions/ADR-007-mod-system.md)。2026-10-05 的[现状复查](../09-mod-capability-current-audit.md)基于 `1b40930` 核对了 13 个内建槽及其边界：动作改向/取消尚不等于伤害公式、建造配方或移动仲裁可替换。后续按[完整玩法计划](../../plans/mod-complete-gameplay.md)前移自有对象生命周期、候选对象操作、开放资源/能力和作者工具；N1a 已交付[自有对象 tick](../../architecture/mod-object-tick.md)、显式 Mod 场景装载和官方生命周期原型；N1b 已交付[同房对象操作](../../architecture/mod-objects.md)及 nursery 自主增删原型；N1c 已开放[handler 依赖与组合诊断](../../architecture/mod-composition.md)及 mod inspect；N1d 已交付[JS 有效规则读取](../../architecture/mod-rules.md)；N1e 已交付[新世界内容选择](../../architecture/mod-content-selection.md)；N2a 已交付[命名空间资源目录](../../architecture/mod-resource-catalog.md)。N2b 已交付[可建造建筑](../../architecture/mod-buildings.md)（G08.a 续交付建筑自定义字段与生命周期 tick，同文档），N2c 已交付[JS 单体伤害策略](../../architecture/combat.md#单体伤害)、[自定义治疗](../../architecture/combat.md#治疗)、[群体伤害策略](../../architecture/combat.md#群体伤害)和[反击表](../../architecture/combat.md#反击)四个切片。剩余默认动作槽和策略按完整玩法需求继续开放。
+
+受击策略第一片已补齐[原生强化 TOUGH](../../architecture/creep-incoming-damage.md)：原生/JS 主伤害与反击在对象 tick 按受伤前身体合并减伤，再与治疗结算。第二片已开放 [JS 受击策略](../../architecture/combat.md#受击)：公式替换、护盾/免疫组合、来源摘要、拒绝默认回退与冷恢复；内建槽增至 14 个。实际伤害驱动的反击尚未开放，下一方向推进移动仲裁。
+
+D5 已收敛玩家执行边界：引擎只接受显式指令和写回候选，玩家执行结果类型归到运行时，旧无参数 `Engine::tick` 与沙箱注册表已删除。运行时按注册身份过滤所有意图族，失败重试复用整轮候选，见 [tick 契约](../../architecture/tick-contract.md#玩家执行与结算接口)。
+
+D4 资源领域后续片已开放 [ctx.resources](../../architecture/mod-resources.md)：同房候选库存读取、精确转账与损耗、额外对象局部拒绝日志和晚期写回失败缓存重试。
+
+D4 移动片已开放 [creep.move 槽](../../architecture/creep-move-slot.md)：意图登记阶段的 before/wrap/replace/after、受控移动请求能力（改向/取消登记）与按执行者粒度的正常拒绝，实际位移仍走既有仲裁与执行阶段。
+
+D4 战斗片已开放 [五个战斗槽](../../architecture/creep-combat-slot.md)（attack/rangedAttack/rangedMassAttack/heal/rangedHeal）：`ctx.combat` 目标改向/取消（恰一次消耗约束）、延迟伤害/治疗队列条目、rampart 重定向受击对象与结构摧毁废墟/对象移除（链内增删日志+ID 游标回退）的局部拒绝恢复；attackController 与容量等其他动作槽仍须逐族开放。
+
+D4 建造族片已开放 [三个建造族槽](../../architecture/creep-build-slot.md)（build/repair/dismantle）：`ctx.build` 目标改向/取消（恰一次消耗约束；request 后刷新处理器视图）、完工变换（工地移除+结构插入）与 dismantle 击毁废墟/超容掉落面（链内增删日志+ID 游标回退+执行者格掉落面快照）的局部拒绝恢复；attackController 与容量族仍须逐族开放。
+
+D4 首片已开放 Generic 仓库的 10 条容量数值，贯穿放置、建造、玩家常量、实验室槽切换和终端 tick，见[仓库容量规则](../../architecture/store-rules.md)。特殊存储策略及更多动作槽仍须逐族开放。检查点的数据域和版本清单前置，先保存当前完整已提交状态，随新增领域扩展迁移与日志；不等待全部规则开放后才开始恢复通路。2026-10-05 已交付[基础检查点](../../architecture/checkpoints.md)：显式保存当前完整已提交状态、严格身份核验、冷恢复与 sim 续跑；输入日志（2026-10-07，[契约](../../architecture/input-log.md)）、结算回放核对与 sim 级周期保存/恢复选择（2026-10-07，[周期保存与恢复选择](../../architecture/checkpoints.md#周期保存与恢复选择g26a)）已交付；升级迁移已由检查点格式版本链承担（G23.a）；服务器级自动周期调度、数据库后端与 outbox 后续扩展。
+
+D6 首片已允许 link transfer 的 JS 处理链正常拒绝一次动作；后续 D4/D6 片已开放 [creep transfer/withdraw](../../architecture/creep-resource-slots.md) 与 [creep move](../../architecture/creep-move-slot.md) 的 before/wrap/replace/after 与正常拒绝。局部恢复执行者/目标库存、link 冷却、实验室槽容量、新增事件、移动请求登记及 Mod state，保留此前成功动作并继续结算。link tick、attackController、容量族和其他动作尚未开放正常拒绝，见[Mod 执行](../../architecture/mod-execution.md#正常动作拒绝)。
+
+[ADR-014](../../decisions/ADR-014-contribution-plane.md)已把扩展基础安排在玩法扩面与首次持久化格式冻结之前，不能继续只列作 M4 的末端功能。Mod 作者使用 JS SDK；对象、指令、规则、候选状态和提交协议须共同设计，服务与客户端贡献随 M3 补齐。
+
+实施范围见[贡献平面方案](../../plans/archive/mod-plane-batches.md)，机制见 [JS Mod 设计](../../designs/mod-system.md)。默认玩法仍须满足同一玩家契约；首版采用共同可信的玩法 VM。投影协议整体设计、分步接入，玩家任务并发另行验证；三方对照基准与扩展基础建设并行推进。新增封闭分派或硬编码白名单须同时提供具名扩展入口，或登记明确的例外依据。
+
+### 渲染器与移动批次补记
+
+2026-10-01 更新：M3 renderer 新增本地官方房间完整 100tick 回放，短窗口定位并修复重复对账/顶罩 source churn/Graphics 释放，369 测全绿，三路评审通过，[阶段证据](renderer-r7-short-verification-2026-10-01.md)。用户暂缓长时间验收，R7 与 M3 最终验收继续待办；短测没有证明 10k 稳态。
+
+2026-10-07 复审范围纠偏：移动准入 G02 仍为部分完成；墙地形/结构等静态阻挡放行、玩家预检与仲裁复检贯通已登记 G02.d，属于完整 JS 玩法验收的剩余消费者。稳定化中的 UTC Date、协议身份、哈希游标、建筑记录校验和批量初始化不代表这些新玩法已经开放；具体进度见持续台账。
+
+2026-10-07 G02.d1 静态移动放行已交付（完整门禁与 release ratchet 通过）：公共 JS 包可放行墙/结构/私有 rampart/己方工地，准入预演与仲裁同源，动态占格及组合否决保持。剩余疲劳/MOVE 玩家门与 moveTo/PathFinder 寻路消费者登记 G02.d2；G02 父项仍部分完成。契约见[移动预检](../../architecture/movement.md#请求预检)，最终检查与提交以持续台账为准。
+
+2026-10-07 G02.d2 移动玩家门双端冻结已交付（完整门禁与 release ratchet 通过）：fatigueLimit/minActiveMoves 两条规则同源驱动玩家面 move()/moveTo() 预检与仲裁原生预填；moveTo 不穿墙、PathFinder 不感知放行已由回归测试钉死。声明式寻路规则登记 G02.d3 设计；G02 父项仍部分完成。契约见[玩家预检规则](../../architecture/player-precheck-rules.md)，最终检查与提交以持续台账为准。
+
+2026-10-08 G02.d3 首片墙地形静态通行声明已交付（完整门禁与 release ratchet 通过）：`builtin:terrain.wallPassable` 规则同源驱动仲裁静态墙项与玩家面原生寻路地形（三通道），物理地形查询保持原值，全墙保护环不放开；默认零行为变化（棘轮零转红）。结构/rampart 通行声明属后续切片，G02 父项仍部分完成。契约见[静态通行声明](../../architecture/movement.md#静态通行声明g02d3)，最终检查与提交以持续台账为准。
+
+G27.a 后台首片已交付独立线程/V8、受控异步生命周期、已提交世界副本读面、有限只读探针和作者 CLI，见[后台服务](../../architecture/background-services.md)。M3 的耐久输入/outbox、storage/provider、HTTP/WS 与客户端仍按原验收范围推进，不从后台首片推导为完成。

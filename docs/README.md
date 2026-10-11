@@ -18,11 +18,14 @@
 | 如何记录每轮提交的输入以便回放？ | [持久输入与玩家结果日志](architecture/input-log.md) |
 | 如何从检查点+日志重放并核对完整状态？ | [输入日志（回放节）](architecture/input-log.md) |
 | 玩家行为应满足什么要求，如何验证？ | [兼容性设计](designs/compatibility.md)、[验收工具](../compat/README.md) |
-| 如何复现 50×6 成熟房性能对照，接下来优化什么？ | [基准使用说明](../scripts/benchmark/README.md)、[源码优化复查](research/11-mature-performance-optimization.md)、[关键路径再调研](research/12-performance-critical-path-review.md)、[性能验收口径](architecture/performance-acceptance.md) |
-| 如何通过全面重构同时领先 xxscreeps、降低内存并保持 Mod 灵活性？ | [目标架构（未实现）](architecture/performance-target.md)、[R00–R12 计划与验收](plans/performance-rearchitecture.md)、[ADR-020（拟议）](decisions/ADR-020-incremental-world-runtime.md) |
+| 如何复现 50×6 成熟房性能对照，接下来优化什么？ | [基准使用说明](../scripts/benchmark/README.md)、[当前队列](plans/mod-next-batches.md#当前执行队列)、[性能验收口径](architecture/performance-acceptance.md)；版本限定的归因见[源码复查](research/11-mature-performance-optimization.md)和[关键路径研究](research/12-performance-critical-path-review.md) |
+| 如何通过全面重构同时领先 xxscreeps、降低内存并保持 Mod 灵活性？ | [完整目标架构](architecture/performance-target.md)、[R00–R12 计划与验收](plans/performance-rearchitecture.md)、[ADR-020（拟议）](decisions/ADR-020-incremental-world-runtime.md)；局部交付状态只查接手台账 |
 | 为什么采用 Rust、V8 和当前模块边界？ | [决策索引](decisions/README.md) |
 | Generic 怎样共享载荷、缓存元数据并保持保存/Mod 语义？ | [快照当前边界](architecture/snapshot-contract.md#当前版本与编码边界)、[ADR-019](decisions/ADR-019-generic-payload-metadata.md) |
-| 当前 Mod 处理链和自主对象 tick 怎样执行？ | [Mod 处理链执行](architecture/mod-execution.md)、[自有对象 tick](architecture/mod-object-tick.md)、[对象操作](architecture/mod-objects.md)、[组合诊断](architecture/mod-composition.md)、[有效规则读取](architecture/mod-rules.md)、[新世界内容选择](architecture/mod-content-selection.md)、[资源目录](architecture/mod-resource-catalog.md)、[可建造建筑](architecture/mod-buildings.md)、[战斗领域](architecture/combat.md)、[移动领域](architecture/movement.md)、[玩家预检规则](architecture/player-precheck-rules.md)、[建筑 RCL 配额规则](architecture/structure-quota.md)、[自有对象库存](architecture/object-store.md)、[自有对象耐久](architecture/object-durability.md) |
+| Mod 处理链如何组合、选择内容并读取规则？ | [处理链执行](architecture/mod-execution.md)、[组合诊断](architecture/mod-composition.md)、[有效规则](architecture/mod-rules.md)、[内容选择](architecture/mod-content-selection.md) |
+| Mod 对象怎样自主更新、增删并接入库存/耐久？ | [自有对象 tick](architecture/mod-object-tick.md)、[对象操作](architecture/mod-objects.md)、[库存](architecture/object-store.md)、[耐久](architecture/object-durability.md) |
+| Mod 怎样定义资源、建筑和配额？ | [资源目录](architecture/mod-resource-catalog.md)、[可建造建筑](architecture/mod-buildings.md)、[建筑 RCL 配额](architecture/structure-quota.md) |
+| Mod 怎样替换战斗/移动策略并保持双端预检一致？ | [战斗](architecture/combat.md)、[移动](architecture/movement.md)、[玩家预检](architecture/player-precheck-rules.md) |
 | 后台服务怎样 await I/O、读取已提交状态并隔离玩法？ | [后台服务](architecture/background-services.md)、[后台域决策](decisions/ADR-017-background-services.md) |
 | 作者如何获得玩家面 TypeScript 声明？ | [玩家类型生成](architecture/mod-types.md) |
 | 作者如何看到 Mod 拒绝/故障与回退过程？ | [运行 trace](architecture/mod-trace.md) |

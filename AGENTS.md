@@ -23,7 +23,7 @@ kkscreeps/
 │   └── kk-backend/         网络服务预留模块
 ├── compat/                 TypeScript 兼容性适配器、测试与回归报告
 ├── apps/game/              游戏客户端占位包
-├── packages/               API、编辑器、渲染器与共享类型占位包
+├── packages/               已实现的渲染器/共享类型，以及 API、编辑器占位包
 ├── mods/official/           使用公共 JS SDK 的官方内容原型
 ├── scripts/                维护、依赖准备与基准工具
 ├── docs/                   架构、设计、决策、计划与研究文档

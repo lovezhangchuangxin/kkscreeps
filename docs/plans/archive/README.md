@@ -14,6 +14,6 @@
 - [m2-playable](m2-playable.md)
 - [m2b-expansion](m2b-expansion.md)
 - [m2b-prerequisite](m2b-prerequisite.md)
-- [Mod 开发历史](mod-history-2026-10.md)（含已完成维护、选型、复审及 power 各片交付记录）
+- [Mod 开发历史](mod-history-2026-10.md)（含 2026-10-12 从台账归档的性能/玩法交付、进展调研及此前维护、选型和复审；旧下一步不参与当前执行）
 - [mod-plane-batches](mod-plane-batches.md)
 - [维护结构优化](structure-governance-2026-10.md)

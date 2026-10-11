@@ -12,21 +12,22 @@ python3 scripts/benchmark/compare.py \
   --output /tmp/kkscreeps-mature-smoke
 ```
 
-短窗成功后，正式采集使用默认的 500+3000 tick、五轮；建议保持同一并发配置：
+短窗成功后，当前 B0 最终验收按[重构计划](../../docs/plans/performance-rearchitecture.md)使用 500 预热 + 3000 采集、两次独立配对窗，再做等价收尾及真实 bot/混合 Mod 抽查。显式指定 `--runs 2`，保持同一并发配置：
 
 ```bash
 python3 scripts/benchmark/compare.py \
-  --xxs-root /path/to/xxscreeps --concurrency 4 \
+  --xxs-root /path/to/xxscreeps \
+  --players 50 --runs 2 --warmup 500 --ticks 3000 --concurrency 4 \
   --output /tmp/kkscreeps-mature-formal
 ```
 
-当前基线每 tick 约 6 秒，完整窗口每端数小时，五轮耗时更长；热点优化前优先短窗归因。`--output` 每次使用新目录。两端顺序执行，正式采集期间保持机器空闲，不同时构建、跑测试或其他基准。
+`compare.py` 的默认 `--runs 5` 和 `formal_window` 判据仍沿用旧工具协议：只有 ≥500 预热、≥3000 采集、≥5 次运行才标 true。因此上述两窗报告会标 false；它不能单独判断新验收是否通过，须结合原始参数、独立窗口和收尾证据审阅。本次文档修订没有改变工具或重标历史报告。开发期用分钟级短窗；不要沿用早期每 tick 约 6 秒估算当前耗时。`--output` 每次使用新目录，两端顺序执行，测量期间保持机器空闲并记录热态。
 
-查看 `summary.json`：`success` 表示夹具/执行/活动校验通过；`formal_window` 表示是否满足正式采样长度和轮次；`equivalent` 表示所比较的公开状态和动作是否一致；`observed_goal` 只记录 P50 与峰值 RSS 两个观测是否领先。查看 `workload_comparisons` 的动作差异，再解释速度倍率。严格排错可追加 `--strict-equivalence`。退出失败时看对应引擎 `.log`、原始 `.json` 和已有的 `failure.json`；不是所有启动/运行失败都会写 `failure.json`。
+查看 `summary.json`：`success` 表示夹具/执行/活动校验通过；`formal_window` 是上述旧工具协议标记；`equivalent` 表示所比较的公开状态和动作是否一致；`observed_goal` 只记录 P50 与峰值 RSS 两个观测是否领先。查看 `workload_comparisons` 的动作差异，再解释速度倍率。严格排错可追加 `--strict-equivalence`。退出失败时看对应引擎 `.log`、原始 `.json` 和已有的 `failure.json`；不是所有启动/运行失败都会写 `failure.json`。
 
-xxscreeps 需要已编译的 `packages/xxscreeps/dist`、安装好的 `node_modules` 和可用的 isolated-vm 原生模块。本次适配器在 Node v24.11.0 上验证，复跑请使用该版本；较旧 Node 的语法支持未验证。工具不会安装依赖或重建外部项目；发现对应 TypeScript 比 dist 新时会拒绝开始，需先在外部项目执行其正常构建。输出目录必须不存在，避免覆盖已有采样。
+xxscreeps 需要已编译的 `packages/xxscreeps/dist`、安装好的 `node_modules` 和可用的 isolated-vm 原生模块。使用 Node.js 24+，并确保 isolated-vm 与所选 Node 匹配；`--node` 可指定可执行程序，复现旧实验时以其 provenance 记录为准，不能把早期 Node v24.11.0 当作所有报告的版本。工具不会安装依赖或重建外部项目；发现对应 TypeScript 比 dist 新时会拒绝开始，需先在外部项目执行其正常构建。输出目录必须不存在，避免覆盖已有采样。
 
-默认采用 `--profile mature`：只采集 50 玩家×6 个 RCL8 满功能建筑成熟房，共 300 房，各做五次独立运行；每次预热 500 tick、采集 3000 tick，玩家并发上限为 2。两端预算明确统一为 limit=100、bucket=10000、tickLimit=500，玩家基础堆上限均为 64MiB（xxscreeps 内部另计共享地形 allowance），并在首个玩家 tick（time=1）校验玩家实际看到的值。kkscreeps 成熟房走 KKPV；xxscreeps 使用生产 isolated 沙箱与 classic/factory/observer/powerspawn/nuker 包。重复间交替两个引擎的先后顺序。`--players`、`--runs`、`--warmup`、`--ticks`、`--concurrency` 可调整，但短窗口或少于五次只能用作调试，不能沿用正式结果的结论。
+工具默认采用 `--profile mature`：50 玩家×6 个 RCL8 满功能建筑成熟房，共 300 房；`--runs 5 --warmup 500 --ticks 3000 --concurrency 2`。当前推荐命令在上文显式覆盖轮次与并发，不会修改这些默认值。两端预算统一为 limit=100、bucket=10000、tickLimit=500，玩家基础堆上限均为 64MiB（xxscreeps 内部另计共享地形 allowance），并在首个玩家 tick（time=1）校验玩家实际看到的值。kkscreeps 成熟房走 KKPV；xxscreeps 使用生产 isolated 沙箱与 classic/factory/observer/powerspawn/nuker 包。重复间交替两个引擎的先后顺序。开发短窗不能沿用正式验收结论。
 
 ## 成熟房工作量与正确性
 
@@ -42,7 +43,7 @@ xxscreeps 需要已编译的 `packages/xxscreeps/dist`、安装好的 `node_modu
 
 本批成功目标是同一成熟房负载下 wall 更低且进程 RSS 更低，2GiB 仅记录作参考，不再作为硬性门槛；汇总的 `observed_goal` 明示 P50 和峰值 RSS 两个观测指标，P95/P99/CPU 同时保留。正式窗口标记只表示采样长度与轮次，不能替代玩法差异和性能结论的审核。
 
-开发排错可缩短窗口、用 `--players 1` 验证同一六房布局；它不是新增性能场景。成功汇总声明 `formal_window`，只有 ≥500 预热、≥3000 采集、≥5 独立轮次才为 true，短窗口不能称为正式性能验收。
+开发排错可缩短窗口、用 `--players 1` 验证同一六房布局；它不是新增性能场景。工具标记与当前最终验收的区别见上文，单次短窗或 `observed_goal=true` 都不能代替验收。
 
 旧共同夹具仍可通过 `--profile legacy` 复现，默认 1／4／8／32 玩家，一房 RCL4、两 source、一 spawn、三个 worker，使用 [player.js](player.js)。此历史入口不作为成熟房批次的前置或新增验收组。
 
@@ -51,7 +52,7 @@ xxscreeps 需要已编译的 `packages/xxscreeps/dist`、安装好的 `node_modu
 - tick wall 包含玩家运行、世界结算、提交及执行错误检查，排除启动、预热、前后状态查询和每 tick 后的 RSS 采样。kkscreeps 另外保留原有 `EmbedEngine` 阶段计时。
 - CPU 使用当前进程全部线程的采集窗口累计用量，单位 core-ms/tick。xxscreeps 的 runner、processor 和隔离沙箱均在该 Node 进程内。两端 CPU 窗口包含 RSS 采样及循环开销，排除前后状态查询。
 - RSS 在采集前和每 tick 后采样，报告中位数与采样点最大值，可能遗漏 tick 内瞬时峰值。统计窗口相同，进程包括各实现已保留的运行时、模块和沙箱资源。
-- 每次 wall 分位数采用排序后 `round((N−1)×q)` 的样本，再对五次运行的同名指标取中位数；不把全部 tick 混成一个样本集。
+- 每次 wall 分位数采用排序后 `round((N−1)×q)` 的样本，再对实际运行次数的同名指标取中位数；不把全部 tick 混成一个样本集。
 
 xxscreeps 由适配器编排生产服务，包含共享存储和消息队列成本；kkscreeps 直接调用嵌入接口。xxscreeps 可在玩家执行期间处理已具备依赖的房间，阶段边界与本项目不同，因此只比较共同的 tick wall、进程 CPU/RSS，不强行对齐 project/run/settle。
 
@@ -59,7 +60,7 @@ xxscreeps 由适配器编排生产服务，包含共享存储和消息队列成�
 
 ## 产物与验证
 
-2026-10-10 已完成同一 50×6 场景的两次开发短窗：30+100（原 lexical terminal 配对，动作数一致、有库存差异）与 5+50（显式邻房配对，三阶段状态和动作数全部一致）。[证据清单](../../compat/reports/mature-comparison/2026-10-10/manifest.json)保留完整参数、原始压缩报告/夹具/日志/哈希；[最终夹具短窗汇总](../../compat/reports/mature-comparison/2026-10-10/50x6-adjacent/summary.json)中 kk/xxs P50 为 6198.34/264.70ms、RSS peak 为 3017.17/4348.03MiB。两次采样都显示内存较低、执行较慢，尚未满足两个条件同时领先；不把短窗数值作为稳态幅度。kk project P50 5552.90ms，下一步优先优化投影重复视野/归属扫描。正式五轮长窗口未执行。
+当前进展与下一优化方向只维护在[接手台账](../../docs/plans/mod-next-batches.md)，完整验收仍未收口。2026-10-10 的[初始夹具证据](../../compat/reports/mature-comparison/2026-10-10/manifest.json)与[早期短窗汇总](../../compat/reports/mature-comparison/2026-10-10/50x6-adjacent/summary.json)保留优化前数据；后续证据按日期/切片归档。不要把早期秒级耗时、当时的“下一步”或跨窗比率当作当前 HEAD 的性能结论。
 
 输出包括共享夹具、每次原始报告和日志、二进制/Node/isolated-vm/xxscreeps 源码及 dist 的哈希、提交与工作区状态、机器信息、每档汇总。记录的是实际执行的 dist，不以 Git 提交号代替未提交代码或编译产物。xxscreeps 的正常配置加载可能生成 `dist/config.schema.json`；该派生文件不计入代码树哈希，结束后另存工作区状态。
 
@@ -75,10 +76,6 @@ node --check scripts/benchmark/xxs-probe.mjs
 `research/` 保存架构、Mod 宿主/归因、玩家工作量与 KKPV 规模实验的采集脚本。日期标识它们对应的实验协议；历史证据和复现参数仍在 [研究索引](../../docs/research/README.md)，默认报告位置保持在 `docs/research/notes/`。这些脚本可复跑对应实验，不作为当前性能达标结论。
 
 
-2026-10-10 优化批追注：视野/observer 共享索引、结算字面量门与单次分类、KKPV 房间块共享装配与类型化直造、JS 定宽列急切解码已落地（见[接手台账](../../docs/plans/mod-next-batches.md)）；同机同窗复测归档于 [50x6-after-opt-abc](../../compat/reports/mature-comparison/2026-10-10/50x6-after-opt-abc/summary.json)，kk/xxs 同窗比率 P50 23.4×→3.68×、CPU 5.4×→1.58×、RSS 峰值低约 20%，动作与状态等价保持。上段"kk project P50 5552.90ms"为优化前归档口径，保留不追改；本批未跑五轮正式长窗。
-
-2026-10-10 类型化直写编码器批追注：KKPV 编码改为借用值单一核心（`KkpvVal`/`encode_ref`，owned 入口委托），世界侧单房直写并删除第二套构造器；同机同窗复测归档于 [50x6-after-typed-encoder](../../compat/reports/mature-comparison/2026-10-10/50x6-after-typed-encoder/summary.json)，kk/xxs 比率 P50 3.68×→3.17×、CPU 1.60×、RSS 峰值 0.86×（低 14%），动作与状态等价保持。同日并发标定（kk 单端 4/6/8/10）：并发 8 仅换约 2% wall 多烧 25% CPU、并发 10 负收益，正式对照维持并发 4。**公平门（用户 2026-10-10）：kk 实测平均并行度（CPU/wall）不得超过 xxs 实测（本窗 3.20× vs 6.34×），且 CPU core-ms/tick 不劣化。**
-
-2026-10-10 V8 侧批追注：Memory 常驻（洁度走查版，棘轮全绿）与 api_probe 门控（compare-probe 关闭诊断 Proxy 仪表，单轮实测 run -26%/CPU -19%）后，同夹具对照归档于 [50x6-after-v8-residency](../../compat/reports/mature-comparison/2026-10-10/50x6-after-v8-residency/summary.json)：kk/xxs P50 835.7/259.5ms（本窗 3.22×；本窗 xxs 比上窗快 24%，跨窗比率不可比）、CPU 1.41×、RSS 峰值 0.72×（低 28%），动作与状态等价保持；正式对照沿用并发 4 与公平门（并行度 2.88× vs 6.57×）。
+首批优化的归档证据：[视野/编码 A–C](../../compat/reports/mature-comparison/2026-10-10/50x6-after-opt-abc/summary.json)、[类型化编码](../../compat/reports/mature-comparison/2026-10-10/50x6-after-typed-encoder/summary.json)、[V8 常驻](../../compat/reports/mature-comparison/2026-10-10/50x6-after-v8-residency/summary.json)。这些是各自环境下的开发短窗，不能跨窗相减推断本 HEAD 收益；公平门与最终口径见[重构计划](../../docs/plans/performance-rearchitecture.md)。
 
 工具回归分别位于 `scripts/tests/` 和本目录。完整 `pnpm run check` 同时执行两组 Python 测试，以及门禁和文档链接检查器的 Node 回归测试。

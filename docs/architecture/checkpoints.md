@@ -1,6 +1,6 @@
 # 基础检查点与冷恢复
 
-当前 `EmbedEngine` 能在无开放轮次时保存完整已提交状态，并在重启后继续运行。`sim run` 提供保存/加载入口。这是显式单文件检查点：输入日志的写入与校验读取自 G25.a 起可用（[契约](input-log.md)；写序在提交之后，检查点不得领先日志头），结算回放核对自 G25.b 起可用（[契约](input-log.md)「回放」节），周期保存与恢复选择自 G26.a 起可用（见下文[周期保存与恢复选择](#周期保存与恢复选择g26a)），热更新与数据库后端尚无；JSON 载荷域自 G23.a 起有显式迁移链（见下文迁移框架），信封与二进制身份域仍不做自动迁移。
+`EmbedEngine` 能在无开放轮次时保存完整已提交状态，并在重启后继续运行。`sim run` 提供单文件保存/加载、[周期保存与目录恢复](#周期保存与恢复选择g26a)及[输入日志/结算回放](input-log.md)。JSON 载荷有显式迁移链，信封与房间二进制身份域不做自动迁移；运行中包集合切换见[Mod 切换](mod-switching.md)，内容级迁移、watch 与数据库后端仍未实现。
 
 ## 已保存的数据清单
 
@@ -9,12 +9,12 @@
 | 数据域 | 持久内容 |
 |---|---|
 | 世界 | time、seed、player_ticks、全局 next_obj_id、generation、terrain_epoch、完整房间集合 |
-| 房间 | 地形、全部原生/Generic/Mod 对象、绝对计时字段、事件，以及房间二进制快照之外的扩展字段 |
+| 房间 | 地形、全部原生/Generic/Mod 对象、绝对计时字段、事件、扩展字段，以及 effects、NPC 移动记忆、raid、powerBank 调度和公共状态种子等独立域 |
 | 玩家账户 | CPU 桶全部字段、GCL、所属房间、RawMemory、segments、活动/公开/默认/外部段请求、通知、余额和跨 shard 资源余额 |
 | 市场 | 订单、交易及两类分配游标 |
 | 引擎 | 自身 ID 游标、最近成功事件、每个 Mod 的已提交 namespace state、冻结 PlanHash |
 | 玩家工作者 | 工作线程注册子集、JS/二进制模块字节、堆/CPU/安装预算及常量配置；账户不必均有线程 |
-| 格式版本 | `checkpoint_format_version`（当前 6，必填——缺失即拒，不做缺键猜测）：JSON 载荷域布局版本，经注册迁移链升入当前版本 |
+| 格式版本 | `checkpoint_format_version`（当前 9，必填——缺失即拒，不做缺键猜测）：JSON 载荷域布局版本，经注册迁移链升入当前版本 |
 | 宿主玩法协议 | `host_protocol`，当前 UTC Date/RNG/SDK 语义身份，恢复严格核验 |
 | Mod 身份 | 全部发现包的 manifest 与全部文件 SHA-256，包含未选择的包；配置、内容选择、冻结选项、VM 预算及自动停用阈值 |
 | 执行策略身份 | 组合报告的域分隔摘要：冻结 PlanHash + 停用闭包 + 每槽派生执行面（键/阶段/模式/活动链）；引用 PlanHash 而非复制，诊断字段不入摘要 |
@@ -35,11 +35,24 @@ V8 堆、JS 全局变量、模块缓存、Rust 派生查询/地形编码缓存�
 
 恢复所需 Mod 包与 `RegisterOptions` 由调用方显式提供。检查点不自动访问记录中的目录，也不携带可自行装载的 Mod 源码。缺包、额外包、manifest/源码/配置/选择/预算/规则来源变化均拒绝；相同包可搬到新绝对目录。PlanHash 由重新注册实际产生并再次核对，停用集合须满足完整依赖闭包，冻结规则和玩家常量从原计划再生。只读导出不解除这些可写启动要求。
 
-玩家模块字节直接保存并用于重建。sim 为防止无意换代码，还核验外部玩家模块清单与目录、场景原始字节摘要及 CLI 二进制 SHA-256；修改场景、移动模块目录、切换 debug/release 或更换二进制也会拒绝续跑。修改代码、换包或改规则应走后续显式升级/迁移协议。
+玩家模块字节直接保存并用于重建。sim 为防止无意换代码，还核验外部玩家模块清单与目录、场景原始字节摘要及 CLI 二进制 SHA-256；修改场景、移动模块目录、切换 debug/release 或更换二进制也会拒绝续跑。现行包集合与宿主配置切换走[无开放轮次的替代分片协议](mod-switching.md)，交集包内容须等值；同包内容升级或存量业务数据变换仍须 G23 内容级迁移。
 
 **版本职权分五项**：信封 `version`（线格式：结构、sha256 机制，严格等值）；`checkpoint_format_version`（JSON 载荷域布局，必填，经迁移链升入）；`engine_version`/`room_schema_version`（发行版本与房间 schema 门；不是源码摘要）；`host_protocol`（SDK 时间/RNG/候选语义身份，严格等值）。
 
-**JSON 载荷迁移框架**：迁移在 `deny_unknown_fields` 解码**之前**对原始 JSON 执行——链上第 n 项（0 起算）把版本 n+1 升到 n+2，从 `raw - 1` 项起依次执行到当前版本，版本号在链执行完毕后统一改写；版本 0、未来版本、缺失或非法版本值拒绝；任一步失败整体拒绝（旧分片由替代分片架构保证完整，不自动修补不一致载荷）。已注册步骤：v1→v2 归一 `last_auto_disable` 旧形态（来源从故障绑定命名空间派生，mod_id 与来源不一致即畸形）。v2→v3 为缺协议身份载荷补旧语义标记，宿主协议门明确拒绝恢复旧时区历史。v3→v4 引入必填房间 effects 表，缺该表的载荷明确拒绝，不补造空表。携带当前协议身份与效果域的显式 v1 演练载荷按 legacy 语义宽容执行策略身份缺失（v1 先于该键存在）；**v2 起 Mod 检查点必须携带该键**。
+**JSON 载荷迁移框架**：迁移在 `deny_unknown_fields` 解码**之前**对原始 JSON 执行——链上第 n 项（0 起算）把版本 n+1 升到 n+2，从 `raw - 1` 项起依次执行到当前版本，版本号在链执行完毕后统一改写；版本 0、未来版本、缺失或非法版本值拒绝；任一步失败整体拒绝，旧分片保持完整。注册链与当前版本由 [migrate.rs](../../crates/kk-runtime/src/embed/checkpoint/migrate.rs) 定义：
+
+| 升级 | 处理及拒绝条件 |
+|---|---|
+| v1→v2 | 归一 `last_auto_disable` 的 `mod_id`；与故障绑定来源不一致即拒绝 |
+| v2→v3 | 缺 `host_protocol` 时标为旧 Date 语义，后续协议门拒绝跨语义自动恢复 |
+| v3→v4 | 房间 `effects` 表必须存在，不补造空表 |
+| v4→v5 | 房间 `keeper_memory` 必须存在，不从当前对象推测巡守历史 |
+| v5→v6 | 房间 `invader_memory` 必须存在，保存路径缓存和 `last_move` |
+| v6→v7 | 房间 `raid` 必须存在，保存阈值覆盖/采集预算/活跃/房态 |
+| v7→v8 | 房间 `power_bank_time` 必须存在，可空；不补造未调度状态 |
+| v8→v9 | 房间 `room_status` 必须存在，可空；不将状态种子静默改为 normal |
+
+迁移入口不保证任意旧文件都能恢复：身份门和必填域仍可能拒载。携带当前协议身份及完整域的显式 v1 演练载荷按 legacy 语义容许执行策略身份缺失；**v2 起 Mod 检查点必须携带该键**。独立域的字段、校验与消费者统一见[状态域清单](state-inventory.md)，不在本页重复玩法规则。
 
 冷恢复的身份门（ModIdentity/plan_hash/执行策略等值）要求新旧包集逐字节一致；运行中**更换**包集合不走检查点往返，走[无开放轮次的包切换](mod-switching.md)（替代分片模式换装执行层，切换后保存的检查点自然携带新身份）。
 
@@ -49,7 +62,7 @@ V8 堆、JS 全局变量、模块缓存、Rust 派生查询/地形编码缓存�
 
 ## 文件格式与发布
 
-检查点 v1 是 JSON 信封：`format = kkscreeps-checkpoint`、`version = 1`、`sha256` 和完整 JSON 载荷字符串 `payload`。SHA-256 覆盖载荷的实际 UTF-8 字节，用于发现损坏，不提供来源认证。载荷记录引擎包版本与房间 `SCHEMA_VERSION`，当前只接受相同版本；未知版本拒载，没有自动迁移。
+检查点信封版本为 1：`format = kkscreeps-checkpoint`、`version = 1`、`sha256` 和完整 JSON 载荷字符串 `payload`。SHA-256 覆盖载荷的实际 UTF-8 字节，用于发现损坏，不提供来源认证。信封版本严格等值；载荷内的 `checkpoint_format_version` 走上文迁移链。引擎包版本与房间 `SCHEMA_VERSION` 仍是双硬门，只接受相同身份，不由 JSON 迁移链自动升级。
 
 房间使用顺序二进制快照（当前 schema v2），以字节数组保存；v2 将 storage 权威容量纳入对象载荷，v1 无法无损还原截止拍容量窗口，显式拒绝，不自动补造。扩展字段单独保存。单文件把 manifest 与所有域放在同一完整版本中，无须从多个文件拼接房间。有限浮点采用 serde_json 的 `float_roundtrip` 精确往返，不能因保存而改变 CPU 桶或字段的数值。
 
@@ -99,11 +112,3 @@ target/release/kkscreeps sim run \
 实际玩家 CPU 费用、玩家面 Date/Math.random 与墙钟输入本来就可能改变独立运行结果；完整续跑相等测试使用固定停跑回充轮锁定 CPU 状态，真实 bot 比较不要求各次实测 CPU 费用相等。玩法 realm（Mod 规则代码）的时间/随机自 G22.b 起确定性化（[协议](gameplay-determinism.md)）；任意 bot 的确定性回放需要输入日志与玩家执行结果——输入日志写入面自 G25.a 起交付、结算回放核对自 G25.b 起交付（[契约](input-log.md)「回放」节，`sim run --verify-replay`）。证据见[基础检查点交付](../research/notes/basic-checkpoints-2026-10-05.md)。
 
 加载检查点目录作为输入整棵受保护：报告、显式保存和日志路径（含符号链接解析后的路径）不得落入其中，守卫先于执行及失败报告写入。重复冷恢复继承 `applied_switches` 并仅追加新成功切换；会话报告只展示当次切换。缺少带哈希游标的旧目录检查点拒绝自动配对，不凭 tick 猜测历史。
-
-普通 Invader 移动记忆自载荷 v6 保存于每房 `invader_memory`，可空缓存与 last_move 必填；v5_to_v6 对缺域房间显式拒绝。该域参与完整状态回放、候选发布、对象删除与恢复，校验及消费者见[游戏循环](game-loop.md#普通-invader-行为当前实现)和[状态清单](state-inventory.md)。
-
-Invader raid 房间状态自载荷 v7 保存于每房 `raid`（阈值覆盖/采集预算/活跃/房态四键必填）；v6_to_v7 对缺域房间显式拒绝（不补造——活跃房静默变为可生成是不可接受的丢失）。生成器消费者与随机流约定见[游戏循环](game-loop.md#invader-raid-调度当前首片)。
-
-powerBank 生成调度自载荷 v8 保存于每房 `power_bank_time`（Option<u64>，null 或到期 tick）；v7_to_v8 对缺键房间显式拒绝（不补造——已调度房静默回到首轮形态是不可接受的丢失）。生成器与消费者见[游戏循环](game-loop.md#powerbank-生成与消费者当前首片)。
-
-房间公共状态种子自载荷 v9 保存于每房 `room_status`（Option<{status,timestamp}>，null 为 normal；novice/respawn/closed + 墙钟毫秒时间戳）；v8_to_v9 对缺键房间显式拒绝（种子房静默回到 normal 是不可接受的丢失）。玩家面 getRoomStatus、launchNuke 房间状态门与传送机制见[游戏循环](game-loop.md#portal房间状态与世界边缘当前首片)。

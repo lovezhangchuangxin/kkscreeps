@@ -1,6 +1,6 @@
 # 高性能、低内存与完整 Mod 扩展的目标架构
 
-日期：2026-10-11。属性：**本轮推荐的目标设计，尚未实现**。用户授权必要的任意改造；具体设计取舍见 [ADR-020](../decisions/ADR-020-incremental-world-runtime.md)，实施与验收见[重构计划](../plans/performance-rearchitecture.md)。现状仍以[总体架构](overall.md)和实际源码为准。依据为 `525ec789` 及[关键路径调研](../research/12-performance-critical-path-review.md)，本轮没有新性能测量。
+方案日期：2026-10-11。属性：**完整目标设计，尚未全部实现**。具体设计取舍见 [ADR-020](../decisions/ADR-020-incremental-world-runtime.md)，实施与验收见[重构计划](../plans/performance-rearchitecture.md)。现状以[总体架构](overall.md)、[接手台账](../plans/mod-next-batches.md)和源码为准；已有局部共享/视图复用/受限并行不等于下文完整架构已交付。方案提出时依据为 `525ec789` 及[关键路径调研](../research/12-performance-critical-path-review.md)，当时没有新增性能测量。
 
 ## 1. 目标与不能混淆的边界
 

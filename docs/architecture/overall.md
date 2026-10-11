@@ -1,6 +1,6 @@
 # 总体形态与模块划分
 
-当前实现是一个可嵌入调用的内存游戏引擎，配套玩家沙箱、兼容性验收和性能采集工具。现已提供显式完整状态[检查点与冷恢复](checkpoints.md)；完整服务器、数据库/日志持久化与前端属于目标架构；本页先说明已经存在的模块和数据流。
+当前实现是一个可嵌入调用的内存游戏引擎，配套玩家沙箱、兼容性验收和性能采集工具。已有[检查点与冷恢复](checkpoints.md)、本地[输入日志与结算回放](input-log.md)及独立渲染器；数据库后端、网络服务与可登录的完整客户端仍未实现。本页说明现行模块和数据流，开发进度见[接手台账](../plans/mod-next-batches.md)。
 
 ## 运行入口
 
@@ -12,6 +12,8 @@
 | `bot-check` | 加载 bot 模块，在固定测试世界中运行并输出运行错误和 API 访问统计 |
 | `perf-probe` | 在采集、升级和孵化负载下测量投影、玩家执行、结算与整轮耗时 |
 | `mod-perf-probe` | 同一 link 冷却负载的 native、空 Mod 与完整处理链纯结算对照；逐对象验证状态与链位计数 |
+| `compare-probe`、`mod-player-probe` | 分别执行共同负载对照的 kkscreeps 侧与多玩家 Mod 闭环采集，见[性能验收](performance-acceptance.md) |
+| `mod init/test/inspect/types/services` | 作者包模板、场景测试、组合诊断、玩家类型生成与独立后台服务探针，见[本地模拟](local-simulation.md)、[组合诊断](mod-composition.md)、[类型生成](mod-types.md)和[后台服务](background-services.md) |
 | `sim run` | 加载版本化 JSON 场景与玩家模块，推进真实世界、检查断言并写报告，见[本地场景模拟](local-simulation.md) |
 | `export-fixtures` | 只读导出渲染器夹具：固定 seed 的脚本世界推进 N tick，逐 tick 落 world_json（JSONL，确定性输出，前端 build-fixtures 消费） |
 | `serve`、`test`、`import` | 预留入口，调用时返回“尚未实现”和退出码 2 |
@@ -27,7 +29,7 @@
 | `kk-core` | 游戏常量、房间坐标、地形编码和随机数工具 |
 | `kk-vm` | 玩家与玩法 VM 共用的执行线程 CPU 时钟、墙钟看门狗、V8 安全点资源检查；不包含游戏规则或两类脚本的 API |
 | `kk-mod-api` | 玩法描述、启动校验、冻结计划与玩家面目录；已接入 link 规则与对象域 Mod 意图，不代表所有默认玩法已迁移 |
-| `kk-mod-host` | 可信 JS 包装载、注册冻结与整槽处理链执行；通过 ChainHost 访问候选，不依赖引擎或玩家 VM |
+| `kk-mod-host` | 可信 JS 包装载、注册冻结与整槽处理链执行，以及独立后台线程/V8；通过 ChainHost 访问候选，不依赖引擎或玩家 VM |
 | `kk-schema` | 二进制快照读写、对象字段定义、布局宏和版本升级接口；接口存在不等于已有历史版本迁移 |
 | `kk-world` | 内存世界、房间和对象管理、空间索引，以及沙箱数据和查询快照的投影 |
 | `kk-engine` | 清洗指令，结算房间和市场规则，验证并提交世界、玩家及市场的内存候选状态 |
@@ -39,7 +41,7 @@
 | `kk-backend` | 预留模块，尚无 HTTP 路由、监听或 WebSocket 服务 |
 | `kk-cli` | 命令行参数和嵌入式调用、bot 检查、性能采集入口 |
 
-前端 `apps/game` 和 `packages/*` 目前是占位包。目标职责见 [frontend.md](frontend.md)。`compat` 是验收工具，通过子进程调用引擎；`spikes` 保留独立实验，不属于 Rust workspace。
+`apps/game` 仍是客户端占位包；`packages/renderer` 已有房间渲染、RoomVisual、交互与资产管线，`packages/shared` 已提供其共享类型。渲染器不等于联网客户端，范围与剩余验收见[前端架构](frontend.md#当前实现与运行时边界f2-r0r6完成r7验收中)。`compat` 是验收工具，通过子进程调用引擎；`spikes` 保留独立实验，不属于 Rust workspace。
 
 ## 实际依赖
 
@@ -47,8 +49,8 @@
 
 | crate | 直接依赖 |
 |---|---|
-| `kk-cli` | core、engine、runtime、mod-host、mod-api、runner、world |
-| `kk-runtime` | core、schema、mod-api、mod-host、engine、runner、world |
+| `kk-cli` | core、engine、runtime、mod-host、mod-api、runner、schema、world |
+| `kk-runtime` | core、schema、mod-api、mod-host、engine、runner、world；vm（仅测试） |
 | `kk-engine` | core、mod-api、pathfinder、schema、world |
 | `kk-world` | core、mod-api、schema |
 | `kk-mod-api` | core |
@@ -87,11 +89,11 @@
 
 ## 当前采用的系统边界
 
-项目适合继续采用单进程的分层内核：玩家读取已提交投影，沙箱只产出意图与写回候选，Rust 结算和协调器共同完成整轮验证与发布。房间是局部工作单元，市场、跨房行为和玩家写回仍须遵守全轮提交边界；不能仅凭房间划分就独立提交。玩家线程已可并发执行，房间结算并行与流水线仍是后续能力。
+项目采用单进程的分层内核：玩家读取已提交投影，沙箱产出意图与写回候选，Rust 结算和协调器共同完成整轮验证与发布。玩家线程可有界并发执行；房间结算满足资格门时逐房并行，主线程克隆候选后经队列流式交付，完成结果按房序合并。触碰依赖房序的 ID/claim 共享操作时恢复候选并串行重做；含 JS 宿主贡献槽的轮次串行执行。资格、故障和合并边界统一见[tick 契约](tick-contract.md)。市场、跨房行为和玩家写回仍遵守全轮提交，房间不能独立提前发布。
 
 玩法扩展以启动冻结计划描述对象、规则和槽；可信玩法 VM 与不可信玩家 VM 分开。组合 JS 函数留在玩法 VM，权威状态与领域校验留在 Rust，避免每层 wrap 都重新借用整个 VM。默认规则继续保留 native 路径；当前不为未开放的规则提供虚假的通用扩展保证。机制见 [Mod 执行](mod-execution.md)，取舍见 [ADR-015](../decisions/ADR-015-mod-chain-execution.md)。
 
-先完成这一读写、提交与失败契约，再扩大规则写面、补齐 VM 预算与故障处置，之后接持久化、网络与客户端。现有 crate 边界足以支撑这条路线；目前没有负载证据要求改成微服务、引入统一 ECS 或把所有规则改写为 JS。后续并行优化、存储选型与进程隔离分别用真实负载和故障验收决定。
+后续在现行读写、提交与失败契约上扩大规则写面，接通数据库、网络与客户端。紧凑存储、变化集和更通用的依赖调度按[目标架构](performance-target.md)逐片验证；存储选型与进程隔离分别用真实负载和故障验收决定。
 
 ### 性能改造与 Mod 扩展能力
 
@@ -100,7 +102,7 @@
 - 共享读面与增量缓存依据有效规则、对象/字段权限和状态版本装配。Mod 动态字段、OwnerCollection、Owner/ServerOnly 裁切、对象创建/修改/删除和包切换须进入正确的失效路径；不能直接共享带归属者私有字段的完整房间视图。
 - 原生加速与紧凑表示须保留动态对象、资源、字段及已开放规则替换的实际消费者。加速路径不支持的合法声明走语义等价的通用路径，不能要求第二个同类 Mod 改 Rust，或静默丢弃其数据和处理器。
 - 轻量候选、按需复制与索引复用仍通过统一候选访问接口维护写入与撤销；正常拒绝、整轮失败、重试及完整保存恢复的边界保持不变。不能把 Mod 写入直接落到已提交世界以节省复制。
-- 房间并行与玩家/结算流水线属于待实施能力。调度必须根据实际可约束的读写域、意图依赖及处理器顺序决定独立工作；跨房、账户、ID/RNG、namespace state 和共享可信 VM 的依赖须有明确的有序处理方案。无法证明独立的处理器保留有序执行路径，不以禁止目标扩展能力换取并行，也不只相信 `parallelSafe` 声明。玩家继续读取同一已提交快照，房间候选不得提前独立发布。
+- 现行房间并行受资格门和串行重做约束；更通用的依赖调度与玩家/结算跨 tick 流水线仍是目标。调度必须根据实际可约束的读写域、意图依赖及处理器顺序决定独立工作；跨房、账户、ID/RNG、namespace state 和共享可信 VM 的依赖须有明确的有序处理方案。无法证明独立的处理器保留有序执行路径，不以禁止目标扩展能力换取并行，也不只相信 `parallelSafe` 声明。玩家继续读取同一已提交快照，房间候选不得提前独立发布。
 
 上述约束不扩大当前 Mod API 的权限或已实现范围。具体成本与验收出口见[性能验收](performance-acceptance.md#架构优化的-mod-正确性前置)；方案和优化前证据见[源码研究](../research/11-mature-performance-optimization.md)。
 
@@ -114,10 +116,8 @@
 
 ## 目标架构与来源
 
-2026-10-11 用户授权为性能全面领先 xxscreeps、内存更低与同等灵活 Mod 进行必要的任意改造。新的[目标架构](performance-target.md)与[实施计划](../plans/performance-rearchitecture.md)推荐紧凑房间存储、统一事务变化集、增量玩家视图与房间依赖调度；它们是尚未实施的演进方案，不改变本页当前调用链。保留默认行为、合法 Mod 通用路径及全域原子发布，不把现有容器或固定三相流程作为不可更改约束。
+为性能领先 xxscreeps、内存更低与同等灵活 Mod，[目标架构](performance-target.md)与[实施计划](../plans/performance-rearchitecture.md)安排紧凑房间存储、统一事务变化集、增量玩家视图与房间依赖调度。现行已有部分视图复用、共享块和受限房间并行；完整目标未收口，不能将这些首片算作全部 R 任务完成。保留默认行为、合法 Mod 通用路径及全域原子发布，不把现有容器或固定三相流程作为不可更改约束。
 
-房间任务并行、玩家与房间结算重叠、共享快照、数据库与输入日志持久化、网络服务和前端尚需分别实现与验收。详细要求见 [架构索引](README.md)，取舍依据见 [ADR-004](../decisions/ADR-004-core-architecture.md)、[ADR-013](../decisions/ADR-013-architecture-review-coordinator.md)和 [ADR-014](../decisions/ADR-014-contribution-plane.md)。
+列式共享直读、权威变化集、数据库、耐久输入/outbox、网络服务和完整客户端仍须分别实现与验收。详细要求见[架构索引](README.md)，取舍依据见 [ADR-004](../decisions/ADR-004-core-architecture.md)、[ADR-013](../decisions/ADR-013-architecture-review-coordinator.md)和 [ADR-014](../decisions/ADR-014-contribution-plane.md)。
 
 常量来源为 Screeps common，指令规则和玩家 API 主要对照 Screeps engine，原生寻路对照 Screeps driver。具体版本与符号在相应源码中注明；原始研究见 [研究索引](../research/README.md)。
-
-G27.a 后台首片由 kk-mod-host::services 提供独立线程/V8 和异步读探针，kk-cli 的 mod services 是真实消费者；已提交世界副本由 runtime 提供，后台等待不阻塞玩家推进。该路径不经过 kk-backend 或 kk-storage，没有网络监听/耐久 outbox/provider。见[后台服务](background-services.md)。
