@@ -8,6 +8,8 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
+mod recovery;
+
 static NEXT: AtomicUsize = AtomicUsize::new(0);
 
 struct Fixture(PathBuf);

@@ -4,7 +4,7 @@
 
 ## 当前接手位置
 
-- 更新日期：2026-10-12；S1.1（文件与目录基座，54db7774）与 S1.2（常驻宿主，本次提交）已实现：serve init/run、严格版本化配置、纯函数调度（不补拍/不漂移）、Paused/Persistence 故障语义、周期保存与收尾保存、stdio 控制、SIGTERM 优雅退出与租约互斥（见下方实施记录）。下一实施入口为 S1.3 连续运行与冷恢复验收；G27.b/G28.a 等父项状态不变。
+- 更新日期：2026-10-12；S1.1（54db7774）、S1.2（c27db2d3）与 S1.3（连续运行与冷恢复验收，本次提交）已实现：serve init/run、严格版本化配置、网格调度（anchor/pending 两点接线）、Paused/Persistence 故障语义、周期保存与收尾保存、stdio 控制、SIGTERM 优雅退出与租约互斥；两玩家/两房/nursery Mod 场景冷恢复续存验收（世界/Memory/CPU/入口/Mod 状态核对、JSON/KKPV 双通道、撕裂回退与同步失败不发布水位）见实施记录。下一实施入口为 S2.1 inbox/确认屏障/恢复下限；G27.b/G28.a 等父项状态不变。
 - 性能主线已按用户要求暂缓：50 玩家×6 个 RCL8 满功能成熟房，共 300 房。已交付 KKPV 共享编码/视图复用、信封直构、条件逐房并行、克隆-结算重叠、预校验 commit 与融合校验；完整紧凑存储/变化集/列式共享直读仍为目标。旧投影预取两版已撤回，恢复时从 run 注入协议重新核验归因，最终验收未完成。
 - 最新标尺记录为 kk/xxs 耗时比中枢 1.0492、热窗 0.9859，来源为[归档接手记录](archive/mod-history-2026-10.md#接手位置沿革)；未找到随最新两片入库的同口径双端标尺明细，不能据此声称本轮独立复算或已正式领先。热态、分段收益及原始窗口须一起判断。
 - 默认玩法：19/19 powers 已接通；[兼容机器报告](../../compat/reports/kkscreeps.json)为 2905/2914 passed、9 failed、0 pending，原始 success=false，按既有差异登记通过棘轮不等于套件全绿或 M2B 整体完成。地图生成、stronghold 战术 AI/create-creep、bot 对战、多房扩张运营与 Overmind 旗标出兵仍有缺口。
@@ -18,7 +18,7 @@
 
 | 顺位 | 任务 | 首片与完成条件 |
 |---|---|---|
-| 1（进行中：S1.1/S1.2 已交付） | S1 常驻运行与无日志检查点恢复 | S1.1（54db7774）与 S1.2（本次提交：serve init/run、调度/故障/停止语义、stdio 控制与信号）已交付；S1.3 连跑/冷恢复验收（两玩家/多房/Mod、JSON/KKPV 双通道、世界/Memory/CPU/模块/Mod 状态核对）为当前入口；默认关闭审计日志，恢复后同目录续存；此片不标 G27.b 或 M3 完成 |
+| 1（进行中：S1.1/S1.2 已交付） | S1 常驻运行与无日志检查点恢复 | S1.1（54db7774）、S1.2（c27db2d3）与 S1.3（本次提交：两玩家/两房/Mod 冷恢复续存验收、JSON/KKPV 双通道等值、撕裂回退下限、同步失败不发布水位）已交付；S2.1 inbox/确认屏障/恢复下限为当前入口；默认关闭审计日志，恢复后同目录续存；此片不标 G27.b 或 M3 完成 |
 | 2（设计完成，依赖 S1） | S2/G27.b 耐久输入/outbox | S2.1 inbox/屏障/恢复下限 → S2.2 代码边界事务 → S2.3 表达式/受限 Mod 输入 → S2.4 幂等投递；最终确认与外部投递等待耐久屏障，恢复不跨已确认下限；不等待 JS storage provider |
 | 3（设计完成，写入依赖 S2） | S3/G28.a → G29.b 最小真实联网闭环 | S3.1 认证/命令/DTO → S3.2 授权房间订阅 → S3.3 两玩家实际客户端 → S3.4 分发/只读 provider；固定地图/预建玩家首片，官方 HTTP/sockjs 兼容另验，不标 M3 或 G21 全域完成 |
 | 随服务验证 | Linux 服务容量与恢复验收（2GB 参考） | 50 玩家×6 房、300 占用房，另覆盖目标 9 区块地图的注册地形规模；短探针只覆盖 300 房，不能代表整幅地图或成熟 bot 负载。长窗观察 RSS/GC、tick 延迟、保存峰值与冷启动，区分合成 worker 与真实 bot；同机 xxscreeps 正式对照另按性能验收口径完成 |
@@ -169,6 +169,13 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - P3 挂账（后续切片处理）：Settle 重试中写回构造失败转 Execution 重跑的边角归类；watchdog 不覆盖在途拍（由 exit_wait 窗容纳，文档已注明）；status 的 next_publish_seq 为诊断值可能过期；probe_checkpoint 假设无外部干预（注释已说明）；已提交后输入日志 IO 失败会被归为 Infrastructure 且脏拍少计 1（serve 未启用 input_log 当前不可达，S2 接线 CommittedLogError 时必须先处理）；stdio 控制行无长度上限（S3 网络入口一并设界）；stdout 管道断裂时 println panic（进程由调用方管理，S3 前无网络面）；`engine()` 访问器仅限装配后只读诊断的约束已注明；tick_interval_ms 下限未单设（25ms 轮询粒度为实际分辨率）。
 - S1.1 挂账三项已收编：宿主 init/run 在租约持有期内收编全部存储调用并清理协议残留临时文件；init 组合函数固化“初始检查点耐久→identity 最后写”顺序；发布失败以目标文件实证消息提供耐久未知判别（PersistenceFault）。
 - 遗留到后续切片：S1.3 将补两玩家/多房/Mod 场景与 JSON/KKPV 双通道冷恢复的完整状态等值验收（本批单玩家链路已覆盖机制正确性）；状态摘要含 `world_id/run_epoch/live_tick/durable_tick/publish_seq/dirty_ticks/last_save_ms/last_error/recovery_selected/skipped_broken`（方案字段齐全，snake_case）。
+
+### 2026-10-12 S1.3 连续运行与冷恢复验收实施记录
+
+- 交付内容：`crates/kk-cli/tests/serve_tests/recovery.rs` 5 项真实子进程+进程内核对用例（4 项链路验收+1 项负向拒绝）（夹具对齐 compat/fixtures/sim-mod-objects 形态：两玩家 p1/p2、W1N1/W2N2 各含 nursery:emitter、period 5/life 3、bot 每拍 Memory.loops 计数并落 lastTick）。①主链路（KKPV）：init→常驻 run→SIGTERM 保存退出 0→测试进程内经 service::checkpoints::select_latest+EmbedEngine::restore_checkpoint 复原最新检查点，核对世界时间=检查点 tick、模块入口 entries（两玩家 main）、两玩家 Memory（loops 计数与 lastTick 落点）、nursery born 计数、两房 Mod 对象、空请求继续结算一拍（CPU/写回活性）→同目录再 run 续存（live_tick 越过恢复点 +10 后控制停止）→再核对 loops 双玩家增长、born 单调、tick 不回退。②JSON 通道：同场景同核对面（业务状态双通道等值）。③撕裂回退：截断最新份→run 恢复选择跳过它回退次新完整版（skipped_broken=1 如实报告，live_tick 自次新起步继续）。④同步失败不发布水位：只读目录注入 Persistence 故障→冻结期间与停止后目录名字集合完全不变、退出 2。
+- 关键约束锁定：serve config 必须声明与场景一致的 mods（root/configs），否则 run 恢复因检查点 ModIdentity 无装载输入被拒（exit 1）——负向用例 mod_checkpoint_run_without_mods_config_is_refused 钉住。
+- 实际验证：`cargo test -p kk-cli --test serve_tests` 10 项全过（S1.2 5 项回归+S1.3 5 项）；完整 `pnpm run check` 通过。S1.3 无产品代码改动（纯验收测试），架构契约无需变更。
+- Review 闭环（2 路 subagent，A 验收充分性/B 持久化恢复语义）：初审 A FAIL 4 项 P2、B PASS 附 1 项 P2，修复清单——①撕裂用例把发布序号当 tick 用的恒真谓词（A/B 一致抓出）：改为进程内 select_latest 精确断言次新 publish_seq+可完整复原（verify_recovered 参数化 skipped 期望），子进程侧断言 recovery_selected==次新文件名、live_tick 以次新 tick 为基线（同单位）增长；②JSON 通道补跨进程续存段（goal 要求双通道均覆盖连跑与续跑；run2 后再复原断言 loops 增长，证明 JSON 注入路径工作者重建与玩家真实执行）；③CPU 核对面由"空请求结算活性"升级为直接读数（两玩家 CPU 桶 validate_checkpoint+limit>0，与引擎恢复校验同口径）；④台账"由此用例锁定"的虚称（负向路径当时未执行）——补 10 行负向用例真正锁定。P3 顺手修：主链路 run2 断言恢复选择指向最新完整份文件名；Mod 对象核对升级为按房分布（两房各含 nursery:emitter，pos.roomName+typeKey）；截断形态注释更正（发布协议不产生终名截断，此为读取侧 Broken 分类的故障注入）；故障用例权限恢复加 Drop 守卫防早退泄漏。B 另实证：前缀截断确定性落入 Eof/Syntax→Broken 跳过分支、sha 失配分支已由 S1.1 单测覆盖不重复声明、名字集合不变是"未发布水位"的可靠代理（发布恒为新名 create_new+rename，序号实时分配不撞旧名）、restore_in_process 与 run.rs setup 同入口同语义。A/B 终态复核均 PASS（A 逐项核验断言 API 与区分力并独立复跑；B 确认撕裂分支确定性、水位代理可靠与同入口语义）；残留 3 项不阻塞 P3 已随手清偿：负向用例 stderr 断言收紧为"Mod 包缺失"特异子串、仓库根手工运行残留 run.err/run.out 清理、台账用例计数措辞对齐（5 项）；CPU 数值级往返等值由 kk-runtime 检查点单测分层承担。
 
 ## 台账维护与每批验收
 
