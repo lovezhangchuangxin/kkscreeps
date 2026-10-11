@@ -425,3 +425,9 @@ RSS 采样中位数均值下降 12.09%，峰值均值仅下降 1.80%；首对新
 【ABBA（冻结 release、2 丢弃+O,N,N,O、5+100、并发 4、同 l1b 夹具）】new/old：**wall P50 0.859（−14.2%）、run 0.785（−21.5%）、CPU 0.834（−16.7%）、RSS 峰 0.933（−6.7%）**、project 0.938、settle 0.936；两对相邻窗方向一致（0.834 / 1.131）。绝对：wall ~503→~420ms、run ~222→~174ms。KKDIAG 组成：rawid/brooms/btail 全部 →0（低于整数毫分辨率）、refresh 3.06→2.0（bwrap 1，残留=3210 行 `_` 清空+126 变更行）；dirty/remat 不变（解码侧行为不变）。棘轮修正后 2905/9/0 转红 0。观察面扩展：Room 实例同一性跨拍保持（同 wrapper 先例）。[证据](../../compat/reports/mature-comparison/2026-10-11/50x6-incremental-assembly/README.md)。
 
 【对目标的含义】以 w5 静默窗（401.2ms、1.397×）为锚：本片 −14% ≈ −56ms → ~345ms（~1.15-1.2× 热态口径）。0.9×（≈285ms）仍差 ~60ms：下一片按队列——remat 字段级复用（804 次变长重物化/拍/玩家，priv 2ms 主靶）或 P4 依赖调度（settle 143ms 主杠杆）。重叠纪律：本片与 L1a 均作用 run/整体 wall，收益不可与 L1a 的 −90~100ms 相加外推。
+
+## 2026-10-11 补记：P2 首刀后标尺——1.155×
+
+【读数】compare.py 同窗配对（50×6、5+100、并发 4，丢弃轮+测量轮，二进制 670c730d）：**测量窗比值 1.1550（kk 343.1 vs xxs 297.0），自 L1a 后静默窗 1.397×**；丢弃窗（较冷）1.4137（kk 294.9/xxs 208.6）——kk 热敏 +16%、xxs +42%，热窗比值反而更低（与既往"比值随热态 1.40-1.63 摆动"方向相反的窗口对，印证单窗不可判、多窗取中枢）。CPU 比 0.749、RSS 峰值比 0.609（公平门大幅富余）。分相 project 63.4/run 138.0/settle 139.1——run 与 settle 并列最大。[证据](../../compat/reports/mature-comparison/2026-10-11/50x6-p2-first-cut-yardstick/README.md)。
+
+【settle 复采样】主线程 sample（300 tick 长窗中段）：settle_world_with_writebacks 内 engine::settle 主导，可辨识叶 settle_room ~15%/publish_tick ~16%/commit_tick_rooms ~6%，其余散布（校验/分配/drop/迭代）——与 settle 搬切证伪时的"成本分散"结论一致，无单一 ≥40ms 杠杆。结构性压缩（相位重叠/房间依赖调度）归 P4/R03 底座按重构方案放行。下一片：remat 字段级复用（run 侧）。
