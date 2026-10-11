@@ -360,3 +360,5 @@ RSS 采样中位数均值下降 12.09%，峰值均值仅下降 1.80%；首对新
 【就绪队列前瞻证伪】假说：run 相 worker 忙碌仅 ~65%，空泡来自"完成事件后主线程先投影 4.2ms 再派发"。实现就绪队列前瞻（等待期预投影、worker 释放即派发，kk-runtime execute_players）：sim 106 + kk-runtime 568 全过，但热平台 interleaved 对照 new 669.7 vs old 660（+1.5% 噪声级）——**无收益撤回**（留证 /tmp/kk-rq-*.json）。空泡主源不是投影延迟，更可能是 V8 GC 停顿与内核调度唤醒；run 相确系 worker 吞吐约束。
 
 【剩余杠杆结构（更新）】热稳态 wall ~515-660ms = proj 174-218（主线程串行）+ run 253-306（worker 吞吐）+ settle 109-148（主线程串行）。xxs 以 6.26× 并行度跑全部相位；kk 受 4P+6E 功率密度约束（L1a/并发扫帚双证）。达标 0.9×（~253-319ms）的可行序：① V8 注入面 row-dirty 跳过（Rust 编码器逐格比对标脏 + 束带行脏位，JS 端免 updateResident 全量——~30-60 core-ms）；② 结算相 109ms 的可并行成分采样归因后分片；③ 相位重叠/并行化的 L1a 仲裁路径（"CPU 小超+wall 大赢"→2 核亲和窗，用户已确认细则）。
+
+【settle 相细分（同批 sample）】1635 样本（~140ms/拍）：tick_with_writebacks ~1100（settle_room 仅 154 ~13ms；BTreeMap 克隆/迭代/drop 胶水 ~350 ~30ms；commit_tick_rooms 124 ~11ms；其余为引擎簿记）+ **publish_tick 299 ~26ms**。可并行成分候选：commit/adopt 的逐房 BTreeMap 重建与 publish_tick 内部结构（下片采样后定）。
