@@ -37,7 +37,7 @@
 | `kk-runtime` | 玩家世界数据注入、执行编排、Memory/segments/CPU 候选提交及失败重试 |
 | `kk-pathfinder` | 封装 Screeps C++ 寻路算法、宿主回调与取消接口；玩家面经 kk-runner 同步执行玩家 roomCallback、代价矩阵与嵌套搜索，引擎面供 NPC 结算（Source Keeper 巡守）Rust 直调 |
 | `kk-storage-bench` | 用合成数据比较 redb 与 libmdbx；结果用于选型研究，不是游戏持久化实现 |
-| `kk-storage` | 预留模块，尚无存储接口或数据库后端 |
+| `kk-storage` | 本地文件持久化原语（现行）：带哈希有界信封的原子发布与错误分类、目录单写者租约；不解释游戏规则，无数据库后端 |
 | `kk-backend` | 预留模块，尚无 HTTP 路由、监听或 WebSocket 服务 |
 | `kk-cli` | 命令行参数和嵌入式调用、bot 检查、性能采集入口 |
 
@@ -50,7 +50,7 @@
 | crate | 直接依赖 |
 |---|---|
 | `kk-cli` | core、engine、runtime、mod-host、mod-api、runner、schema、world |
-| `kk-runtime` | core、schema、mod-api、mod-host、engine、runner、world；vm（仅测试） |
+| `kk-runtime` | core、schema、mod-api、mod-host、engine、runner、world、storage；vm（仅测试） |
 | `kk-engine` | core、mod-api、pathfinder、schema、world |
 | `kk-world` | core、mod-api、schema |
 | `kk-mod-api` | core |
@@ -59,9 +59,9 @@
 | `kk-runner` | core、vm、pathfinder、schema，world（仅测试），使用 deno_core 等外部库 |
 | `kk-vm` | 无内部依赖，使用 deno_core 与 libc |
 | `kk-storage-bench` | core、schema、world |
-| `kk-core`、`kk-pathfinder`、`kk-storage`、`kk-backend` | 无内部依赖 |
+| `kk-core`、`kk-pathfinder`、`kk-storage`、`kk-backend` | 无内部依赖（storage 用 serde/sha2 等外部库提供发布原语） |
 
-表中的简称均指 `kk-*` crate。实际引擎并不通过 `kk-storage` 读写；`kk-pathfinder` 有两个消费面——玩家沙箱经 kk-runner 的 op 通道执行玩家 roomCallback，引擎 NPC 结算（Source Keeper 巡守）在 Rust 侧直调寻路、不依赖 V8；完整服务的目标依赖不应代替这张实际依赖表。
+表中的简称均指 `kk-*` crate。实际引擎并不通过 `kk-storage` 读写（kk-runtime 的检查点发布与服务目录基座经它）；`kk-pathfinder` 有两个消费面——玩家沙箱经 kk-runner 的 op 通道执行玩家 roomCallback，引擎 NPC 结算（Source Keeper 巡守）在 Rust 侧直调寻路、不依赖 V8；完整服务的目标依赖不应代替这张实际依赖表。
 
 ## 数据流与状态边界
 

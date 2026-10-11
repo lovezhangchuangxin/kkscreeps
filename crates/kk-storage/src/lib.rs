@@ -1,8 +1,18 @@
-//! 持久化存储模块的预留位置。
+//! 本地文件持久化原语：原子发布、信封校验与目录单写者租约。
 //!
-//! 当前尚未定义存储接口，也没有数据库后端或定期写盘实现。
-//! 房间状态与快照对象的转换位于 kk-world，二进制编码与解码位于 kk-schema；
-//! 这些操作不负责写入磁盘。存储引擎的比较基准位于 kk-storage-bench。
+//! 本 crate 只提供“写出完整文件并使其耐久”的机制，不解释游戏规则、
+//! 不依赖 runtime/V8。检查点、inbox、effects 等各写入域的格式与恢复
+//! 政策由上层（kk-runtime service 等）定义；发布协议为：同目录新临时
+//! 文件 → 完整写入 → 文件同步 → rename → 父目录同步 → 才记为成功。
 //!
 //! 检查点与分布式存储的目标设计见 docs/architecture/storage.md，
-//! 快照格式及恢复边界见 docs/architecture/snapshot-contract.md。
+//! 服务目录布局与恢复政策见 docs/plans/service-playable-batches.md。
+pub mod envelope;
+pub mod lease;
+pub mod publish;
+
+pub use envelope::{EnvelopeSpec, ReadError};
+pub use lease::WriterLease;
+pub use publish::{
+    PublishStage, StaleCleanup, publish, publish_json, remove_stale_temporaries, sync_directory,
+};

@@ -1090,6 +1090,7 @@ dependencies = [
  "kk-mod-host",
  "kk-runner",
  "kk-schema",
+ "kk-storage",
  "kk-vm",
  "kk-world",
  "serde",
@@ -1109,6 +1110,12 @@ dependencies = [
 [[package]]
 name = "kk-storage"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "sha2",
+]
 
 [[package]]
 name = "kk-storage-bench"

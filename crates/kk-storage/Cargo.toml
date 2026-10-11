@@ -1,6 +1,6 @@
 [package]
 name = "kk-storage"
-description = "持久化存储模块的预留位置，尚无存储接口或后端实现"
+description = "本地文件原子发布、信封校验与目录单写者租约；不解释游戏规则"
 version.workspace = true
 edition.workspace = true
 
@@ -8,3 +8,9 @@ edition.workspace = true
 workspace = true
 
 [dependencies]
+serde = { workspace = true }
+# float_roundtrip 与 kk-runtime 对齐：检查点载荷（CPU 桶等浮点）经本
+# crate 序列化，不能用最短往返表示静默改变数值。
+serde_json = { workspace = true, features = ["float_roundtrip"] }
+anyhow = { workspace = true }
+sha2 = "0.10.9"

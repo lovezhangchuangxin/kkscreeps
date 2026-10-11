@@ -15,6 +15,7 @@ kk-mod-host = { workspace = true }
 kk-engine = { workspace = true }
 kk-runner = { workspace = true }
 kk-world = { workspace = true }
+kk-storage = { workspace = true }
 serde_json = { workspace = true, features = ["float_roundtrip"] }
 serde = { workspace = true }
 anyhow = { workspace = true }

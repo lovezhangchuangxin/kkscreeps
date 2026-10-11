@@ -4,7 +4,7 @@
 
 ## 当前接手位置
 
-- 更新日期：2026-10-12；设计基线 HEAD `99cb63c6` 已提交文档优化与性能暂缓。用户已选择三批功能方向并要求深度设计；[服务三批方案](service-playable-batches.md)与[ADR-021（拟议）](../decisions/ADR-021-service-command-durability.md)随本次文档提交交付，未开始功能实现或改变父项完成状态；下一实施入口为 S1.1。
+- 更新日期：2026-10-12；S1.1（文件与目录基座）已实现并通过 3 路 subagent review 闭环：kk-storage 提供原子发布/信封分类/单写者租约，kk-runtime::service 提供服务目录/身份/检查点元数据与无日志恢复选择（见下方实施记录）。下一实施入口为 S1.2 常驻宿主；G27.b/G28.a 等父项状态不变。
 - 性能主线已按用户要求暂缓：50 玩家×6 个 RCL8 满功能成熟房，共 300 房。已交付 KKPV 共享编码/视图复用、信封直构、条件逐房并行、克隆-结算重叠、预校验 commit 与融合校验；完整紧凑存储/变化集/列式共享直读仍为目标。旧投影预取两版已撤回，恢复时从 run 注入协议重新核验归因，最终验收未完成。
 - 最新标尺记录为 kk/xxs 耗时比中枢 1.0492、热窗 0.9859，来源为[归档接手记录](archive/mod-history-2026-10.md#接手位置沿革)；未找到随最新两片入库的同口径双端标尺明细，不能据此声称本轮独立复算或已正式领先。热态、分段收益及原始窗口须一起判断。
 - 默认玩法：19/19 powers 已接通；[兼容机器报告](../../compat/reports/kkscreeps.json)为 2905/2914 passed、9 failed、0 pending，原始 success=false，按既有差异登记通过棘轮不等于套件全绿或 M2B 整体完成。地图生成、stronghold 战术 AI/create-creep、bot 对战、多房扩张运营与 Overmind 旗标出兵仍有缺口。
@@ -18,7 +18,7 @@
 
 | 顺位 | 任务 | 首片与完成条件 |
 |---|---|---|
-| 1（设计完成，未实现） | S1 常驻运行与无日志检查点恢复 | [三批方案](service-playable-batches.md)：S1.1 文件/租约/恢复 → S1.2 调度/停止 → S1.3 连跑/冷恢复；复用机制但保留 sim 身份政策，默认关闭审计日志，恢复后同目录续存；此片不标 G27.b 或 M3 完成 |
+| 1（进行中：S1.1 已交付） | S1 常驻运行与无日志检查点恢复 | S1.1 已交付（发布原语提取 kk-storage、服务目录/身份/metadata.service v1、无日志恢复选择、完整版本保留）；S1.2 常驻宿主（init/run、严格配置、调度状态机、周期保存、控制入口、停止）为当前入口 → S1.3 连跑/冷恢复；默认关闭审计日志，恢复后同目录续存；此片不标 G27.b 或 M3 完成 |
 | 2（设计完成，依赖 S1） | S2/G27.b 耐久输入/outbox | S2.1 inbox/屏障/恢复下限 → S2.2 代码边界事务 → S2.3 表达式/受限 Mod 输入 → S2.4 幂等投递；最终确认与外部投递等待耐久屏障，恢复不跨已确认下限；不等待 JS storage provider |
 | 3（设计完成，写入依赖 S2） | S3/G28.a → G29.b 最小真实联网闭环 | S3.1 认证/命令/DTO → S3.2 授权房间订阅 → S3.3 两玩家实际客户端 → S3.4 分发/只读 provider；固定地图/预建玩家首片，官方 HTTP/sockjs 兼容另验，不标 M3 或 G21 全域完成 |
 | 随服务验证 | Linux 服务容量与恢复验收（2GB 参考） | 50 玩家×6 房、300 占用房，另覆盖目标 9 区块地图的注册地形规模；短探针只覆盖 300 房，不能代表整幅地图或成熟 bot 负载。长窗观察 RSS/GC、tick 延迟、保存峰值与冷启动，区分合成 worker 与真实 bot；同机 xxscreeps 正式对照另按性能验收口径完成 |
@@ -122,6 +122,7 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 
 | 已提交切片 | 实际验证与证据 |
 |---|---|
+| S1.1 服务目录基座（本次提交） | kk-storage 6+runtime service 13 项新测试、原 checkpoint/sim 回归（sim_tests 106）、clippy/doc-link 干净；3 路 review（A 行为/B 持久化/C 边界）修复 4 项 P1 与 7 项 P2 后全绿，详见下方实施记录 |
 | `ca347777` commit 转义门提升 | commit 三对 ABBA 同向降低 0.6–1.4ms；kk-world、300 房终态等价、棘轮零转红及完整 check；[证据](../../compat/reports/mature-comparison/2026-10-12/50x6-ugate-hoist/README.md) |
 | `fc5d602c` 校验融合 | validate 10.41–12.22→3.01–3.20ms；kk-engine/kk-runtime、300 房终态等价、棘轮零转红及完整 check；热污染窗口不判 wall；[证据](../../compat/reports/mature-comparison/2026-10-12/50x6-validate-fusion/README.md) |
 | `df170906` max ID 末键读取 | prepare 三对降低 1.5–2.7ms；世界/引擎、终态等价、棘轮与完整 check；[证据](../../compat/reports/mature-comparison/2026-10-11/50x6-maxid-next-back/README.md) |
@@ -148,6 +149,16 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - 核对发现：sim 目录恢复要求日志；管理 world_snapshot 不裁切玩家视野；Sandbox.set_modules 失败不提供回滚；RoomFeed 尚非冻结网络协议且不接受同 tick delta。方案分别设计独立服务恢复、授权投影、替代工作者与网络薄适配。
 - 核心取舍：周期游戏检查点 + 低频命令/副作用耐久屏障 + 独立恢复下限/投递确认；received 与 completed 分开，去重水位有界保留，后台不直接写世界。拆为 11 子片，首片建议 S1.1；代码/API/SDK/服务格式尚未改动。
 - 实际验证：文档链接检查通过（333 个 Markdown、2243 个本地链接），`git diff --check` 通过；G01–G30 全部父项状态与设计基线 HEAD 一致，新增正文标题/代码围栏及 11 子片分配核对通过。复审补齐服务状态归属、入口模块保存、去重明细过期、v2 初次启用、代码激活通知、outbox 满额停顿与重试/去重期限语义。仅文档变更；本次提交前无参数 `pnpm run check` 完整门禁通过，包含 Rust 格式、Clippy、workspace 测试、CLI 重建、维护工具及 JS workspace 测试、文档链接和源码规模检查；不代表 S1–S3 已实现或已执行其未来验收。设计随本次提交交付，未启动性能或 renderer 长测。
+
+
+### 2026-10-12 S1.1 服务目录基座实施记录
+
+- 交付内容：发布原语从 kk-runtime/checkpoint 提取为 `kk-storage`（信封读取与 Broken/Fatal 错误分类、原子发布含阶段故障注入、目录单写者租约、临时文件清点）；`kk-runtime::service` 新增服务目录布局/校验（`dir`）、目录身份 identity.json v1（初始化完成标记 + world_id/种子/内容身份）、检查点内 `metadata.service` v1（含每玩家 entry）、`cp-<publishSeq>.json` 命名/序号分配（回滚不复用）、无日志恢复选择（撕裂/哈希损坏跳过计数，I/O/未来格式/身份不一致停止）、按完整版本计数的保留策略（保护集不占名额）。公共 `read_checkpoint` API 与 sim 行为不变。
+- 实际验证：`cargo test -p kk-storage`（7 通过 + 1 子进程用例：争锁立即拒绝、硬退出释放、发布中断分类、临时文件匹配）；`cargo test -p kk-runtime --lib`（65 通过，含服务域 12 项：序号不复用、坏最新份跳过、四类身份门 + 引擎载荷 tick/种子交叉核、完整版本保留与恢复基线保护、真实引擎发布-选择-恢复往返）；`cargo test -p kk-cli --test sim_tests`（106 通过）；clippy 两 crate 干净；`node scripts/check-doc-links.mjs` 通过。提交前完整门禁见本次提交说明。
+- Review 闭环（3 路 subagent，A 行为正确性/B 持久化与崩溃恢复/C 边界与测试）：确认成立并已修复——①信封层“合法 JSON 但结构不符”误归可跳过（按 serde 错误类别拆分 Syntax/Eof→跳过、Data→停止）；②`list_seqs` 吞目录迭代错误（改为传播，防止序号复用覆盖/静默降级）；③保留策略按文件名而非完整版本计数、降级恢复基线可被自己删除（改为完整版本窗口 + 窗口下界外才删）；④台账滞后（本条）。P2 修复：scenario_sha256 身份门与引擎载荷种子交叉核、hex 字符集校验、u64 序号上限、`max_bytes+1` 饱和、float_roundtrip 特性对齐、半初始化目录处置提示、init 容忍协议临时残留、临时名空段收紧、AGENTS.md 模块树同步。
+- 复核闭环：A/B 两路 reviewer 对修复后最终改动逐项复核 PASS（A 侧另实证九种信封形态分类无漏网；唯一残留形态“完整信封+尾部垃圾归 Broken”仅外部篡改可造、已注释说明不阻塞）。C 路初审提出的台账更新（本条）与 AGENTS.md 模块树同步亦已落地。
+- 平台证据：macOS XNU 的 flock“快速加锁/释放循环 × 并发 fork”会留无持有者残锁（约 250ms 自愈、约 4% 循环命中；两线程探针实证并记录在 lease.rs 注释）——生产形态每进程单次取锁不受影响，测试经串行化规避；Linux 侧未实证。
+- 挂账到 S1.2：宿主在租约持有期内收编 publish/select/enforce_keep/remove_stale_temporaries 调用并清理残留临时文件；init 组合函数（先初始检查点耐久后写 identity）与 init 各阶段崩溃矩阵测试；发布“耐久未知”错误的可判别形态（PersistenceFault 映射）。
 
 ## 台账维护与每批验收
 

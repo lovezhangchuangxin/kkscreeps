@@ -19,7 +19,7 @@ kkscreeps/
 │   ├── kk-pathfinder/      原生 C++ 寻路封装，经 kk-runner op 供玩家面搜索
 │   ├── kk-cli/             embed、sim run、mod inspect、bot-check 与性能命令入口
 │   ├── kk-storage-bench/   存储引擎选型基准
-│   ├── kk-storage/         持久化预留模块
+│   ├── kk-storage/         本地文件原子发布、信封校验与目录单写者租约
 │   └── kk-backend/         网络服务预留模块
 ├── compat/                 TypeScript 兼容性适配器、测试与回归报告
 ├── apps/game/              游戏客户端占位包

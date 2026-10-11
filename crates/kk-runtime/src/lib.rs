@@ -11,6 +11,7 @@ pub mod kkpv_store;
 mod mod_trace;
 mod mod_vm;
 mod run;
+pub mod service;
 pub mod world_source;
 
 pub use embed::{EmbedEngine, PlayerRun};

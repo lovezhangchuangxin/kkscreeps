@@ -51,6 +51,17 @@
 | Mod 提交状态 | `engine.mod_states`（动态映射，载荷不透明——namespace state 是 Mod 自管 JSON） | 无独立版本；与包身份一致性由 realm 重建核对 | Mod namespace state 回填 | 拒绝不迁移，G23 负责 |
 | 引擎杂项 | `engine.next_id`、`engine.plan_hash` | `plan_hash` 恢复时由重新注册实际产生并等值核对，不等即拒 | 对象 ID 游标续发；冻结计划一致性 | 拒绝不迁移，G23 负责 |
 
+## 服务目录宿主侧域（`kk-runtime` `service`，S1.1 现行）
+
+与 sim 宿主侧持久面平行的服务目录域；不进引擎键树门禁（同样是 `metadata` 不透明叶子内的新键树），由服务选择器严格解码消费。
+
+| 域 | 字段/文件 | 版本策略 | 恢复消费者 | 迁移状态 |
+|---|---|---|---|---|
+| 目录身份 | `identity.json`：`service_format_version`、`world_id`、`world_seed`、`scenario_sha256`、`initialized` | 信封 `kkscreeps-service-identity` v1 严格等值；`initialized` 必须 true；服务格式版本当前 1，v2 随 S2 切片升级 | `service::identity::read`（run 入口）；身份缺失/损坏拒绝运行 | 新域首版，无历史迁移 |
+| 检查点服务元数据 | `metadata.service`：`service_format_version`、`world_id`、`publish_seq`、`tick`、`world_seed`、`scenario_sha256`、`entries.*` | v1 严格 `deny_unknown_fields`；载荷序号须与文件名一致，world_id/种子/内容身份/格式与目录身份一致，tick/种子与引擎载荷交叉一致；保留策略按完整版本计数 | `service::checkpoints::select_latest`（无日志恢复选择）与 `enforce_keep` | 新域首版，无历史迁移 |
+| 服务检查点文件 | `checkpoints/cp-<publishSeq>.json`（复用检查点信封与引擎载荷） | 信封同基础检查点；发布序号目录唯一分配、不复用 | 选择器降序取首个完整份；撕裂/哈希损坏跳过并计数 | 随基础检查点 |
+| 单写者租约 | `writer.lock`（无内容语义） | 无版本；固定 inode、持锁期间不删除 | `kk-storage::WriterLease`（进程级互斥，崩溃由 OS 释放） | 不适用 |
+
 ## 不持久化域
 
 | 域 | 不保存的原因 |
