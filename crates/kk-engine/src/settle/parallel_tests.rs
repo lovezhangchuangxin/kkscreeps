@@ -153,3 +153,40 @@ fn worker_count_adapts_to_room_count() {
     large.tick_with_intents(IntentBatch::default()).unwrap();
     assert!(large.rooms_settled_in_parallel_for_test());
 }
+
+/// 流式派发下故障注入的错误消息与串行首失败一致，且世界不被推进：
+/// 注入点按房序进入合并，注入点之后未交付的房间不产生额外错误。
+#[test]
+fn parallel_injected_failure_keeps_message_and_world() {
+    let mut parallel = Engine::new(world_with_rooms(40));
+    parallel.set_settle_workers(Some(4));
+    parallel.set_fail_room_for_test(Some("W20N1".into()));
+    let err = parallel
+        .tick_with_intents(IntentBatch::default())
+        .expect_err("注入房 ⇒ 整体 Err");
+    assert_eq!(err.0, "故障注入：房间 W20N1 结算失败");
+    assert_eq!(parallel.world().time(), 0, "失败 tick 不推进时间");
+    let mut serial = Engine::new(world_with_rooms(40));
+    serial.set_settle_workers(Some(1));
+    serial.set_fail_room_for_test(Some("W20N1".into()));
+    let serial_err = serial
+        .tick_with_intents(IntentBatch::default())
+        .expect_err("串行注入同错误");
+    assert_eq!(serial_err.0, err.0, "并行与串行注入消息一致");
+}
+
+/// 流式队列的完成序由调度决定：同输入重复运行全量指纹逐字节一致，
+/// 锁定克隆-结算重叠不引入完成序依赖。
+#[test]
+fn streaming_pipeline_is_deterministic_across_repeats() {
+    let mut first = Engine::new(world_with_rooms(40));
+    first.set_settle_workers(Some(4));
+    let mut second = Engine::new(world_with_rooms(40));
+    second.set_settle_workers(Some(4));
+    drive(&mut first, 10);
+    drive(&mut second, 10);
+    assert!(first.rooms_settled_in_parallel_for_test());
+    assert!(second.rooms_settled_in_parallel_for_test());
+    assert_eq!(fingerprint(&first), fingerprint(&second));
+    assert_eq!(first.last_events, second.last_events);
+}

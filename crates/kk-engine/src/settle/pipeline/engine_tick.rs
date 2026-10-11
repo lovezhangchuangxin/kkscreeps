@@ -272,6 +272,11 @@ impl Engine {
     /// 确定性依据（取证见 50x6-settle-phase-diag）：房间循环的跨房耦合仅
     /// ID 分配、claim 读候选与 gcl/power 交换律累加——前两者触发串行
     /// 回退，后者求和与顺序无关；事件按房序归并、跨房移动后置应用。
+    ///
+    /// 克隆与结算流水重叠：主线程克隆一间即交付共享队列一间（World 非
+    /// Sync，克隆留在主线程，计时归 clone 段），工作者取房即结算。完成
+    /// 序由调度决定，不影响产物——合并严格按房序，工作者计时经完成通道
+    /// 回传累加。
     fn settle_rooms_parallel(
         &self,
         txn: &mut txn::OwnedTickTxn,
@@ -284,76 +289,110 @@ impl Engine {
         let fail_room = self.fail_room.clone();
         let time = txn.time;
         let now_ms = txn.input.now_ms;
-        // 主线程克隆房候选：World 非 Sync，克隆留在主线程（计时归 clone 段）。
-        let mut owned: Vec<RoomState> = Vec::with_capacity(txn.room_names.len());
-        for name in &txn.room_names {
-            if fail_room.as_deref() == Some(name.as_str()) {
-                return Err(SettleError(format!("故障注入：房间 {name} 结算失败")));
-            }
-            let t_room = std::time::Instant::now();
-            let mut room = self.world.room(name).expect("房间名来自键集").clone();
-            room.name.clone_from(name);
-            diag.clone_ns += t_room.elapsed().as_nanos();
-            owned.push(room);
-        }
-        // 连续块分片（归并时块序拼接即房序，免排序）。
-        let chunk = owned.len().div_ceil(workers);
-        let mut worker_inputs: Vec<Vec<RoomState>> = Vec::with_capacity(workers);
-        let mut rooms = std::mem::take(&mut owned);
-        while !rooms.is_empty() {
-            let take = chunk.min(rooms.len());
-            worker_inputs.push(rooms.drain(..take).collect());
-        }
-        struct Outcome {
-            settled: Result<SettledRoom, SettleError>,
-        }
-        let mut outcomes: Vec<Outcome> = Vec::with_capacity(txn.room_names.len());
         let plane = self.tick_plane(market::world_span(
             self.world.rooms().keys().map(String::as_str),
         ));
+        struct Outcome {
+            settled: Result<SettledRoom, SettleError>,
+        }
+        // 单队列多消费者：Receiver 非 Sync，包 Mutex 共享等待。等待者持锁
+        // 阻塞于 recv，工作者只在取房瞬间竞争；结算期间不持锁，主线程
+        // send 不经过该锁。
+        let (work_tx, work_rx) = std::sync::mpsc::channel::<(usize, RoomState)>();
+        let work_rx = std::sync::Mutex::new(work_rx);
+        let (done_tx, done_rx) = std::sync::mpsc::channel::<(usize, Outcome, u128, u128)>();
         let state = txn.state.clone();
         let batch = &txn.batch;
+        let total = txn.room_names.len();
+        let mut injected: Option<String> = None;
         std::thread::scope(|scope| {
-            let mut handles = Vec::with_capacity(worker_inputs.len());
-            for input in worker_inputs {
+            let mut handles = Vec::with_capacity(workers.min(total));
+            for _ in 0..workers.min(total) {
                 let state = &state;
                 let batch = &*batch;
                 let plane = &plane;
                 let hook = hook.as_deref();
+                let work_rx = &work_rx;
+                let done_tx = done_tx.clone();
                 handles.push(scope.spawn(move || {
-                    let mut out = Vec::with_capacity(input.len());
-                    let (mut settle_ns, mut hook_ns) = (0u128, 0u128);
-                    for room in input {
+                    loop {
+                        let room = {
+                            let guard = work_rx.lock().expect("结算取房锁");
+                            guard.recv()
+                        };
+                        let (idx, room) = match room {
+                            Ok(pair) => pair,
+                            Err(_) => break, // 队列关闭：克隆已全部交付
+                        };
                         let t = std::time::Instant::now();
                         let settled = settle_room(room, time, now_ms, state, batch, plane);
-                        settle_ns += t.elapsed().as_nanos();
+                        let settle_ns = t.elapsed().as_nanos();
+                        let mut hook_ns = 0;
                         if let Ok(sr) = &settled
                             && let Some(hook) = hook
                         {
                             let t = std::time::Instant::now();
                             hook(&sr.room.name, &sr.room);
-                            hook_ns += t.elapsed().as_nanos();
+                            hook_ns = t.elapsed().as_nanos();
                         }
-                        out.push(Outcome { settled });
+                        if done_tx
+                            .send((idx, Outcome { settled }, settle_ns, hook_ns))
+                            .is_err()
+                        {
+                            break; // 接收端已丢弃：整轮已失败
+                        }
                     }
-                    (out, settle_ns, hook_ns)
                 }));
             }
+            // 主线程克隆房候选并即时交付：克隆与工作者结算重叠。故障注入
+            // 点之后不再交付，注入错误按房序进入合并（与串行首失败同位）。
+            for (idx, name) in txn.room_names.iter().enumerate() {
+                if fail_room.as_deref() == Some(name.as_str()) {
+                    injected = Some(name.clone());
+                    break;
+                }
+                let t_room = std::time::Instant::now();
+                let mut room = self.world.room(name).expect("房间名来自键集").clone();
+                room.name.clone_from(name);
+                diag.clone_ns += t_room.elapsed().as_nanos();
+                if work_tx.send((idx, room)).is_err() {
+                    break; // 工作者 panic：join 处统一报错
+                }
+            }
+            // 显式关闭队列并释放本线程的完成通道端：工作者随 recv Err 退
+            // 出，scope 退出前的 join 才能返回；不显式 drop 会互相等待。
+            drop(work_tx);
+            drop(done_tx);
             for handle in handles {
-                let (out, settle_ns, hook_ns) = handle.join().expect("结算工作线程 panic");
-                diag.settle_ns += settle_ns;
-                diag.hook_ns += hook_ns;
-                outcomes.extend(out);
+                handle.join().expect("结算工作线程 panic");
             }
         });
-        debug_assert_eq!(
-            outcomes.len(),
-            txn.room_names.len(),
-            "连续块分片拼接必为房序全覆盖"
-        );
+        // scope 已 join 全部工作者：完成消息齐备，逐条收集后按房序合并。
+        let mut outcomes: Vec<Option<Outcome>> = (0..total).map(|_| None).collect();
+        while let Ok((idx, outcome, settle_ns, hook_ns)) = done_rx.recv() {
+            diag.settle_ns += settle_ns;
+            diag.hook_ns += hook_ns;
+            debug_assert!(outcomes[idx].is_none(), "每房恰一条完成消息");
+            outcomes[idx] = Some(outcome);
+        }
+        if let Some(name) = &injected {
+            let idx = txn
+                .room_names
+                .iter()
+                .position(|n| n == name)
+                .expect("注入房必在房序");
+            if outcomes[idx].is_none() {
+                outcomes[idx] = Some(Outcome {
+                    settled: Err(SettleError(format!("故障注入：房间 {name} 结算失败"))),
+                });
+            }
+        }
         let mut inter_room_moves = Vec::new();
         let mut fresh_age = std::collections::BTreeSet::new();
         for (name, outcome) in txn.room_names.iter().zip(outcomes) {
+            let Some(outcome) = outcome else {
+                break; // 注入点之后未交付
+            };
             let SettledRoom {
                 room,
                 events: mut room_events,

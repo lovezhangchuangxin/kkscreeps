@@ -1,0 +1,35 @@
+{
+  "d": {
+    "kk_p50": 226.868125,
+    "xxs_p50": 181.45324999999866,
+    "ratio": 1.2502841641028841,
+    "cpu_ratio": 0.9598687115737015,
+    "rss_peak_ratio": 0.6524204465782901
+  },
+  "m1": {
+    "kk_p50": 212.651125,
+    "xxs_p50": 183.1837919999998,
+    "ratio": 1.1608621192861879,
+    "cpu_ratio": 0.9170582994848783,
+    "rss_peak_ratio": 0.6167627948621243,
+    "binary_sha256": "f39f7c5a0d691eee15d05814ffcd043f818ad1072b57d31f3a4610156888eb1a"
+  },
+  "m2": {
+    "kk_p50": 225.25504199999997,
+    "xxs_p50": 209.8975419999988,
+    "ratio": 1.0731666500411008,
+    "cpu_ratio": 0.8464491161551086,
+    "rss_peak_ratio": 0.6427913932147267,
+    "binary_sha256": "f39f7c5a0d691eee15d05814ffcd043f818ad1072b57d31f3a4610156888eb1a"
+  },
+  "m3": {
+    "kk_p50": 247.536042,
+    "xxs_p50": 231.96150000000125,
+    "ratio": 1.0671427887817533,
+    "cpu_ratio": 0.8565705284539159,
+    "rss_peak_ratio": 0.6483380313664655,
+    "binary_sha256": "f39f7c5a0d691eee15d05814ffcd043f818ad1072b57d31f3a4610156888eb1a"
+  },
+  "binary_sha256": "f39f7c5a0d691eee15d05814ffcd043f818ad1072b57d31f3a4610156888eb1a",
+  "protocol": "\u72b6\u6001\u95e8\u653e\u884c\uff08pmset \u65e0\u8282\u6d41+ABBA \u540e 25 \u5206\u949f\u8f7b\u6d3b\uff09\uff0c1 \u4e22\u5f03+3 \u6d4b\u91cf\uff0ccompare.py --runs 1\uff08\u7a97\u5185 kk \u6052\u5148\u8dd1\uff09\uff1b\u5e8f\u5217 m1\u2192m3 \u5355\u8c03\u70ed\u5316\uff0cxxs \u5899\u949f\u70ed\u654f\u9ad8\u4e8e kk\uff08181\u2192232\uff09\uff0c\u51c9\u7a97\u6bd4\u503c\u6700\u5dee\u2014\u2014\u6bd4\u503c-\u70ed\u6001\u53cd\u6bd4\u7b2c\u56db\u6b21\u5b9e\u8bc1"
+}
