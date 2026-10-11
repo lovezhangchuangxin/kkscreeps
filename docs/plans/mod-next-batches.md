@@ -4,6 +4,8 @@
 
 ## 当前接手位置
 
+- 2026-10-11 R00-lite run 相分段诊断交付（随本提交交付）：`SandboxConfig.run_diag`（`KK_RUN_DIAG=1` 开启，compare-probe 门控）+ prelude 分段计时与 kkpv 计数器（rows/dirty/remat），KKDIAG 行经控制台保留末拍采样（50 玩家=50 样本）。实测（真实 bot 夹具）：refresh 3.06（bwrap 1.64/brooms 1.08/btail 0.32）+ priv 1.66（rows 3210、dirty 126=**96% 干净**、remat 804）+ rawid 0.34 + pub/terr 0.36；五段 ~5.4ms ≈ 每玩家预算三成，余为玩家代码+GC+Memory。**裁定 P2 优先于 P1**：P1 JS 侧仅 ~0.4ms/玩家（公开地图版本化 wall ≈2ms 量级，降级登记）；P2 靶面 ~3.4ms/玩家（bwrap/brooms/rawid/remat），干净行 96% 使增量上限高，估 wall ~29ms + GC 外溢。验证：sandbox 62 场景、完整无参数 check。下一片：**P2 首刀=装配主环与房间查询的干净行增量维护**（bwrap+brooms 2.7ms 主靶），remat 字段级复用次之；P4 trace 随后。
+
 
 - 2026-10-11 全面架构重构方案（方案完成，实施未启动，随本提交入库并按用户意见收敛）：用户追加性能全面超过 xxscreeps、内存更低且同等灵活 Mod 的目标，授权必要的任意改造。**同日用户收敛验收口径并采纳复审修正**：①目标线收紧为 B0（50×6）单一锚点（≤0.9×、连续两配对窗、CPU 仲裁制、RSS 峰值 <1），0.70×/0.75× 主攻档降为非承诺参考，B1–B7 降为登记场景库（Linux 少核与 72h 长跑随部署线）；②测量分层——开发与批次用分钟级短窗（交替 A/B/多短窗中枢），500+3000 长窗收敛为最终验收 ×2 窗，不为验证等数小时；③P1 子片先落低扰动计数（公共地图版本化 wall 收益或仅数 ms，大头在稀疏私有束与 JS 索引）；④tick-contract 目标演进补取代关系标注。[目标架构](../architecture/performance-target.md)、[R00–R12 计划](performance-rearchitecture.md)与 [ADR-020 草案](../decisions/ADR-020-incremental-world-runtime.md)已完成；核心为紧凑房间页/动态 schema、受控 RoomTxn/ChangeSet、稀疏增量视图、玩家私有索引与执行器、依赖调度和有序通用 Mod。方案要求首版 JS handler 有序执行、ID/RNG 有序、旧 buffer pin/权限校验、局部拒绝与完整恢复；少核容量与实际 JS preset 对照随部署线与最终验收抽查执行。同步总体/快照/性能入口、roadmap、完整玩法计划和索引；G 领域缺口不销账。下一接手 R00（lite 起步：低扰动计数 + 双端基线冻结），随后 R01（P1 稀疏投影）与 R02（P2 字段复用/私有索引增量）；R03 底座以 R00 账本证据逐段放行。本提交为纯文档变更（含用户收敛与复审修正）。
 

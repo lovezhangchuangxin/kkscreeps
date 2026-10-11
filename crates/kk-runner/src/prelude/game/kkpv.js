@@ -623,6 +623,7 @@
   // 重写、缺失字段删除残留，变长字段重装共享访问器（顶掉已物化的旧值）。
   // 调用前已由布局签名保证字段集、顺序与列类型不变。
   function updateResident(rec, dv, bucket, row, arenaBase, arenaLen) {
+    DIAG.dirty++;
     if (bucket.lazyAccessors !== null) {
       rePointCtx(rec, dv, row, arenaBase, arenaLen, bucket.fields);
     }
@@ -634,6 +635,8 @@
       } else if (field.kind < 5) {
         rec[field.key] = readField(dv, field, row, arenaBase, arenaLen);
       } else {
+        // 变长字段重物化（P2 目标面）：值未变也会重新安装访问器。
+        DIAG.remat++;
         __defineProperty(rec, field.key, bucket.lazyAccessors[f]);
       }
     }
@@ -680,6 +683,11 @@
    * Memory 常驻同属已接受的观察面（依赖每拍新对象的代码在官方即坏）。
    * 块序与上一拍一致时逐块两指针归并（免 id 串物化与 seen Set）；
    * 清扫改走 SEEN_TICK 戳比对。块数变动即弃用归并一拍（慢路径自愈）。 */
+  // run 相构成诊断的累积计数（KKDIAG）：rows=处理行数、dirty=走全量
+  // 更新的行数（干净行跳过不计）、remat=重装的变长字段访问器数。
+  const DIAG = { rows: 0, dirty: 0, remat: 0 };
+  globalThis.__kkp.kkpvDiag = DIAG;
+
   function decodeBundleResident(buffer, expectedTick, resident) {
     const dv = new __DataView(buffer);
     const total = __reflectApply(__dvByteLength, dv, []);
@@ -722,6 +730,7 @@
         if (rec[SEEN_TICK] !== expectedTick) __reflectApply(__mapDelete, resident, [id]);
       },
     ]);
+    DIAG.rows += records.length;
     return records;
   }
 

@@ -18,6 +18,7 @@
   const __reflectApply = Reflect.apply;
   const __objectEntries = Object.entries;
   const __objectKeys = Object.keys;
+  const __dateNow = Date.now;
   const __isArray = Array.isArray;
   const __numberIsInteger = Number.isInteger;
   const mathPow = Math.pow;
@@ -72,6 +73,9 @@
   }
 
   function buildGame() {
+    // 诊断子段（KKDIAG）：装配主环 / 房间与查询构造 / 回填清扫。
+    const diagOn = gw.runDiag === true;
+    const dWrap0 = diagOn ? __dateNow() : 0;
     gw.objectsById = new __Map();
     const creeps = {};
     const spawns = {};
@@ -145,6 +149,8 @@
         }
       }
     }
+    const dRooms0 = diagOn ? __dateNow() : 0;
+    const dWrap = dRooms0 - dWrap0;
     const rooms = {};
     const roomEntries = __objectEntries(gw.world.rooms || {});
     for (let i = 0; i < roomEntries.length; i++) {
@@ -156,6 +162,8 @@
         __reflectApply(__mapGet, roomBuckets, [name]),
       );
     }
+    const dTail0 = diagOn ? __dateNow() : 0;
+    const dRooms = dTail0 - dRooms0;
     // 回填 room：直接遍历分桶的包装数组，不再全量扫描世界与逐对象 Map 回查。
     // 未建房间（rooms 无键）回填 undefined，与旧版「保持主循环重置值」等价。
     __reflectApply(__mapForEach, roomBuckets, [
@@ -167,6 +175,9 @@
     ]);
     // 常驻表清扫：消亡对象出表（rawById 已是本拍权威集合）。
     gw.sweepResidentWrappers();
+    if (diagOn) {
+      gw.__kkdiagBuild = { wrap: dWrap, rooms: dRooms, tail: __dateNow() - dTail0 };
+    }
 
     const cpu = gw.world.cpu || {
       limit: 20,

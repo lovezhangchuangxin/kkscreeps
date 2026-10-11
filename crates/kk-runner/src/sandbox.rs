@@ -63,6 +63,10 @@ pub struct SandboxConfig {
     /// 实测占 run 相约四分之一墙钟与五分之一 CPU。默认 true 保持
     /// 现有诊断工作流不变。
     pub api_probe: bool,
+    /// 是否开启 run 相分段诊断（KKDIAG）：每 tick 在控制台输出束解码/
+    /// 地形装配/索引与 Game 装配的分段耗时与行/脏行/重物化计数。
+    /// 计时与输出本身有开销，窗口只用于构成归因，不作为 wall 证据。
+    pub run_diag: bool,
 }
 
 impl Default for SandboxConfig {
@@ -81,6 +85,7 @@ impl Default for SandboxConfig {
             obstacles_passable: false,
             private_ramparts_passable: false,
             api_probe: true,
+            run_diag: false,
         }
     }
 }

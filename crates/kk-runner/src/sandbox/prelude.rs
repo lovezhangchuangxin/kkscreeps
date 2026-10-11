@@ -158,6 +158,10 @@ pub(super) fn install_base(runtime: &mut JsRuntime, config: &SandboxConfig) -> a
             config.obstacles_passable, config.private_ramparts_passable
         ),
     )?;
+    runtime.execute_script(
+        "kk-prelude-run-diag",
+        format!("globalThis.__kkp.gw.runDiag = {};", config.run_diag),
+    )?;
     if config.extension_intents {
         runtime.execute_script(
             "kk-prelude-mods-extension-intents",

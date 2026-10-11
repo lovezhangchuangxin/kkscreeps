@@ -13,6 +13,10 @@
   const __mapSet = Map.prototype.set;
   const __reflectApply = Reflect.apply;
   const __objectEntries = Object.entries;
+  // run 相构成诊断（KKDIAG）：捕获原始 Date.now 与 kkpv 计数器；只在
+  // 宿主置 gw.runDiag 时输出，计时/输出开销本身计入被测段之外。
+  const __dateNow = Date.now;
+  const kkpvDiag = globalThis.__kkp.kkpvDiag || { rows: 0, dirty: 0, remat: 0 };
 
   // refreshGame 由装配入口一次性传入；玩家执行时不回查已解绑的 __kkp。
   // KKPV 记录常驻表：沙箱生命周期内跨 tick 复用记录对象（就地更新），
@@ -61,6 +65,9 @@
      * 来自公开地形束的零拷贝视图（信封不含 terrain 键），其余步骤两条
      * 通道完全一致。两个束必须同时提供或同时为空——单侧出现即装配错误。 */
     function beginTickImpl(worldJson, cpuMeta, bundle, publicBundle) {
+      const diag = gw.runDiag
+        ? { t0: __dateNow(), rows0: kkpvDiag.rows, dirty0: kkpvDiag.dirty, remat0: kkpvDiag.remat }
+        : null;
       const hasPrivate = bundle !== null && bundle !== undefined;
       const hasPublic = publicBundle !== null && publicBundle !== undefined;
       if (hasPrivate !== hasPublic) {
@@ -69,10 +76,16 @@
       // 使用捕获的 JSON.parse 解码，避免玩家替换全局函数后改写世界与用户身份。
       gw.world = typeof worldJson === 'string' ? __jsonParse(worldJson) : worldJson;
       let terrainViews = null;
+      let tPriv = 0;
+      let tPub = 0;
       if (hasPrivate) {
         // 块头 tick 与信封 time 在解码器内交叉校验（同一投影的同界快照）。
+        let d0 = __dateNow();
         gw.world.objects = gw.kkpv.decodeBundleResident(bundle, gw.world.time, residentRecords);
+        let d1 = __dateNow();
+        tPriv = d1 - d0;
         terrainViews = gw.kkpv.decodePublicBundle(publicBundle, gw.world.time);
+        tPub = __dateNow() - d1;
       }
       // Game.cpu 真值合并（宿主 begin_tick 第二参数——官方 make.js 先算窗口
       // 再装 runtimeData 的等价物；world.cpu 占位基准被此覆盖，键恒权威）
@@ -85,12 +98,14 @@
       __Object.setPrototypeOf(gw.world, null);
       gw.viewerName = gw.world.user ?? null;
       // 先建立当前 tick 的原始对象索引，再装配 Game；装配期间的 getter 已会回查该索引。
+      const raw0 = __dateNow();
       gw.rawById = new __Map();
       const tickObjs = gw.world.objects || [];
       for (let i = 0; i < tickObjs.length; i++) {
         const o = tickObjs[i];
         if (o && o.id !== undefined) __reflectApply(__mapSet, gw.rawById, [o.id, o]);
       }
+      const tRawid = __dateNow() - raw0;
       resetIntents(); // 官方每 tick 新建收集器（runtime.js _start 每 tick 执行）
       // 重置安全模式最后请求与本 tick 占领计数，避免上一 tick 的状态影响本轮预检。
       gw.lastActivateSafeMode = null;
@@ -124,13 +139,16 @@
           configurable: true,
         });
       };
+      let tTerr = 0;
       if (terrainViews !== null) {
         // KKPV 通道：公开束的零拷贝视图直接作为地形源——无 b64 解码、
         // 无逐 tick 重分配（视图锚定共享内存，旧代际随视图失活回收）。
         // rev 缓存路径不参与：束每代际整份更换，不存在同 rev 复用问题。
+        const terr0 = __dateNow();
         for (const room in terrainViews) {
           setTerrain(room, terrainViews[room]);
         }
+        tTerr = __dateNow() - terr0;
       } else {
         const terrainEntries = __objectEntries(gw.world.rooms || {});
         for (let i = 0; i < terrainEntries.length; i++) {
@@ -157,7 +175,30 @@
         const fns = gw.perTickReset;
         for (let i = 0; i < fns.length; i++) fns[i]();
       }
+      const refresh0 = __dateNow();
       refreshGame();
+      if (diag !== null) {
+        // 每 tick 一行构成报告：束解码/公开束解码/地形表/原始索引/Game 装配
+        // 分段毫秒 + 行/脏行/重物化计数差分。控制台输出有开销，窗口只用于
+        // 构成归因，不作为 wall 证据。
+        const build = gw.__kkdiagBuild || {};
+        gw.__kkdiagLast = {
+          tick: gw.world.time,
+          priv: tPriv,
+          pub: tPub,
+          terr: tTerr,
+          rawid: tRawid,
+          refresh: __dateNow() - refresh0,
+          bwrap: build.wrap || 0,
+          brooms: build.rooms || 0,
+          btail: build.tail || 0,
+          rows: kkpvDiag.rows - diag.rows0,
+          dirty: kkpvDiag.dirty - diag.dirty0,
+          remat: kkpvDiag.remat - diag.remat0,
+          objs: tickObjs.length,
+        };
+        console.log('KKDIAG ' + JSON.stringify(gw.__kkdiagLast));
+      }
     }
   }
   globalThis.__kkp.createWorldTick = createWorldTick;

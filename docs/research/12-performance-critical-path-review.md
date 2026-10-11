@@ -155,3 +155,11 @@ P4 的 trace 可以先于 P3 实施，但不应先大规模重写调度器。如
 - 通过减少 Mod 可替换范围、跳过权限/候选校验或允许部分世界提前提交换性能。可以优化验证覆盖范围，但必须先把变更来源和边界封住。
 
 下一实施入口：在 HEAD 复核后给公共地图解析、空块处理、私有索引装配和变长字段物化加低扰动计数，优先交付 P1 的公共地图版本切片；P4 先收 trace，不启动未经依赖核验的并行结算。
+
+## 2026-10-11 补记：R00-lite run 相分段实测（KKDIAG 探针），P1/P2 裁定
+
+【探针】`SandboxConfig.run_diag`（compare-probe 经 `KK_RUN_DIAG=1` 开启）：prelude 分段计时（捕获原始 Date.now）+ kkpv 计数器（rows/dirty/remat），每 tick 每 player 输出一行 `KKDIAG`（控制台保留末拍，50 样本=50 玩家）。计时/输出有开销，窗口只用于构成归因。
+
+【实测（真实 bot 夹具 5+30，50 玩家）】每玩家每 tick：priv 私有束解码 1.66ms（rows=3210、dirty=126——**96% 行干净**、remat=804）；pub+terr 公开束+地形表 **0.36ms**；rawid 0.34ms；refresh Game 装配 3.06ms（bwrap 主环 1.64 + brooms 房间/查询 1.08 + btail 回填清扫 0.32）。五段合计 ~5.4ms，占每玩家 tick 预算（~15-19ms）约三成，其余为玩家代码+GC+Memory。
+
+【裁定】**P2（增量索引+字段复用）优先于 P1（稀疏束）**：P1 的 JS 侧成本（pub+terr+空块遍历）实测仅 ~0.4ms/玩家——公开地图版本化 wall 收益≈2ms 量级，正式降级为登记项（Rust 侧信封成本留在 project 相 66ms 内再议）；P2 靶面=bwrap+brooms+rawid+remat ≈ 3.4ms/玩家/tick，干净行占 96% 使增量维护上限高，保守估 wall ~29ms + GC 减负外溢。后续 P4（依赖调度）仍是 settle 相（143ms）的主杠杆。

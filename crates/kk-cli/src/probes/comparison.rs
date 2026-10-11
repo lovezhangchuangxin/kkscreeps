@@ -49,6 +49,9 @@ pub(crate) fn run(
                     // 性能对照面：不装配 API 诊断 Proxy（与 xxscreeps 生产
                     // 沙箱同形——诊断仪表不进计时路径）。
                     api_probe: false,
+                    // KK_RUN_DIAG=1 时输出 run 相分段构成（KKDIAG 行），
+                    // 用于归因窗口，不作为 wall 证据。
+                    run_diag: std::env::var_os("KK_RUN_DIAG").is_some(),
                     ..kk_runner::SandboxConfig::default()
                 },
             );
