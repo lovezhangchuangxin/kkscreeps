@@ -832,7 +832,6 @@ pub use input_log_scan::{
     truncate_after_cursor,
 };
 use mod_chain::ModSlotExecutor;
-use projection::{kkpv_audience_hash, market_view, power_account_view};
 pub use replay::{
     ReplayRound, assert_header_paired, rebuild_round, segments_from_checkpoint,
     strip_checkpoint_memory, verify_logged_memory,

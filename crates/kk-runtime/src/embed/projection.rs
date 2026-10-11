@@ -109,6 +109,159 @@ impl EmbedEngine {
         }
     }
 
+    /// 逐玩家世界装配。KKPV 通道优先信封字符串直构（分离接口）——束装配
+    /// 仍走分组共享（同组查看者命中句柄免装配，未命中装配后发布）；任一
+    /// 分离接口不可用回退分组/逐查看者合并路径，行为不变。JSON 参考通道
+    /// 整世界一个 Value。market/power 两种通道都注入 world 顶层。
+    /// 耗时由调用方归入投影相；失败整轮中止。
+    ///
+    /// # Errors
+    /// KKPV 投影失败或世界源不提供投影时返回错误（消息含玩家名）。
+    pub(super) fn assemble_player_world(
+        &self,
+        source: &dyn WorldSource,
+        handle: &str,
+        gcl: i64,
+        epoch: RunEpoch,
+        now_ms: u64,
+    ) -> anyhow::Result<(Value, Option<kk_runner::KkpvPrivateBundle>)> {
+        if !self.kkpv_channel {
+            let mut world = source.world_json_for_viewer_with_extensions(
+                handle,
+                gcl,
+                self.engine.extensions(),
+                self.player_surface.as_deref(),
+            );
+            // 市场与 power 账号读取已提交的引擎状态，随世界 JSON 注入，
+            // 不存放在 V8 持久闭包中。
+            if let Some(obj) = world.as_object_mut() {
+                obj.insert("market".into(), market_view(&self.engine, handle));
+                obj.insert(
+                    "power_account".into(),
+                    power_account_view(&self.engine, handle, now_ms),
+                );
+            }
+            return Ok((world, None));
+        }
+        // 信封字符串直构快路径：世界源提供分离的信封字符串与束装配时，
+        // 免 Value 信封逐玩家重建与整树二次序列化（信封占投影相绝大部分
+        // 成本）。market/power 仍逐玩家序列化后按顶层键序拼接（rooms 之后，
+        // 与 Value 插入路径一致）。任一分离接口不可用即走分组/逐查看者
+        // 路径，行为不变。
+        let direct = source
+            .kkpv_envelope_string_for_viewer(handle, gcl)
+            .and_then(|envelope| envelope.ok())
+            .and_then(|envelope| {
+                // 束装配仍走分组共享：同组查看者命中组句柄免装配
+                //（重叠视野场景），未命中装配并发布。
+                let group_key = self
+                    .kkpv_grouping_eligible_for_epoch(source, epoch)
+                    .then(|| source.kkpv_viewer_group_key(handle))
+                    .flatten();
+                if let Some(key) = group_key.as_deref()
+                    && let Some(shared) = self.kkpv_grouped_bundle_hit(epoch, key)
+                {
+                    return Some((envelope, kk_runner::KkpvPrivateBundle::Shared(shared)));
+                }
+                source
+                    .kkpv_bundle_bytes_only_for_viewer(
+                        handle,
+                        self.engine.extensions(),
+                        self.player_surface.as_deref(),
+                        self.engine.plan_hash().bytes(),
+                        kkpv_audience_hash(handle),
+                    )
+                    .and_then(|bundle| bundle.ok())
+                    .map(|bundle| {
+                        let bundle = match group_key.as_deref() {
+                            Some(key) => {
+                                let shared = kk_runner::SharedKkpvBundle::from_vec(bundle);
+                                self.kkpv_publish_grouped_bundle(epoch, key, shared.clone());
+                                kk_runner::KkpvPrivateBundle::Shared(shared)
+                            }
+                            None => kk_runner::KkpvPrivateBundle::Owned(bundle),
+                        };
+                        (envelope, bundle)
+                    })
+            });
+        if let Some((envelope, bundle)) = direct {
+            let market = serde_json::to_string(&market_view(&self.engine, handle))
+                .unwrap_or_else(|_| "{}".into());
+            let power = serde_json::to_string(&power_account_view(&self.engine, handle, now_ms))
+                .unwrap_or_else(|_| "{}".into());
+            let mut json = String::with_capacity(envelope.len() + market.len() + power.len() + 32);
+            // 去掉信封顶层收尾 '}' 后追加两键（键序与 Value 插入路径的
+            // IndexMap 追加序一致）。Value::String 是注入层的直构哨兵
+            //（免整树二次序列化）。
+            json.push_str(&envelope[..envelope.len() - 1]);
+            json.push_str(",\"market\":");
+            json.push_str(&market);
+            json.push_str(",\"power_account\":");
+            json.push_str(&power);
+            json.push('}');
+            return Ok((serde_json::Value::String(json), Some(bundle)));
+        }
+        // 束分组共享：世界块字节与查看者无关（全房可共享且空块可共享）
+        // 时，可见集相同的查看者私有束字节完全一致（仅差无人消费的
+        // audience 改写位）——按分组键共享装配，组内首个查看者装配发布，
+        // 其余共享句柄零拷贝复用。互驻军/联盟/观战等视野重叠场景同组
+        // 直接命中。信封与 market/power 仍逐玩家；资格或信封不可得时走
+        // 逐查看者装配。
+        let group_key = self
+            .kkpv_grouping_eligible_for_epoch(source, epoch)
+            .then(|| source.kkpv_viewer_group_key(handle))
+            .flatten();
+        if let Some((shared, mut envelope)) = group_key
+            .as_deref()
+            .and_then(|key| self.kkpv_grouped_bundle_hit(epoch, key))
+            .and_then(|shared| {
+                source
+                    .kkpv_envelope_json_for_viewer(handle, gcl)
+                    .map(|envelope| (shared, envelope))
+            })
+        {
+            if let Some(obj) = envelope.as_object_mut() {
+                obj.insert("market".into(), market_view(&self.engine, handle));
+                obj.insert(
+                    "power_account".into(),
+                    power_account_view(&self.engine, handle, now_ms),
+                );
+            }
+            return Ok((envelope, Some(kk_runner::KkpvPrivateBundle::Shared(shared))));
+        }
+        // 共享装配路径：可共享房块字节跨查看者复用（束字节与逐查看者
+        // 编码一致），信封与 market/power 注入不变。
+        let (mut envelope, bundle) = source
+            .kkpv_bundle_bytes_for_viewer(
+                handle,
+                gcl,
+                self.engine.extensions(),
+                self.player_surface.as_deref(),
+                self.engine.plan_hash().bytes(),
+                kkpv_audience_hash(handle),
+            )
+            .ok_or_else(|| anyhow::anyhow!("世界源未提供 KKPV 投影（玩家 {handle}）"))?
+            .map_err(|e| anyhow::anyhow!("KKPV 投影失败（玩家 {handle}）: {e}"))?;
+        if let Some(obj) = envelope.as_object_mut() {
+            obj.insert("market".into(), market_view(&self.engine, handle));
+            obj.insert(
+                "power_account".into(),
+                power_account_view(&self.engine, handle, now_ms),
+            );
+        }
+        // 分组资格成立时，首个装配者发布的束即组内共享形态（后续同组
+        // 查看者命中上面的共享分支）。
+        let bundle = match group_key.as_deref() {
+            Some(key) => {
+                let shared = kk_runner::SharedKkpvBundle::from_vec(bundle);
+                self.kkpv_publish_grouped_bundle(epoch, key, shared.clone());
+                kk_runner::KkpvPrivateBundle::Shared(shared)
+            }
+            None => kk_runner::KkpvPrivateBundle::Owned(bundle),
+        };
+        Ok((envelope, Some(bundle)))
+    }
+
     /// 读取公开束保留报告（固定内存测量面）：仍被句柄持有的代际、
     /// 字节数与库外句柄数。V8 侧 ArrayBuffer 引用只延长真实存活，
     /// 不进入读数——报告是存活下界。

@@ -440,116 +440,19 @@ impl EmbedEngine {
                     .map(|p| p.gcl)
                     .unwrap_or(0);
                 let t_project = std::time::Instant::now();
-                // KKPV 通道：对象记录走二进制块束，world 是不含 objects 的信封；
-                // JSON 参考通道：整世界一个 Value。市场都注入 world 顶层。
-                let (world, kkpv_bundle) = if self.kkpv_channel {
-                    // 束分组共享：世界块字节与查看者无关（全房可共享且空块
-                    // 可共享）时，可见集相同的查看者私有束字节完全一致（仅差
-                    // 无人消费的 audience 改写位）——按分组键共享装配，组内
-                    // 首个查看者装配发布，其余共享句柄零拷贝复用。互驻军/
-                    // 联盟/观战等视野重叠场景同组直接命中。信封与 market/
-                    // power 仍逐玩家；资格或信封不可得时走逐查看者装配。
-                    let group_key = self
-                        .kkpv_grouping_eligible_for_epoch(source, epoch)
-                        .then(|| source.kkpv_viewer_group_key(&handle))
-                        .flatten();
-                    let grouped_hit = group_key
-                        .as_deref()
-                        .and_then(|key| self.kkpv_grouped_bundle_hit(epoch, key))
-                        .and_then(|shared| {
-                            source
-                                .kkpv_envelope_json_for_viewer(&handle, gcl)
-                                .map(|envelope| (shared, envelope))
-                        });
-                    if let Some((shared, mut envelope)) = grouped_hit {
-                        if let Some(obj) = envelope.as_object_mut() {
-                            obj.insert("market".into(), market_view(&self.engine, &handle));
-                            obj.insert(
-                                "power_account".into(),
-                                power_account_view(&self.engine, &handle, now_ms),
-                            );
+                // KKPV 通道：对象记录走二进制块束，world 是不含 objects 的
+                // 信封；JSON 参考通道：整世界一个 Value。市场都注入 world
+                // 顶层（装配细节见 projection 的 assemble_player_world）。
+                let (world, kkpv_bundle) =
+                    match self.assemble_player_world(source, &handle, gcl, epoch, now_ms) {
+                        Ok(pair) => pair,
+                        Err(e) => {
+                            // 装配耗时归入投影相，不混入执行相。
+                            project_ns += t_project.elapsed().as_nanos();
+                            failure = Some(e.to_string());
+                            continue;
                         }
-                        (envelope, Some(kk_runner::KkpvPrivateBundle::Shared(shared)))
-                    } else {
-                        // 共享装配路径：可共享房块字节跨查看者复用（束字节与
-                        // 逐查看者编码一致），信封与 market/power 注入不变。
-                        match source.kkpv_bundle_bytes_for_viewer(
-                            &handle,
-                            gcl,
-                            self.engine.extensions(),
-                            self.player_surface.as_deref(),
-                            self.engine.plan_hash().bytes(),
-                            kkpv_audience_hash(&handle),
-                        ) {
-                            Some(projection) => match projection
-                                .map_err(|e| anyhow::anyhow!("KKPV 投影失败（玩家 {handle}）: {e}"))
-                                .map(|(mut envelope, bundle)| {
-                                    if let Some(obj) = envelope.as_object_mut() {
-                                        obj.insert(
-                                            "market".into(),
-                                            market_view(&self.engine, &handle),
-                                        );
-                                        obj.insert(
-                                            "power_account".into(),
-                                            power_account_view(&self.engine, &handle, now_ms),
-                                        );
-                                    }
-                                    (envelope, Some(kk_runner::KkpvPrivateBundle::Owned(bundle)))
-                                }) {
-                                Ok((envelope, bundle)) => {
-                                    // 分组资格成立时，首个装配者发布的束即
-                                    // 组内共享形态（后续同组查看者命中上面
-                                    // 的共享分支）。
-                                    let bundle = match (group_key.as_deref(), bundle) {
-                                        (
-                                            Some(key),
-                                            Some(kk_runner::KkpvPrivateBundle::Owned(bytes)),
-                                        ) => {
-                                            let shared =
-                                                kk_runner::SharedKkpvBundle::from_vec(bytes);
-                                            self.kkpv_publish_grouped_bundle(
-                                                epoch,
-                                                key,
-                                                shared.clone(),
-                                            );
-                                            Some(kk_runner::KkpvPrivateBundle::Shared(shared))
-                                        }
-                                        (_, bundle) => bundle,
-                                    };
-                                    (envelope, bundle)
-                                }
-                                Err(e) => {
-                                    // 投影耗时归入投影相，不混入执行相。
-                                    project_ns += t_project.elapsed().as_nanos();
-                                    failure = Some(e.to_string());
-                                    continue;
-                                }
-                            },
-                            None => {
-                                project_ns += t_project.elapsed().as_nanos();
-                                failure = Some(format!("世界源未提供 KKPV 投影（玩家 {handle}）"));
-                                continue;
-                            }
-                        }
-                    }
-                } else {
-                    let mut world = source.world_json_for_viewer_with_extensions(
-                        &handle,
-                        gcl,
-                        self.engine.extensions(),
-                        self.player_surface.as_deref(),
-                    );
-                    // 市场与 power 账号读取已提交的引擎状态，随世界 JSON 注入，
-                    // 不存放在 V8 持久闭包中。
-                    if let Some(obj) = world.as_object_mut() {
-                        obj.insert("market".into(), market_view(&self.engine, &handle));
-                        obj.insert(
-                            "power_account".into(),
-                            power_account_view(&self.engine, &handle, now_ms),
-                        );
-                    }
-                    (world, None)
-                };
+                    };
                 project_ns += t_project.elapsed().as_nanos();
                 let budget = kk_core::cpu::RunBudget::new(&self.engine.players()[&handle].cpu);
                 match self.players.as_mut().expect("已检查分片创建").dispatch_job(

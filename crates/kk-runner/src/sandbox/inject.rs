@@ -142,7 +142,13 @@ impl Sandbox {
                     .to_string()
                 };
                 // 先序列化世界数据再启动看门狗；启动后的失败路径必须解除期限。
-                let world_json = serde_json::to_string(world)?;
+                // Value::String 是运行时的信封直构哨兵——两条通道的世界 JSON
+                // 恒为对象，裸字符串只可能来自直构快路径（已含 market/power），
+                // 直用免整树二次序列化。
+                let world_json = match world {
+                    serde_json::Value::String(prebuilt) => prebuilt.clone(),
+                    other => serde_json::to_string(other)?,
+                };
                 let deadline = Instant::now()
                     + Duration::from_millis(self.budget.tick_limit().max(1.0) as u64);
                 *self.shared.thread_cpu_start.lock().unwrap() =

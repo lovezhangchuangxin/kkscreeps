@@ -90,6 +90,28 @@ pub trait WorldSource {
     fn kkpv_envelope_json_for_viewer(&self, _viewer: &str, _gcl_points: i64) -> Option<Value> {
         None
     }
+
+    /// 信封字符串直构：与 `to_string(kkpv_envelope_json_for_viewer)` 逐字节
+    /// 一致但免 Value 树逐玩家重建与整树二次序列化。默认 None。
+    fn kkpv_envelope_string_for_viewer(
+        &self,
+        _viewer: &str,
+        _gcl_points: i64,
+    ) -> Option<Result<String, String>> {
+        None
+    }
+
+    /// 分离快路径的束装配（不含信封）：与合并路径同源同字节。默认 None。
+    fn kkpv_bundle_bytes_only_for_viewer(
+        &self,
+        _viewer: &str,
+        _catalog: &kk_mod_api::extension::ExtensionCatalog,
+        _surface: Option<&kk_mod_api::player_surface::PlayerSurface>,
+        _plan_hash: [u8; 32],
+        _audience_hash: [u8; 32],
+    ) -> Option<Result<Vec<u8>, String>> {
+        None
+    }
 }
 
 impl WorldSource for kk_world::World {
@@ -156,6 +178,34 @@ impl WorldSource for kk_world::World {
     fn kkpv_envelope_json_for_viewer(&self, viewer: &str, gcl_points: i64) -> Option<Value> {
         Some(kk_world::World::kkpv_envelope_json_for_viewer(
             self, viewer, gcl_points,
+        ))
+    }
+
+    fn kkpv_envelope_string_for_viewer(
+        &self,
+        viewer: &str,
+        gcl_points: i64,
+    ) -> Option<Result<String, String>> {
+        Some(Ok(kk_world::World::kkpv_envelope_string_for_viewer(
+            self, viewer, gcl_points,
+        )))
+    }
+
+    fn kkpv_bundle_bytes_only_for_viewer(
+        &self,
+        viewer: &str,
+        catalog: &kk_mod_api::extension::ExtensionCatalog,
+        surface: Option<&kk_mod_api::player_surface::PlayerSurface>,
+        plan_hash: [u8; 32],
+        audience_hash: [u8; 32],
+    ) -> Option<Result<Vec<u8>, String>> {
+        Some(kk_world::World::kkpv_bundle_bytes_only_for_viewer(
+            self,
+            viewer,
+            catalog,
+            surface,
+            plan_hash,
+            audience_hash,
         ))
     }
 

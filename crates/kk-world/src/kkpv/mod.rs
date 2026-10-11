@@ -38,6 +38,22 @@ use objects::{RoomBlockMeta, encode_room_block, type_key_cow};
 /// Mod 对象（对象/字段级权限）、无扩展字段（Owner 字段裁切）。归属
 /// 工地不阻碍 full 块共享（可见房工地对全员导出），但不可见查看者的
 /// 空块含归属者自己的工地，故 `empty` 仅在无归属工地时共享。
+/// 信封逐房片段的代际缓存载荷（房序对齐）：[`World::kkpv_envelope_string_for_viewer`]
+/// 的字符串直构素材。片段经 serde_json 序列化产出，与 Value 路径字节同源。
+#[derive(Debug)]
+pub(crate) struct EnvelopeFragments {
+    /// 不可见房整片段（房键 + 条目对象，只含公共字段）。
+    pub(crate) invisible: Vec<String>,
+    /// 可见房前缀（至 `"energyAvailable":` 键名，值由逐玩家拼接）。
+    pub(crate) visible_prefix: Vec<String>,
+    /// 常量中缀：`,"energyCapacityAvailable":`。
+    pub(crate) visible_mid: &'static str,
+    /// 可见房后缀（事件段 + 条目收尾）。
+    pub(crate) visible_suffix: Vec<String>,
+    /// 全部片段总长（容量预估用）。
+    pub(crate) total_len: usize,
+}
+
 #[derive(Debug)]
 pub(crate) struct SharedRoomBlock {
     /// full 块携带行级脏位（跨拍保留在 [`World::room_block_dirty`]），
@@ -287,6 +303,41 @@ impl World {
         audience_hash: [u8; 32],
     ) -> Result<(Value, Vec<u8>), String> {
         let envelope = self.kkpv_envelope_for_viewer(user, gcl_points);
+        let bundle =
+            self.assemble_private_bundle(user, catalog, surface, plan_hash, audience_hash)?;
+        Ok((envelope, bundle))
+    }
+
+    /// [`World::kkpv_bundle_for_viewer`] 的束装配（不含信封）：与合并
+    /// 路径同源同字节，供世界源 trait 的信封/束分离快路径转发。
+    ///
+    /// # Errors
+    /// 逐查看者回退房的对象记录无法映射为 KKPV 值形态时返回错误。
+    pub fn kkpv_bundle_bytes_only_for_viewer(
+        &self,
+        user: &str,
+        catalog: &kk_mod_api::extension::ExtensionCatalog,
+        surface: Option<&kk_mod_api::player_surface::PlayerSurface>,
+        plan_hash: [u8; 32],
+        audience_hash: [u8; 32],
+    ) -> Result<Vec<u8>, String> {
+        self.assemble_private_bundle(user, catalog, surface, plan_hash, audience_hash)
+    }
+
+    /// [`World::kkpv_bundle_for_viewer`] 的束装配主体（不含信封）：信封
+    /// 走字符串直构快路径（[`World::kkpv_envelope_string_for_viewer`]）时
+    /// 由世界源 trait 分开调用，免重复构建 Value 信封。
+    ///
+    /// # Errors
+    /// 逐查看者回退房的对象记录无法映射为 KKPV 值形态时返回错误。
+    fn assemble_private_bundle(
+        &self,
+        user: &str,
+        catalog: &kk_mod_api::extension::ExtensionCatalog,
+        surface: Option<&kk_mod_api::player_surface::PlayerSurface>,
+        plan_hash: [u8; 32],
+        audience_hash: [u8; 32],
+    ) -> Result<Vec<u8>, String> {
         let index = self.visibility_index();
         let observed = index.observed_rooms_of(user);
         let shared = self.shared_room_blocks(plan_hash);
@@ -388,7 +439,7 @@ impl World {
                 Source::Fresh(bytes) => out.extend_from_slice(&bytes),
             }
         }
-        Ok((envelope, out))
+        Ok(out)
     }
 
     /// 查看者的束分组键：完整可见房集合（自有 ∪ 观察，房名升序、
@@ -571,6 +622,130 @@ impl World {
             "visibleRooms": visible_rooms,
             "rooms": Value::Object(rooms),
         })
+    }
+
+    /// [`World::kkpv_envelope_for_viewer`] 的字符串直构形态：逐代际缓存
+    /// 每房预序列化片段（房键/名称/公共状态/事件段），逐玩家只拼接片段
+    /// 与逐玩家数值（time/gcl/user/visibleRooms/能量两键）。产物与
+    /// `serde_json::to_string(kkpv_envelope_for_viewer(...))` **逐字节一致**
+    ///（键序、转义、数字格式同源复刻，由回归测试锁定）——信封占投影相
+    /// 的绝大部分成本，Value 树逐玩家重建与整树二次序列化是主要浪费。
+    pub fn kkpv_envelope_string_for_viewer(&self, user: &str, gcl_points: i64) -> String {
+        let fragments = self.envelope_fragments();
+        let index = self.visibility_index();
+        let mut visible: std::collections::BTreeSet<&String> = self
+            .rooms
+            .iter()
+            .filter(|(name, _)| index.room_visible_to(name, user))
+            .map(|(name, _)| name)
+            .collect();
+        if let Some(observed) = index.observed_rooms_of(user) {
+            visible.extend(observed.iter());
+        }
+        // 容量预估：片段总量 + 逐玩家头部与能量数值余量。
+        let mut out = String::with_capacity(fragments.total_len + 256);
+        out.push_str("{\"time\":");
+        out.push_str(&self.time.to_string());
+        // 与 json! 宏的固定字面量逐字节一致。
+        out.push_str(",\"cpu\":{\"limit\":20,\"tickLimit\":500,\"bucket\":10000},\"user\":");
+        out.push_str(&serde_json::to_string(user).expect("玩家名可序列化"));
+        out.push_str(",\"gcl\":");
+        out.push_str(&gcl_points.to_string());
+        out.push_str(",\"visibleRooms\":[");
+        let mut first = true;
+        for room in &visible {
+            if !first {
+                out.push(',');
+            }
+            first = false;
+            out.push_str(&serde_json::to_string(*room).expect("房名可序列化"));
+        }
+        out.push_str("],\"rooms\":{");
+        for (slot, (name, state)) in self.rooms.iter().enumerate() {
+            if slot > 0 {
+                out.push(',');
+            }
+            if visible.contains(name) {
+                out.push_str(&fragments.visible_prefix[slot]);
+                let (available, capacity) = room_energy(state, Some(user));
+                out.push_str(&available.to_string());
+                out.push_str(fragments.visible_mid);
+                out.push_str(&capacity.to_string());
+                out.push_str(&fragments.visible_suffix[slot]);
+            } else {
+                out.push_str(&fragments.invisible[slot]);
+            }
+        }
+        out.push_str("}}");
+        out
+    }
+
+    /// 逐房信封片段（代际缓存，房序对齐）：不可见整片段、可见前缀（至
+    /// energyAvailable 键名前）、常量中缀（energyCapacityAvailable 键名）、
+    /// 可见后缀（事件段 + 条目收尾）。字符串全部经 serde_json 序列化产
+    /// 出，与 Value 路径的字节输出同源。
+    fn envelope_fragments(&self) -> std::sync::Arc<EnvelopeFragments> {
+        {
+            let cache = self.envelope_fragments.borrow();
+            if let Some((generation, fragments)) = cache.as_ref()
+                && *generation == self.generation()
+            {
+                return fragments.clone();
+            }
+        }
+        let mut invisible = Vec::with_capacity(self.rooms.len());
+        let mut visible_prefix = Vec::with_capacity(self.rooms.len());
+        let mut visible_suffix = Vec::with_capacity(self.rooms.len());
+        let mut total_len = 0usize;
+        for (name, state) in &self.rooms {
+            let key = serde_json::to_string(name).expect("房名可序列化");
+            let name_value = serde_json::to_string(name).expect("房名可序列化");
+            // 条目公共头："KEY":{"name":NAME[,"status":S,"statusTimestamp":T]
+            let mut head = String::with_capacity(key.len() + name_value.len() + 48);
+            head.push_str(&key);
+            head.push_str(":{\"name\":");
+            head.push_str(&name_value);
+            if let Some(status) = &state.room_status {
+                head.push_str(",\"status\":");
+                head.push_str(
+                    &serde_json::to_string(status.status.as_str()).expect("状态可序列化"),
+                );
+                head.push_str(",\"statusTimestamp\":");
+                head.push_str(&status.timestamp.to_string());
+            }
+            // 不可见整片段。
+            let inv = format!("{head}}}");
+            total_len += inv.len();
+            invisible.push(inv);
+            // 可见前缀：公共头 + energyAvailable 键名（值由逐玩家拼接）。
+            let prefix = format!("{head},\"energyAvailable\":");
+            total_len += prefix.len();
+            visible_prefix.push(prefix);
+            // 可见后缀：事件段（与 Value 路径同源——逐条 from_str 后整串
+            // 序列化，病态事件同样被 filter_map 丢弃）或直接收尾。
+            let suffix = if state.events.is_empty() {
+                "}".to_string()
+            } else {
+                let events: Vec<Value> = state
+                    .events
+                    .iter()
+                    .filter_map(|e| serde_json::from_str(e).ok())
+                    .collect();
+                let body = serde_json::to_string(&Value::Array(events)).expect("事件可序列化");
+                format!(",\"events\":{body}}}")
+            };
+            total_len += suffix.len();
+            visible_suffix.push(suffix);
+        }
+        let fragments = std::sync::Arc::new(EnvelopeFragments {
+            invisible,
+            visible_prefix,
+            visible_mid: ",\"energyCapacityAvailable\":",
+            visible_suffix,
+            total_len,
+        });
+        *self.envelope_fragments.borrow_mut() = Some((self.generation(), fragments.clone()));
+        fragments
     }
 }
 
@@ -816,6 +991,8 @@ fn value_to_json(value: &KkpvValue) -> Value {
     }
 }
 
+#[cfg(test)]
+mod envelope_tests;
 #[cfg(test)]
 mod grouping_tests;
 #[cfg(test)]

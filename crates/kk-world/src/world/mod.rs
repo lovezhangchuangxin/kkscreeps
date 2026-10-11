@@ -232,6 +232,11 @@ pub struct World {
     /// 共享编码缓存：可共享房一次编码、跨查看者复用（audience 置零，
     /// 装配时改写）。失效与清空口径同可见性索引。
     pub(crate) room_block_cache: RefCell<Option<RoomBlockCacheEntry>>,
+    /// 信封逐房片段的代际缓存（房序对齐）：字符串直构信封时复用，免逐
+    /// 玩家重建 300 房条目的 Value 树与重复事件解析。换代（一切内容变
+    /// 更推进 generation）整体重建。
+    pub(crate) envelope_fragments:
+        RefCell<Option<(u64, std::sync::Arc<crate::kkpv::EnvelopeFragments>)>>,
     /// 行级脏位的上一拍保留（房名 → 建索引的共享 full 块）。键为房名，
     /// 值自带 tick/generation：过期保留（换代、跳拍后复用）在编码端
     /// 不产脏段、在解码端由基准拍号校验兜底，至多退化为全量更新，
@@ -263,6 +268,7 @@ impl Clone for World {
             visibility_cache: self.visibility_cache.clone(),
             room_block_cache: self.room_block_cache.clone(),
             room_block_dirty: self.room_block_dirty.clone(),
+            envelope_fragments: self.envelope_fragments.clone(),
             preencode_source: RefCell::new(None),
         }
     }
@@ -319,6 +325,7 @@ impl World {
             visibility_cache: RefCell::new(None),
             room_block_cache: RefCell::new(None),
             room_block_dirty: RefCell::new(HashMap::new()),
+            envelope_fragments: RefCell::new(None),
             preencode_source: RefCell::new(None),
         }
     }

@@ -465,3 +465,17 @@ RSS 采样中位数均值下降 12.09%，峰值均值仅下降 1.80%；首对新
 【实测证伪】B0 短窗两轮：project 66.7/65.4（基线 ~62，无收益）、**run 220.9/232.0（基线 ~120，+100ms）**、wall 443/451；KKDIAG **priv 2→6ms/玩家**（选块正确：rows/dirty/remat 与基线一致）。机理：① B0 每玩家仅见自有 6 房（6×534=3204≈rows 3210，该数字曾两次误导归因），逐玩家装配仅 ~0.1ms（~6ms/拍总量）——**装配从来不是大头**；② 目录缓冲 ~50MB 内散布访问 + 每拍新 backing store 缺页 + 逐槽房名读取 = +4ms/玩家。胜负条件"装配节省>散访代价"在任意可见集形态下都不成立（全互见时装配 memcpy ~0.1ms 仍远低于散访）——**方向被支配，已回退**（HEAD 停在分组共享 348ec122）。
 
 【投影侧归因最终修正】project 62ms = **信封 ~50ms（82%）** + 装配 ~6ms + market/power ~5ms。散页证伪后，投影侧唯一有分量的杠杆是**信封逐代际条目模板缓存/字符串直构**（kkpv_envelope_for_viewer 逐玩家 300 房 Value 构建 + 事件 from_str ×50 玩家）。解码端 kkpv.js 块游走核心与 begin_tick 的 catalog_mode 参数已验证可承载目录形态（补丁可复活），若未来出现"装配份额真实变大"的负载形态再启用。
+
+## 2026-10-11 补记：信封字符串直构——逐代际片段缓存免逐玩家 Value 重建（现行实现）
+
+【机理】散页证伪后归因收敛：project 62ms 中信封 ~50ms（82%），成本在 `kkpv_envelope_for_viewer` 逐玩家 300 房 Value 构建（300 Map × 50 玩家 churn）+ 事件 from_str 往返 + 整树二次序列化。本片把信封拆为**逐代际片段缓存**：`EnvelopeFragments`（generation 键控，一切内容变更随代际失效）预序列化逐房片段——不可见头（键/名称/公共状态）、可见前缀（+`"energyAvailable":`）、可见中段、可见后缀（能量容量后到 events/闭括号，事件段与 Value 路径同源 from_str→to_string 往返保证转义一致）；逐玩家只拼接片段+逐玩家数值（time/user/gcl/visibleRooms/能量两键）。产物与 `to_string(kkpv_envelope_for_viewer(...))` **逐字节一致**（新增字节锁 envelope_string_matches_value_serialization：可见/不可见、状态/无状态、事件含病态条目、观察者能量 0、缓存复用、换代失效）。
+
+【接线】世界源 trait 分离 `kkpv_envelope_string_for_viewer` + `kkpv_bundle_bytes_only_for_viewer`（束装配拆出信封，与合并路径同源同字节；默认 None 供测试替身回退）；execution.rs KKPV 臂直构路径在分组共享块**之前**：信封字符串 + 分组命中即取 Shared 句柄 / 未命中经 bundle_only 装配后发布，market/power 逐玩家序列化后按顶层键序拼接（rooms 之后，与 Value 插入路径 IndexMap 追加序一致）；注入层 `Value::String` 哨兵直用免整树序列化（世界 JSON 恒为对象，字符串值只可能来自本直构路径）。直构不可用时回退合并路径（分组共享语义保持）。
+
+【ABBA（冻结 release、2 丢弃+O,N,N,O、5+100、并发 4、同 l1b 夹具；old=5e9abba5、new=aea12526）】**project P50 0.706（−29.4%）相邻对双确认（0.748/1.487），48.4/60.7→36.2/40.8ms**；CPU 0.941（Value churn 消失）；**wall 0.951 但相邻对方向矛盾——本窗序列单调热漂（old1 255.9→old4 309.4，同二进制 21% 漂移），wall 归因作废**，判定以 project 双对一致+标尺复核为准；RSS 峰 1.022 噪声级。热漂教训再确认：窗序后期二进制系统性偏慢，ABBA wall 必须查同二进制跨窗漂移量。
+
+【标尺】compare.py 同窗配对（丢弃+测量）：**测量窗 1.1177×（kk 247.3 vs xxs 221.3）**、丢弃窗 1.1543×（263.3/228.1）；CPU 比 0.708、RSS 峰比 0.650。旅程 1.397×→1.155×→1.2213×→**1.1177×**（kk 绝对 401→343→266→247.3）；分相 project 36.1 / run 97.7 / **settle 111.6（最大相）**；等价签名与既往一致（structures 517/518、move +0.339%）。[证据](../../compat/reports/mature-comparison/2026-10-11/50x6-envelope-direct-build/README.md)。
+
+【测试面】kk-world 104（新增字节锁）、kk-runner 全套、kk-runtime embed 102（双通道等价+分组重叠探针保持）、mod_chain 495、sim 106、棘轮 2905/9/0 转红 0。
+
+【对目标的含义】0.9×（本窗口径 199.2ms）还差 −48ms。settle 111.6 为最大相且成本分散（复采样无单点杠杆）——**结构性相位重叠（P4 依赖调度/R03 底座）是剩余主路径**；project 残余 36.1（片段拼接+可见集查表+束装配+market/power）与 run 97.7（V8 玩家代码为主）次之。信封路径已无逐玩家全量重建，投影侧小片空间收窄。
