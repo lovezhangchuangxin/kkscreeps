@@ -530,3 +530,9 @@ RSS 采样中位数均值下降 12.09%，峰值均值仅下降 1.80%；首对新
 【机制】max_id_cache 换代重建从全对象键平铺（~9-16 万键 BTreeMap 全树追逐）改为每房 next_back() O(log n)，结果逐位一致。[证据](../../compat/reports/mature-comparison/2026-10-11/50x6-maxid-next-back/README.md)。
 
 【归因修正】env 门控探针证伪"validate 9.3=四趟子扫可索引化"（合计 ~1.5ms）；全树重建 ~2ms 由 prepare 段支付（先触达者付费、后续命中温缓存）——ABBA prepare 三对全同向 −1.5~−2.7ms，validate 不动。**教训：同段成本可能记在首个触达惰性缓存的相位头上，跨段共享缓存（max_id_cache/obj_dir）的归因要按触达顺序拆**。未解：validate 段剩余 ~7ms 构成（可见部分 <3ms），需细粒度剖检；obj_dir 每拍触达面待排查。
+
+## 2026-10-12 补记：validate 段压缩（乘法散列+Mod 融合）
+
+【归因方法升级】env 门控跳过探针的 inv 零差值系窗间噪声误导；macOS `sample` 函数级采样（进程内 8 秒）直接给出真值：SipHash rehash 链与 Mod 独立枚举占 validate 段大头。**门控探针只能定位"量级 >窗间噪声"的子项；小项归因用采样**。[证据](../../compat/reports/mature-comparison/2026-10-12/50x6-validate-fusion/README.md)。
+
+【结果】IdHasher 乘法散列+预容量、check_mod_object 融进不变式循环（独立入口留给检查点/管理路径）：validate 10.4-12.2→3.0-3.2 全窗一致，settle 相 wall 三对同向 −4.6~−7.8ms。教训：状态门（pmset 无节流）拦不住棘轮余温的热惯性——重活后需沉降间歇再跑 ABBA。

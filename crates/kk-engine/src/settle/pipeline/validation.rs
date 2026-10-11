@@ -5,6 +5,26 @@ use kk_schema::room::RoomObject;
 use kk_world::{ObjId, RoomState};
 use serde_json::Value;
 
+/// ObjId（u64）唯一性扫描的乘法散列：validate 每拍 9 万+插入，默认
+/// SipHash 的逐键哈希曾是该段约一半成本（2026-10-12 sample 取证）。
+#[derive(Default)]
+struct IdHasher(u64);
+impl std::hash::Hasher for IdHasher {
+    fn finish(&self) -> u64 {
+        self.0.wrapping_mul(0x9E37_79B9_7F4A_7C15).rotate_left(32)
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        // ObjId 的派生 Hash 走 write_u64；此兜底仅保证散列器完备。
+        for &byte in bytes {
+            self.0 = (self.0.rotate_left(5) ^ byte as u64).wrapping_mul(0x517C_C1B7_2722_0A95);
+        }
+    }
+    fn write_u64(&mut self, v: u64) {
+        self.0 = (self.0.rotate_left(5) ^ v).wrapping_mul(0x517C_C1B7_2722_0A95);
+    }
+}
+type IdHashBuild = std::hash::BuildHasherDefault<IdHasher>;
+
 impl Engine {
     /// 只读检查候选房间覆盖、ID 游标和玩家键，失败进入 NeedsRecovery。
     pub(in crate::settle) fn validate_stage(
@@ -37,7 +57,16 @@ impl Engine {
                 state.next_id
             )));
         }
-        let mut ids = std::collections::HashSet::new();
+        // 唯一性集合：u64 键乘法散列 + 按对象总量预容量——默认 SipHash +
+        // 空集增量扩容曾占 validate 段约一半（2026-10-12 sample 取证，
+        // 9 万+插入逐键 SipHash 与 rehash 双重开销）。
+        let total_objects: usize = cand.rooms.iter().map(|(_, room)| room.objects.len()).sum();
+        let mut ids = std::collections::HashSet::with_capacity_and_hasher(
+            total_objects,
+            IdHashBuild::default(),
+        );
+        // Mod 对象检查融进同一趟全对象遍历：单独的 Mod 扫曾是第二趟
+        // 全量枚举（B0 无 Mod 也要逐对象判别），管理路径仍走独立入口。
         for (name, room) in &cand.rooms {
             for (id, object) in &room.objects {
                 let (x, y) = object.pos();
@@ -53,6 +82,9 @@ impl Engine {
                         id.as_str()
                     )));
                 }
+                if let kk_schema::room::RoomObject::Mod(o) = object {
+                    self.check_mod_object(name, id, o)?;
+                }
             }
         }
         // 候选可以增加玩家，不能删除已提交的玩家。
@@ -65,28 +97,15 @@ impl Engine {
         }
         drop(state);
         self.validate_extensions(cand)?;
-        self.validate_mod_objects(cand)?;
         self.validate_building_rooms(cand.rooms.iter().map(|(name, room)| (name, room)))?;
         Ok(())
     }
 
     /// 发布前校验候选中的 Mod 对象：类型在计划中、字段 payload 整体
     /// 满足描述符、声明的位置字段与信封坐标同步。写入路径（创建与
-    /// 处理器回写）已各自校验；此处封住绕过写入口的直改形态。
-    pub(super) fn validate_mod_objects(
-        &self,
-        cand: &mut txn::OwnedTickTxn,
-    ) -> Result<(), SettleError> {
-        self.validate_mod_object_rooms(&cand.rooms)
-    }
-
-    pub(super) fn validate_mod_object_rooms(
-        &self,
-        rooms: &[(String, RoomState)],
-    ) -> Result<(), SettleError> {
-        self.validate_mod_object_iter(rooms.iter().map(|(name, room)| (name, room)))
-    }
-
+    /// 处理器回写）已各自校验；此处封住绕过写入口的直改形态。结算
+    /// validate 已把单对象检查融进不变式遍历（免第二趟全扫），本入口
+    /// 供检查点/管理路径整房扫描。
     pub(in crate::settle) fn validate_mod_object_iter<'a>(
         &self,
         rooms: impl Iterator<Item = (&'a String, &'a RoomState)>,
@@ -100,123 +119,132 @@ impl Engine {
                 let kk_schema::room::RoomObject::Mod(o) = obj else {
                     continue;
                 };
-                let key = kk_mod_api::Key::new(o.type_key.clone()).map_err(|e| {
-                    SettleError(format!(
-                        "房间 {room_name} 的 Mod 对象 {} 类型键非法：{e}",
-                        id.as_str()
-                    ))
-                })?;
-                let Some(handle) = self.plan.projection().resolve(&key) else {
-                    return Err(SettleError(format!(
-                        "房间 {room_name} 的 Mod 对象 {} 类型 {} 不在计划中",
-                        id.as_str(),
-                        o.type_key
-                    )));
-                };
-                let ty = self.plan.projection().get(handle).expect("句柄来自计划");
-                let payload: serde_json::Value = serde_json::from_str(&o.data).map_err(|e| {
-                    SettleError(format!(
-                        "房间 {room_name} 的 Mod 对象 {} payload 非法 JSON：{e}",
-                        id.as_str()
-                    ))
-                })?;
-                // 库存/耐久信封键（G09.a/G09.b）不属于声明字段：拆出后
-                // 校验，再按类型声明核对信封在场的合法性（防篡改与防缺失）。
-                let (bare, envelope) = kk_mod_api::objects::split_store_envelope(&payload);
-                let (fields, hits_env) = kk_mod_api::objects::split_hits_envelope(&bare);
-                kk_mod_api::validate::check_object_payload(
-                    &fields,
-                    &ty.descriptor.fields,
-                    &o.type_key,
-                )
+                self.check_mod_object(room_name, id, o)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// 单个 Mod 对象的发布前校验（类型键/计划内/payload 字段/库存与
+    /// 耐久信封/位置同步）。validate 融合路径与管理扫描入口共用。
+    fn check_mod_object(
+        &self,
+        room_name: &str,
+        id: &kk_world::ObjId,
+        o: &kk_schema::room::ModObj,
+    ) -> Result<(), SettleError> {
+        {
+            let key = kk_mod_api::Key::new(o.type_key.clone()).map_err(|e| {
+                SettleError(format!(
+                    "房间 {room_name} 的 Mod 对象 {} 类型键非法：{e}",
+                    id.as_str()
+                ))
+            })?;
+            let Some(handle) = self.plan.projection().resolve(&key) else {
+                return Err(SettleError(format!(
+                    "房间 {room_name} 的 Mod 对象 {} 类型 {} 不在计划中",
+                    id.as_str(),
+                    o.type_key
+                )));
+            };
+            let ty = self.plan.projection().get(handle).expect("句柄来自计划");
+            let payload: serde_json::Value = serde_json::from_str(&o.data).map_err(|e| {
+                SettleError(format!(
+                    "房间 {room_name} 的 Mod 对象 {} payload 非法 JSON：{e}",
+                    id.as_str()
+                ))
+            })?;
+            // 库存/耐久信封键（G09.a/G09.b）不属于声明字段：拆出后
+            // 校验，再按类型声明核对信封在场的合法性（防篡改与防缺失）。
+            let (bare, envelope) = kk_mod_api::objects::split_store_envelope(&payload);
+            let (fields, hits_env) = kk_mod_api::objects::split_hits_envelope(&bare);
+            kk_mod_api::validate::check_object_payload(&fields, &ty.descriptor.fields, &o.type_key)
                 .map_err(SettleError)?;
-                let envelope_complete = envelope.as_ref().is_some_and(|env| {
-                    kk_mod_api::objects::STORE_ENVELOPE_KEYS
-                        .iter()
-                        .filter(|key| **key != "storeCapacityResource")
-                        .all(|key| env.contains_key(*key))
-                });
-                if let Some(declared) = ty.descriptor.store_capacity {
-                    if !envelope_complete {
-                        return Err(SettleError(format!(
-                            "房间 {room_name} 的 Mod 对象 {} 声明 store 却缺少完整库存信封",
-                            id.as_str()
-                        )));
-                    }
-                    let env = envelope.as_ref().expect("上面已判 complete");
-                    // Mod 当前只有冻结的总容量；单资源槽未开放。库存数值与
-                    // 总和须能在玩家 JS 读面中精确表示，恢复时同样校验。
-                    let total = env
-                        .get("store")
-                        .and_then(serde_json::Value::as_object)
-                        .and_then(|store| {
-                            store.values().try_fold(0_u64, |total, value| {
-                                total
-                                    .checked_add(value.as_u64()?)
-                                    .filter(|sum| *sum <= 9_007_199_254_740_991)
-                            })
-                        });
-                    if env.get("storeCapacity").and_then(serde_json::Value::as_u64)
-                        != Some(declared)
-                        || env.contains_key("storeCapacityResource")
-                        || total.is_none()
-                        || kk_world::domain::generic::decode_store(&o.data).is_none()
-                    {
-                        return Err(SettleError(format!(
-                            "房间 {room_name} 的 Mod 对象 {} 库存信封非法",
-                            id.as_str()
-                        )));
-                    }
-                } else if envelope.is_some() {
+            let envelope_complete = envelope.as_ref().is_some_and(|env| {
+                kk_mod_api::objects::STORE_ENVELOPE_KEYS
+                    .iter()
+                    .filter(|key| **key != "storeCapacityResource")
+                    .all(|key| env.contains_key(*key))
+            });
+            if let Some(declared) = ty.descriptor.store_capacity {
+                if !envelope_complete {
                     return Err(SettleError(format!(
-                        "房间 {room_name} 的 Mod 对象 {} 未声明 store 却携带库存信封",
+                        "房间 {room_name} 的 Mod 对象 {} 声明 store 却缺少完整库存信封",
                         id.as_str()
                     )));
                 }
-                // 耐久信封（G09.b）三臂：声明缺信封、信封与冻结声明不符、
-                // 未声明携带。hitsMax 恒等于冻结声明（写一次语义），hits
-                // 在 1..=hitsMax 内（伤害扣至 0 即移除，存活对象恒 ≥1；
-                // 0 只能由直改造出，发布前拒绝）。
-                let hits_complete = hits_env
-                    .as_ref()
-                    .is_some_and(|env| env.contains_key("hits") && env.contains_key("hitsMax"));
-                if let Some(declared) = ty.descriptor.hits_max {
-                    if !hits_complete {
-                        return Err(SettleError(format!(
-                            "房间 {room_name} 的 Mod 对象 {} 声明耐久却缺少完整耐久信封",
-                            id.as_str()
-                        )));
-                    }
-                    let env = hits_env.as_ref().expect("上面已判 complete");
-                    let hits = env.get("hits").and_then(serde_json::Value::as_i64);
-                    let hits_max = env.get("hitsMax").and_then(serde_json::Value::as_i64);
-                    if hits_max != Some(declared as i64)
-                        || !hits.is_some_and(|h| (1..=declared as i64).contains(&h))
-                    {
-                        return Err(SettleError(format!(
-                            "房间 {room_name} 的 Mod 对象 {} 耐久信封非法",
-                            id.as_str()
-                        )));
-                    }
-                } else if hits_env.is_some() {
+                let env = envelope.as_ref().expect("上面已判 complete");
+                // Mod 当前只有冻结的总容量；单资源槽未开放。库存数值与
+                // 总和须能在玩家 JS 读面中精确表示，恢复时同样校验。
+                let total = env
+                    .get("store")
+                    .and_then(serde_json::Value::as_object)
+                    .and_then(|store| {
+                        store.values().try_fold(0_u64, |total, value| {
+                            total
+                                .checked_add(value.as_u64()?)
+                                .filter(|sum| *sum <= 9_007_199_254_740_991)
+                        })
+                    });
+                if env.get("storeCapacity").and_then(serde_json::Value::as_u64) != Some(declared)
+                    || env.contains_key("storeCapacityResource")
+                    || total.is_none()
+                    || kk_world::domain::generic::decode_store(&o.data).is_none()
+                {
                     return Err(SettleError(format!(
-                        "房间 {room_name} 的 Mod 对象 {} 未声明耐久却携带耐久信封",
+                        "房间 {room_name} 的 Mod 对象 {} 库存信封非法",
                         id.as_str()
                     )));
                 }
-                if let Some([fx, fy]) = &ty.descriptor.position_fields {
-                    let px = payload
-                        .get(kk_mod_api::validate::field_name(fx))
-                        .and_then(serde_json::Value::as_u64);
-                    let py = payload
-                        .get(kk_mod_api::validate::field_name(fy))
-                        .and_then(serde_json::Value::as_u64);
-                    if px != Some(o.x as u64) || py != Some(o.y as u64) {
-                        return Err(SettleError(format!(
-                            "房间 {room_name} 的 Mod 对象 {} 位置字段与信封坐标不同步",
-                            id.as_str()
-                        )));
-                    }
+            } else if envelope.is_some() {
+                return Err(SettleError(format!(
+                    "房间 {room_name} 的 Mod 对象 {} 未声明 store 却携带库存信封",
+                    id.as_str()
+                )));
+            }
+            // 耐久信封（G09.b）三臂：声明缺信封、信封与冻结声明不符、
+            // 未声明携带。hitsMax 恒等于冻结声明（写一次语义），hits
+            // 在 1..=hitsMax 内（伤害扣至 0 即移除，存活对象恒 ≥1；
+            // 0 只能由直改造出，发布前拒绝）。
+            let hits_complete = hits_env
+                .as_ref()
+                .is_some_and(|env| env.contains_key("hits") && env.contains_key("hitsMax"));
+            if let Some(declared) = ty.descriptor.hits_max {
+                if !hits_complete {
+                    return Err(SettleError(format!(
+                        "房间 {room_name} 的 Mod 对象 {} 声明耐久却缺少完整耐久信封",
+                        id.as_str()
+                    )));
+                }
+                let env = hits_env.as_ref().expect("上面已判 complete");
+                let hits = env.get("hits").and_then(serde_json::Value::as_i64);
+                let hits_max = env.get("hitsMax").and_then(serde_json::Value::as_i64);
+                if hits_max != Some(declared as i64)
+                    || !hits.is_some_and(|h| (1..=declared as i64).contains(&h))
+                {
+                    return Err(SettleError(format!(
+                        "房间 {room_name} 的 Mod 对象 {} 耐久信封非法",
+                        id.as_str()
+                    )));
+                }
+            } else if hits_env.is_some() {
+                return Err(SettleError(format!(
+                    "房间 {room_name} 的 Mod 对象 {} 未声明耐久却携带耐久信封",
+                    id.as_str()
+                )));
+            }
+            if let Some([fx, fy]) = &ty.descriptor.position_fields {
+                let px = payload
+                    .get(kk_mod_api::validate::field_name(fx))
+                    .and_then(serde_json::Value::as_u64);
+                let py = payload
+                    .get(kk_mod_api::validate::field_name(fy))
+                    .and_then(serde_json::Value::as_u64);
+                if px != Some(o.x as u64) || py != Some(o.y as u64) {
+                    return Err(SettleError(format!(
+                        "房间 {room_name} 的 Mod 对象 {} 位置字段与信封坐标不同步",
+                        id.as_str()
+                    )));
                 }
             }
         }
