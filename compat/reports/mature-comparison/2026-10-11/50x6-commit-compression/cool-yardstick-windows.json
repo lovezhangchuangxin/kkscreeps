@@ -1,0 +1,54 @@
+{
+ "d": {
+  "kk_p50": 232.8,
+  "xxs_p50": 208.8,
+  "ratio": 1.1147,
+  "cpu_ratio": 0.832,
+  "rss_peak_ratio": 0.642,
+  "kk_phases": {
+   "project": 42.9,
+   "run": 105.7,
+   "settle": 78.2,
+   "wall": 232.8
+  }
+ },
+ "m1": {
+  "kk_p50": 248.7,
+  "xxs_p50": 218.5,
+  "ratio": 1.1383,
+  "cpu_ratio": 0.837,
+  "rss_peak_ratio": 0.631,
+  "kk_phases": {
+   "project": 46.5,
+   "run": 111.8,
+   "settle": 81.1,
+   "wall": 248.7
+  }
+ },
+ "m2": {
+  "kk_p50": 254.0,
+  "xxs_p50": 231.1,
+  "ratio": 1.0993,
+  "cpu_ratio": 0.813,
+  "rss_peak_ratio": 0.629,
+  "kk_phases": {
+   "project": 47.9,
+   "run": 118.2,
+   "settle": 82.0,
+   "wall": 254.0
+  }
+ },
+ "m3": {
+  "kk_p50": 280.0,
+  "xxs_p50": 265.0,
+  "ratio": 1.0565,
+  "cpu_ratio": 0.8,
+  "rss_peak_ratio": 0.643,
+  "kk_phases": {
+   "project": 55.5,
+   "run": 130.3,
+   "settle": 90.4,
+   "wall": 280.0
+  }
+ }
+}

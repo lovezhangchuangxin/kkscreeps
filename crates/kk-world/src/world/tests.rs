@@ -558,3 +558,91 @@ fn decode_rejects_duplicate_ids_and_out_of_bounds_positions() {
             .contains("坐标越界")
     );
 }
+
+/// 信任提交路径的自检面：覆盖/地形不一致与游标回退仍拒绝；旧房返回
+/// 供异步释放；域状态校验（悬空效果）仍触发——对象不变式全扫由调用
+/// 方代扫（引擎 validate 段），本路径不再重复。
+#[test]
+fn commit_prevalidated_keeps_self_checks_and_returns_old_rooms() {
+    let mut world = World::new(1);
+    world.register_room("W1N1", Terrain::plains()).unwrap();
+    world.register_room("W2N1", Terrain::plains()).unwrap();
+    let a = world.insert("W1N1", energy(1)).unwrap();
+    let next = world.next_obj_id();
+
+    // 成功路径：返回旧房（两间），世界状态推进。
+    let rooms: Vec<(String, RoomState)> = ["W1N1", "W2N1"]
+        .into_iter()
+        .map(|name| {
+            let mut room = RoomState::new(name, Terrain::plains());
+            if name == "W1N1" {
+                room.insert_with_id(a.0, energy(2)).unwrap();
+            }
+            (name.to_string(), room)
+        })
+        .collect();
+    let old = world
+        .commit_tick_rooms_prevalidated(rooms, next, true)
+        .unwrap();
+    assert_eq!(old.len(), 2, "每槽返回一间旧房");
+    assert_eq!(world.time(), 1);
+    assert!(matches!(
+        world.room("W1N1").unwrap().objects.get(&a),
+        Some(RoomObject::Energy(_))
+    ));
+
+    // 覆盖不一致：房序错位拒绝。
+    let bad_order: Vec<(String, RoomState)> = ["W2N1", "W1N1"]
+        .into_iter()
+        .map(|name| (name.to_string(), RoomState::new(name, Terrain::plains())))
+        .collect();
+    assert!(
+        world
+            .commit_tick_rooms_prevalidated(bad_order, next, true)
+            .unwrap_err()
+            .contains("覆盖、顺序或地形不一致")
+    );
+
+    // 地形不一致拒绝。
+    let bad_terrain = vec![(
+        "W1N1".to_string(),
+        RoomState::new("W1N1", Terrain::from_codes(&[3; 2500]).unwrap()),
+    )];
+    assert!(
+        world
+            .commit_tick_rooms_prevalidated(bad_terrain, next, true)
+            .is_err()
+    );
+
+    // 游标回退拒绝。
+    let rooms: Vec<(String, RoomState)> = ["W1N1", "W2N1"]
+        .into_iter()
+        .map(|name| (name.to_string(), RoomState::new(name, Terrain::plains())))
+        .collect();
+    assert!(
+        world
+            .commit_tick_rooms_prevalidated(rooms, 1, true)
+            .unwrap_err()
+            .contains("游标不得回退")
+    );
+}
+
+/// 信任路径不重扫对象不变式，但域状态校验仍在：悬空效果候选被拒。
+#[test]
+fn commit_prevalidated_still_rejects_dangling_effects() {
+    let mut world = World::new(1);
+    world.register_room("W1N1", Terrain::plains()).unwrap();
+    let next = world.next_obj_id().max(10);
+    let mut room = RoomState::new("W1N1", Terrain::plains());
+    let effect = crate::EffectEntry {
+        effect: None,
+        power: 1,
+        level: 1,
+        end_time: 10,
+    };
+    room.effects.insert(ObjId(999), vec![effect]);
+    let err = world
+        .commit_tick_rooms_prevalidated(vec![("W1N1".to_string(), room)], next, true)
+        .unwrap_err();
+    assert!(err.contains("悬空效果"), "{err}");
+}

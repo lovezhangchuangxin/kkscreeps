@@ -1,0 +1,48 @@
+{
+ "before(9446121f)": {
+  "phases_p50": {
+   "project": 47.8,
+   "run": 138.0,
+   "settle": 113.1,
+   "wall": 304.1
+  },
+  "segments_p50": {
+   "prepare": 6.16,
+   "clone": 12.35,
+   "settle": 76.5,
+   "hook": 11.52,
+   "interroom": 5.54,
+   "nukes": 6.42,
+   "market": 5.93,
+   "power": 5.75,
+   "writeback": 0.02,
+   "validate": 12.48,
+   "into_prepared": 0.75,
+   "commit": 27.31
+  },
+  "note": "同日较热冒烟窗"
+ },
+ "after(this slice)": {
+  "phases_p50": {
+   "project": 63.6,
+   "run": 157.8,
+   "settle": 102.4,
+   "wall": 331.9
+  },
+  "segments_p50": {
+   "prepare": 6.13,
+   "clone": 12.67,
+   "settle": 84.73,
+   "hook": 11.64,
+   "interroom": 5.8,
+   "nukes": 6.66,
+   "market": 6.28,
+   "power": 5.91,
+   "writeback": 0.03,
+   "validate": 13.58,
+   "into_prepared": 0.8,
+   "commit": 10.54
+  },
+  "note": "热窗（本片冒烟 wall 331.9 为当日热态；结构对照用分段比例）"
+ }
+}

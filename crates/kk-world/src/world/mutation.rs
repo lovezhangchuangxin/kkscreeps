@@ -14,8 +14,22 @@ pub struct RoomContents<'a> {
 }
 
 impl World {
-    /// 同一校验供管理员编辑、恢复和整轮候选消费。
+    /// 同一校验供管理员编辑、恢复和整轮候选消费：对象不变式全扫加逐房
+    /// 域状态校验，两段依次执行（[`Self::validate_object_invariants`]、
+    /// [`Self::validate_domain_state`]）。
     pub fn validate_room_objects<'a>(
+        rooms: impl IntoIterator<Item = (&'a str, &'a RoomState)>,
+        next_id: u64,
+    ) -> Result<(), String> {
+        let rooms: Vec<(&str, &RoomState)> = rooms.into_iter().collect();
+        Self::validate_object_invariants(rooms.iter().copied(), next_id)?;
+        Self::validate_domain_state(rooms, next_id)
+    }
+
+    /// 对象 ID/坐标/唯一性与房键一致全扫。引擎 validate 段对整轮候选
+    /// 同形执行；整轮发布的信任路径据此跳过本段（见
+    /// [`Self::commit_tick_rooms_prevalidated`]）。
+    pub fn validate_object_invariants<'a>(
         rooms: impl IntoIterator<Item = (&'a str, &'a RoomState)>,
         next_id: u64,
     ) -> Result<(), String> {
@@ -28,6 +42,36 @@ impl World {
                 return Err(format!("房间键与名称不一致：{name}"));
             }
             for (id, object) in &room.objects {
+                let (x, y) = object.pos();
+                if id.0 == 0
+                    || id.0 >= next_id
+                    || object.id() != id.0
+                    || x >= 50
+                    || y >= 50
+                    || !ids.insert(*id)
+                {
+                    return Err(format!(
+                        "房间 {name} 对象 {} 的 ID/坐标不变式无效",
+                        id.as_str()
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// 逐房域状态校验：Generic 归一标记/配方、storage 容量、keeper 与
+    /// invader 记忆表、效果表悬空/重复、扩展字段悬空。整轮发布的信任
+    /// 路径仍执行本段（对象不变式由引擎 validate 段代扫）。
+    pub fn validate_domain_state<'a>(
+        rooms: impl IntoIterator<Item = (&'a str, &'a RoomState)>,
+        next_id: u64,
+    ) -> Result<(), String> {
+        if next_id == 0 {
+            return Err("对象 ID 游标不得为零".into());
+        }
+        for (name, room) in rooms {
+            for object in room.objects.values() {
                 // 二进制恢复或直接替房不得夹带第二份 effects 权威状态。
                 // 前置子串门见 domain_validate_markers_present：绝大多数
                 // Generic 无标记键，跳过整趟解析。
@@ -48,19 +92,6 @@ impl World {
                     && !(0..=9_007_199_254_740_991).contains(&storage.store_capacity)
                 {
                     return Err("storage 容量必须是非负安全整数".into());
-                }
-                let (x, y) = object.pos();
-                if id.0 == 0
-                    || id.0 >= next_id
-                    || object.id() != id.0
-                    || x >= 50
-                    || y >= 50
-                    || !ids.insert(*id)
-                {
-                    return Err(format!(
-                        "房间 {name} 对象 {} 的 ID/坐标不变式无效",
-                        id.as_str()
-                    ));
                 }
             }
             crate::domain::keeper_memory::validate(room, next_id)?;
@@ -160,6 +191,56 @@ impl World {
         self.next_obj_id = next;
         self.generation = generation;
         Ok(())
+    }
+
+    /// 整轮候选发布的信任路径：调用方（引擎 validate 段）已对**同一份
+    /// 候选数据**完成对象 ID/坐标/唯一性全扫（同
+    /// [`Self::validate_object_invariants`] 语义），此处不再重复该扫；
+    /// 域状态校验与覆盖/地形/游标自检保留。候选在 validate 与本调用
+    /// 之间不得变异（staged_body 的两调用点之间只做玩家侧收敛）。
+    /// 返回被替换的旧房（RoomState 无 Drop 副作用且 Send），供调用方
+    /// 在结算关键路径之外释放。
+    pub fn commit_tick_rooms_prevalidated(
+        &mut self,
+        rooms: Vec<(String, RoomState)>,
+        next_id: u64,
+        count_player_tick: bool,
+    ) -> Result<Vec<RoomState>, String> {
+        if rooms.len() != self.rooms.len()
+            || rooms
+                .iter()
+                .zip(self.rooms.iter())
+                .any(|((name, room), (key, old))| {
+                    name != key || room.terrain.as_slice() != old.terrain.as_slice()
+                })
+        {
+            return Err("整轮房间覆盖、顺序或地形不一致".into());
+        }
+        if next_id < self.next_obj_id {
+            return Err("对象 ID 游标不得回退".into());
+        }
+        Self::validate_domain_state(
+            rooms.iter().map(|(name, room)| (name.as_str(), room)),
+            next_id,
+        )?;
+        let time = self.time.checked_add(1).ok_or("世界时间已耗尽")?;
+        let player_ticks = if count_player_tick {
+            self.player_ticks.checked_add(1).ok_or("玩家轮数已耗尽")?
+        } else {
+            self.player_ticks
+        };
+        let generation = self.next_generation()?;
+        // 逐槽替换取代整树重建；旧 RoomState 收集返回，由调用方决定
+        // 释放时机（结算关键路径之外）。
+        let mut old_rooms = Vec::with_capacity(self.rooms.len());
+        for (slot, (_name, room)) in self.rooms.values_mut().zip(rooms) {
+            old_rooms.push(std::mem::replace(slot, room));
+        }
+        self.next_obj_id = next_id;
+        self.time = time;
+        self.player_ticks = player_ticks;
+        self.generation = generation;
+        Ok(old_rooms)
     }
 
     /// 发布完整房间候选；所有可能失败的操作均在写入前完成。

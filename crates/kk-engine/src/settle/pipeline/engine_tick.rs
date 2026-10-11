@@ -433,10 +433,16 @@ impl Engine {
         diag: &mut TickDiag,
     ) -> Result<(), SettleError> {
         let t_commit = std::time::Instant::now();
-        self.world
-            .commit_tick_rooms(prepared.rooms, prepared.next_id, !warmup)
+        let old_rooms = self
+            .world
+            .commit_tick_rooms_prevalidated(prepared.rooms, prepared.next_id, !warmup)
             .map_err(SettleError)?;
         diag.commit_ns = t_commit.elapsed().as_nanos();
+        // 旧房释放在结算关键路径之外（RoomState 无 Drop 副作用且 Send）：
+        // 后台线程吸收 16 万级对象的 dealloc，与下一拍的投影/执行窗重叠。
+        if !old_rooms.is_empty() {
+            std::thread::spawn(move || drop(old_rooms));
+        }
         self.market = prepared.market;
         self.players = prepared.players;
         self.mod_states = prepared.mod_states;
