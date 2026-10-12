@@ -491,6 +491,192 @@ fn code_replace_command_consumed_with_barrier_and_memory_kept() -> anyhow::Resul
     Ok(())
 }
 
+/// S2.3 玩家表达式与受限 Mod 输入：真实子进程链路上挂起命令随拍求值/
+/// 注入，拍提交后经屏障终态化（表达式携带求值结果、Mod 输入 accepted）。
+#[test]
+#[cfg(unix)]
+fn console_expr_and_mod_input_complete_via_real_run() -> anyhow::Result<()> {
+    let fixture = Fixture::new()?;
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../compat/fixtures/mod-player");
+    let config = fixture.config(json!({
+        "config_format_version": 2,
+        "mod_grants": {"workload": ["p1"]},
+        "mods": {"root": root},
+    }))?;
+    let scenario_file = config.parent().unwrap().join("scenario.json");
+    let mut scenario: Value = serde_json::from_slice(&std::fs::read(&scenario_file)?)?;
+    scenario["mods"] = json!({"root": root});
+    scenario["objects"] = json!([{
+        "alias": "counter", "room": "W1N1", "kind": "mod",
+        "spec": {"typeKey": "workload:counter", "fields": {"owner": "p1", "x": 10, "y": 10}},
+    }]);
+    std::fs::write(&scenario_file, serde_json::to_vec(&scenario)?)?;
+    init_ok(&fixture, &config)?;
+    anyhow::ensure!(enable_inbox(&config)?.status.success());
+    let packages = kk_mod_host::discover_packages(&root)?;
+    let options = kk_mod_host::RegisterOptions::default();
+    let mut initial = kk_runtime::EmbedEngine::new();
+    initial.restore_checkpoint(latest_payload(&fixture)?, Some((&packages, &options)))?;
+    let target = initial.mod_object_snapshots()[0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    drop(initial);
+    let dir = kk_runtime::service::ServiceDir::new(fixture.state());
+    let identity = kk_runtime::service::identity::read(&dir.identity_file())?;
+    let mut inbox_state = kk_runtime::service::inbox::load(&dir.inbox_file(), &identity.world_id)?;
+    kk_runtime::service::inbox::accept::open_stream(&mut inbox_state, "p1", "s1")
+        .map_err(|error| anyhow::anyhow!(error))?;
+    kk_runtime::service::inbox::accept::open_stream(&mut inbox_state, "workload", "m1")
+        .map_err(|error| anyhow::anyhow!(error))?;
+    let mut envelopes = Vec::new();
+    for (principal, stream, seq, kind, payload) in [
+        (
+            "workload",
+            "m1",
+            1,
+            "mod.input",
+            json!({
+                "intent": "workload:increment",
+                "asPlayer": "p1",
+                "targetId": target,
+                "args": {"amount": 1},
+            }),
+        ),
+        (
+            "p1",
+            "s1",
+            1u64,
+            "console.expr",
+            json!({"expression": "Memory.exprDone = (Memory.exprDone || 0) + 1; 'from-expr'"}),
+        ),
+    ] {
+        envelopes.push(json!({
+            "worldId": identity.world_id,
+            "principal": principal,
+            "streamId": stream,
+            "clientSeq": seq,
+            "kind": kind,
+            "schemaVersion": 1,
+            "payload": payload,
+        }));
+    }
+    for envelope in &envelopes {
+        match kk_runtime::service::inbox::accept::accept(
+            &mut inbox_state,
+            envelope,
+            &kk_runtime::service::inbox::InboxLimits::default(),
+            3_000,
+        ) {
+            kk_runtime::service::inbox::accept::AcceptOutcome::Received { .. } => {}
+            other => panic!("注入应接收: {other:?}"),
+        }
+    }
+    kk_runtime::service::inbox::store(&inbox_state, &dir.inbox_file())?;
+
+    let (mut run, stderr_file) = spawn_run(&config, &fixture, "s23-run.err")?;
+    wait_for(|| {
+        kk_runtime::service::inbox::load(&dir.inbox_file(), &identity.world_id)
+            .map(|state| {
+                [
+                    &state.streams["s1"].entries[&1],
+                    &state.streams["m1"].entries[&1],
+                ]
+                .iter()
+                .all(|entry| {
+                    matches!(
+                        entry.status,
+                        kk_runtime::service::inbox::EntryStatus::Completed { .. }
+                    )
+                })
+            })
+            .unwrap_or(false)
+    })
+    .map_err(|error| {
+        anyhow::anyhow!(
+            "{error}: {} inbox={:?}",
+            std::fs::read_to_string(&stderr_file).unwrap_or_default(),
+            kk_runtime::service::inbox::load(&dir.inbox_file(), &identity.world_id)
+                .ok()
+                .and_then(|s| serde_json::to_value(s).ok())
+        )
+    })?;
+    unsafe {
+        libc::kill(run.id() as i32, libc::SIGTERM);
+    }
+    anyhow::ensure!(run.wait()?.code() == Some(0), "S2.3 运行应退出 0");
+
+    let state = kk_runtime::service::inbox::load(&dir.inbox_file(), &identity.world_id)?;
+    match &state.streams["s1"].entries[&1].status {
+        kk_runtime::service::inbox::EntryStatus::Completed { result } => {
+            assert_eq!(result["value"], json!("from-expr"), "表达式结果随终态返回")
+        }
+        other => panic!("表达式应完成：{other:?}"),
+    }
+    match &state.streams["m1"].entries[&1].status {
+        kk_runtime::service::inbox::EntryStatus::Completed { result } => {
+            assert_eq!(result, &json!({"accepted": true}))
+        }
+        other => panic!("Mod 输入应 accepted：{other:?}"),
+    }
+    // 屏障水位含两条流；表达式副作用已随检查点耐久（恢复面验证）。
+    let effects = kk_runtime::service::effects::load(&dir.effects_file(), &identity.world_id)?;
+    assert_eq!(effects.anchor.inbox_applied.get("s1"), Some(&1));
+    assert_eq!(effects.anchor.inbox_applied.get("m1"), Some(&1));
+    let mut engine = kk_runtime::EmbedEngine::new();
+    engine
+        .restore_checkpoint(latest_payload(&fixture)?, Some((&packages, &options)))
+        .map_err(|error| anyhow::anyhow!("恢复失败: {error}"))?;
+    let code = "(() => { const bot = require(\"main\"); bot.loop(); return true; })()";
+    engine.run_player("p1", code)?;
+    let raw = engine.player_state("p1").unwrap().raw_memory.clone();
+    let memory: Value = serde_json::from_str(&raw)?;
+    assert_eq!(memory["exprDone"], json!(1), "表达式副作用随检查点持久");
+    assert_eq!(
+        engine.get_object(&target).unwrap()["fields"]["value"],
+        1,
+        "Mod 输入真实结算效果跨恢复保持"
+    );
+    // 模拟终态存档前崩溃：耐久世界/结果不动，仅 inbox 退回 Received。
+    let mut replay_state = state.clone();
+    {
+        let st = replay_state.streams.get_mut("s1").unwrap();
+        st.applied_seq = 0;
+        st.entries.get_mut(&1).unwrap().status = kk_runtime::service::inbox::EntryStatus::Received;
+    }
+    kk_runtime::service::inbox::store(&replay_state, &dir.inbox_file())?;
+    let (mut resumed, _) = spawn_run(&config, &fixture, "s23-gap.err")?;
+    wait_for(|| {
+        kk_runtime::service::inbox::load(&dir.inbox_file(), &identity.world_id)
+            .map(|s| {
+                ["s1", "m1"]
+                    .iter()
+                    .all(|id| s.streams[*id].entries[&1].status.is_settled())
+            })
+            .unwrap_or(false)
+    })?;
+    unsafe {
+        libc::kill(resumed.id() as i32, libc::SIGTERM);
+    }
+    anyhow::ensure!(resumed.wait()?.code() == Some(0));
+    let recovered_results =
+        kk_runtime::service::inbox::load(&dir.inbox_file(), &identity.world_id)?;
+    assert_eq!(
+        serde_json::to_value(&recovered_results.streams["s1"].entries[&1].status)?,
+        serde_json::to_value(&state.streams["s1"].entries[&1].status)?
+    );
+    let mut restored = kk_runtime::EmbedEngine::new();
+    restored.restore_checkpoint(latest_payload(&fixture)?, Some((&packages, &options)))?;
+    assert_eq!(
+        restored.get_object(&target).unwrap()["fields"]["value"],
+        1,
+        "缺口恢复不能重复施加 Mod 输入"
+    );
+    let memory: Value = serde_json::from_str(&restored.player_state("p1").unwrap().raw_memory)?;
+    assert_eq!(memory["exprDone"], 1, "缺口恢复不能重复表达式副作用");
+    Ok(())
+}
+
 /// 崩溃窗口（矩阵 2，链路级）：屏障已发布、effects 已更新、inbox 终态
 /// 未存档——重启走真实恢复装配（v2 上下文自检查点 meta 重建）后 drain
 /// 幂等补全：结果由当前 codeVersion 重构，不重新执行（无新屏障）。

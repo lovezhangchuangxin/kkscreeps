@@ -239,6 +239,12 @@ fn setup(
         // 真实推进自 S2.2 起由命令完成事务建立新屏障）。
         host.set_v2_context(context);
     }
+    host.set_command_results(service::command_results::CommandResults::decode(
+        &selected.value,
+    )?);
+    // 受限 Mod 输入的代表授予表（S2.3）：空表=无授予，一切代表提交
+    // 在命令层拒绝。
+    host.set_mod_grants(config.mod_grants.clone());
 
     let control = if control_stdio {
         let (sender, receiver) = std::sync::mpsc::channel::<String>();
@@ -403,7 +409,16 @@ fn run_one_tick(host: &mut ServiceHost, reference: &mut Instant) {
                 eprintln!("serve run: 拍暂停（保持 tick，等待显式重试）: {reason}");
             }
         }
-        Err(error) => eprintln!("serve run: 拒绝开始新拍: {error:#}"),
+        Err(error) => {
+            // 拍入口守卫（阶段/故障）拒绝新拍与"拍已提交、收尾事务失败"
+            // （如命令屏障发布失败）都走此臂——按当前故障分类如实区分。
+            match host.fault() {
+                Some(Fault::Persistence { .. }) => {
+                    eprintln!("serve run: 拍后事务失败（世界已提交，停止推进）: {error:#}")
+                }
+                _ => eprintln!("serve run: 拒绝开始新拍: {error:#}"),
+            }
+        }
     }
     maybe_save(host, reference);
 }

@@ -42,6 +42,9 @@ pub struct EvalReport {
     /// runExpr 的结果 JSON：`{ok, value?} | {ok:false, kind, error}`——注入
     /// 失败（玩家把环境搞坏）为 `{ok:false, kind:"inject_failed"}`（玩家级）。
     pub expr: Value,
+    /// 控制台表达式（S2.3）的求值结果，与 expr 同分类体系；无输入或
+    /// 未执行（停跑轮）为 None，软异常是有界错误结果、主代码照常。
+    pub console_expr: Option<Value>,
     pub console: Vec<LogLine>,
     pub bucket_after: f64,
     /// endTick 带出的本 tick intentsList（Null = 无/硬中断丢弃）。
@@ -88,6 +91,9 @@ pub struct RunJob {
     /// 或同 None。
     pub kkpv_public: Option<crate::shared_bundle::SharedKkpvBundle>,
     pub code: String,
+    /// 控制台表达式（S2.3）：主代码求值前先求值的输入源码，共用同次
+    /// 注入与预算；软异常有界继续主代码，硬中断按现有玩家结局处理。
+    pub pre_expr: Option<String>,
     pub epoch: RunEpoch,
     pub attempt: u64,
     /// 整条命令的绝对期限；None 在派发时绑定 tickLimit 加 1 秒通信余量。
@@ -358,6 +364,7 @@ impl PlayerThreads {
                                             job.kkpv_bundle,
                                             job.kkpv_public,
                                             &job.code,
+                                            job.pre_expr.as_deref(),
                                             job.epoch,
                                             Some(&job.budget),
                                         )
@@ -852,115 +859,5 @@ fn run_one_tick(
     }
 }
 
-/// 执行注入、表达式与写回，返回等待协调器提交的结果；原样回带 epoch。
-fn run_eval_tick(
-    sandbox: &mut Sandbox,
-    world: &Value,
-    bundle: Option<KkpvPrivateBundle>,
-    public: Option<crate::shared_bundle::SharedKkpvBundle>,
-    code: &str,
-    epoch: RunEpoch,
-) -> anyhow::Result<EvalReport> {
-    run_eval_tick_with_budget(sandbox, world, bundle, public, code, epoch, None)
-}
-
-fn run_eval_tick_with_budget(
-    sandbox: &mut Sandbox,
-    world: &Value,
-    bundle: Option<KkpvPrivateBundle>,
-    public: Option<crate::shared_bundle::SharedKkpvBundle>,
-    code: &str,
-    epoch: RunEpoch,
-    budget: Option<&kk_core::cpu::RunBudget>,
-) -> anyhow::Result<EvalReport> {
-    // 世界注入失败作为该玩家的 inject_failed 结果返回，让协调器继续处理其他玩家。
-    // 通道断开等基础设施故障仍返回 Err。
-    let begin = match (channel_input(bundle, public)?, budget) {
-        (ChannelInput::Kkpv { public, private }, Some(budget)) => {
-            sandbox.begin_tick_kkpv_with_budget(world, &public, &private, budget)
-        }
-        (ChannelInput::Kkpv { public, private }, None) => {
-            sandbox.begin_tick_kkpv(world, &public, &private)
-        }
-        (ChannelInput::Json, Some(budget)) => sandbox.begin_tick_with_budget(world, budget),
-        (ChannelInput::Json, None) => sandbox.begin_tick(world),
-    };
-    let plan = match begin {
-        Ok(plan) => plan,
-        Err(e) => {
-            // 注入失败的费用候选按完整预算计算，报告携带同一候选；此处尚不修改余额。
-            let bill = sandbox.pending_bill();
-            return Ok(EvalReport {
-                expr: serde_json::json!({
-                    "ok": false, "kind": "inject_failed",
-                    "error": format!("世界注入失败: {e}"),
-                }),
-                console: sandbox.drain_console(),
-                bucket_after: sandbox.bucket(),
-                intents: Value::Null,
-                cpu_billed_ms: bill,
-                raw_memory: None,
-                ism_local: None,
-                segments_out: None,
-                epoch,
-            });
-        }
-    };
-    match plan {
-        TickPlan::SkipPenalty => Ok(EvalReport {
-            // 代码未执行时使用 terminated，区别于成功求值得到 undefined。
-            // 停跑回充留给协调器提交，bucket_after 仍是提交前余额。
-            expr: serde_json::json!({
-                "ok": false, "kind": "terminated", "error": "本 tick 停跑（桶透支为负，玩家代码未执行）",
-            }),
-            console: sandbox.drain_console(),
-            bucket_after: sandbox.bucket(),
-            intents: Value::Null,
-            cpu_billed_ms: None,
-            raw_memory: None,
-            ism_local: None,
-            segments_out: None,
-            epoch,
-        }),
-        TickPlan::Run { .. } => {
-            let mut expr = sandbox.run_expr(code)?;
-            let writeback = sandbox.end_tick()?;
-            let intents = sandbox.take_intents().unwrap_or(Value::Null);
-            // 代码开始执行后被中断，或写回失败，按适配器契约归为 runtime。
-            // 只有上面的负余额停跑分支使用 terminated 表示尚未执行。
-            if expr.get("ok").and_then(Value::as_bool) == Some(false)
-                && expr.get("kind").and_then(Value::as_str) == Some("terminated")
-            {
-                expr = serde_json::json!({
-                    "ok": false, "kind": "runtime",
-                    "error": "硬中断（超时或内存闸门，代码已开始执行）",
-                });
-            } else if expr.get("ok").and_then(Value::as_bool) == Some(true)
-                && writeback.get("ok").and_then(Value::as_bool) == Some(false)
-            {
-                expr = serde_json::json!({
-                    "ok": false, "kind": "runtime",
-                    "error": writeback.get("error").cloned().unwrap_or_else(|| "Memory 写回失败".into()),
-                });
-            }
-            Ok(EvalReport {
-                expr,
-                console: sandbox.drain_console(),
-                bucket_after: sandbox.bucket(),
-                intents,
-                // 计费与 RawMemory 均作为候选返回；协调器在世界结算成功后提交。
-                cpu_billed_ms: sandbox.pending_bill(),
-                segments_out: writeback.get("segmentsOut").cloned(),
-                raw_memory: writeback
-                    .get("rawMemory")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned),
-                ism_local: writeback
-                    .get("ismLocal")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned),
-                epoch,
-            })
-        }
-    }
-}
+mod eval;
+use eval::{run_eval_tick, run_eval_tick_with_budget};

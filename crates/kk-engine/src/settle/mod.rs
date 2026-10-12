@@ -387,6 +387,11 @@ impl Engine {
         self.plan.hash()
     }
 
+    /// 冻结对象意图描述符，供宿主耐久输入在入候选前核验目录和参数。
+    pub fn mod_intent(&self, key: &kk_mod_api::Key) -> Option<&kk_mod_api::IntentDescriptor> {
+        self.plan.get_intent(self.plan.resolve_intent(key)?)
+    }
+
     /// 计划中的 Mod 类型描述符（管理面创建对象与诊断用）；builtin 类型
     /// 不在此列。类型键须为 `namespace:name`。
     pub fn mod_object_type(&self, type_key: &str) -> Option<&kk_mod_api::ObjectTypeDescriptor> {

@@ -23,6 +23,27 @@ impl EmbedEngine {
         &mut self,
         codes: &BTreeMap<String, String>,
     ) -> anyhow::Result<BTreeMap<String, PlayerRun>> {
+        self.run_players_internal(codes, &BTreeMap::new(), &[])
+    }
+
+    /// S2.3 受限 Mod 输入：表达式之上再附加宿主侧扩展意图（先于玩家
+    /// wire 注入——玩家对同对象同意图的提交覆盖外部命令）。Settle
+    /// 重试固定原候选宿主输入，不使用重试调用方提供的新输入。
+    pub fn run_players_with_inputs(
+        &mut self,
+        codes: &BTreeMap<String, String>,
+        exprs: &BTreeMap<String, String>,
+        host_intents: &[crate::HostIntent],
+    ) -> anyhow::Result<BTreeMap<String, PlayerRun>> {
+        self.run_players_internal(codes, exprs, host_intents)
+    }
+
+    fn run_players_internal(
+        &mut self,
+        codes: &BTreeMap<String, String>,
+        exprs: &BTreeMap<String, String>,
+        host_intents: &[crate::HostIntent],
+    ) -> anyhow::Result<BTreeMap<String, PlayerRun>> {
         self.no_execution_failure("run_players")?;
         let t0 = std::time::Instant::now();
         // 先校验再取走缓存，防止错误请求丢掉失败轮。子集请求仍重试整个缓存轮。
@@ -34,14 +55,31 @@ impl EmbedEngine {
                     );
                 }
             }
+        } else {
+            for intent in host_intents {
+                self.validate_host_intent(intent)
+                    .map_err(anyhow::Error::msg)?;
+            }
         }
         // 恢复失败不能取走候选或重新执行玩家；重建只读取原启动快照。
         self.rebuild_mod_realm()?;
-        let (results, run_ns, project_ns, input) = match self.pending.take() {
-            Some(pending) => (pending.results, 0u128, 0u128, pending.input),
+        let (results, run_ns, project_ns, input, host_intents) = match self.pending.take() {
+            Some(pending) => (
+                pending.results,
+                0u128,
+                0u128,
+                pending.input,
+                pending.host_intents,
+            ),
             None => {
-                let (results, run_ns, project_ns) = self.execute_players(codes)?;
-                (results, run_ns, project_ns, TickInput::now())
+                let (results, run_ns, project_ns) = self.execute_players(codes, exprs)?;
+                (
+                    results,
+                    run_ns,
+                    project_ns,
+                    TickInput::now(),
+                    host_intents.to_vec(),
+                )
             }
         };
         // 墙钟输入随候选一起缓存，重试不会重新采样签名时间等值。
@@ -81,13 +119,30 @@ impl EmbedEngine {
         // 取结算前的世界值（结算执行的是世界当前 tick），墙钟用缓存首次值。
         let (round_tick, round_generation) =
             (self.engine.world().time(), self.engine.world().generation());
+        let batch = Self::batch_with_host_intents(&results, &host_intents);
         let log_input = self.input_log.is_some().then(|| {
-            let intents = Value::Object(
+            let mut intents = Value::Object(
                 results
                     .iter()
                     .map(|(handle, result)| (handle.clone(), result.intents_raw.clone()))
                     .collect(),
             );
+            // 宿主意图也是回放输入；只替换 ext 部分，保留其余玩家原始
+            // wire（避免规范化改变清洗语义），并包含无 RunJob 的授予玩家。
+            for (player, user) in &batch.users {
+                for (target, ext) in &user.ext {
+                    if !intents[player].is_object() {
+                        intents[player] = json!({});
+                    }
+                    let id = target.as_str();
+                    if !intents[player][&id].is_object() {
+                        intents[player][&id] = json!({});
+                    }
+                    for (key, args) in ext {
+                        intents[player][&id][key.as_str()] = args.clone();
+                    }
+                }
+            }
             let entries = results
                 .iter()
                 .map(|(handle, result)| {
@@ -112,13 +167,20 @@ impl EmbedEngine {
                     )
                 })
                 .collect();
-            (input.now_ms, intents, input_log::players_map(&entries))
+            let mut players = input_log::players_map(&entries);
+            for player in batch.users.keys() {
+                if players[player].is_null() {
+                    // 只有宿主输入的玩家没有 RunJob 写回，回放保持原 CPU 桶。
+                    players[player] = json!({
+                        "cpu_bucket": self.engine.players()[player].cpu,
+                        "cpu_billed_ms": null, "raw_memory_sha256": null,
+                        "ism_local": null, "segments": null,
+                    });
+                }
+            }
+            (input.now_ms, intents, players)
         });
-        let settled = self.settle_world_with_writebacks(
-            Self::batch_from_results(&results),
-            input,
-            writebacks,
-        );
+        let settled = self.settle_world_with_writebacks(batch, input, writebacks);
         match settled {
             Ok(()) => {
                 if let Some((now_ms, intents, players)) = log_input
@@ -152,7 +214,11 @@ impl EmbedEngine {
             Err(e) => {
                 // 保留候选以重试结算；已提交世界、Memory 和 CPU 桶保持旧值。
                 // V8 全局变量不在回滚范围内。
-                self.pending = Some(PendingRound { results, input });
+                self.pending = Some(PendingRound {
+                    results,
+                    input,
+                    host_intents,
+                });
                 Err(e)
             }
         }
@@ -318,6 +384,7 @@ impl EmbedEngine {
     pub(super) fn execute_players(
         &mut self,
         codes: &BTreeMap<String, String>,
+        exprs: &BTreeMap<String, String>,
     ) -> anyhow::Result<(BTreeMap<String, RunResult>, u128, u128)> {
         // 未知 handle 显式报错：静默跳过会让结果映射缺项，调用方无从得知玩家没跑
         let registered = self
@@ -463,6 +530,7 @@ impl EmbedEngine {
                         kkpv_bundle,
                         kkpv_public: kkpv_public.clone(),
                         code: code.clone(),
+                        pre_expr: exprs.get(&handle).cloned(),
                         epoch,
                         attempt: 0,
                         deadline: None,
@@ -520,20 +588,6 @@ impl EmbedEngine {
             anyhow::bail!(reason);
         }
         Ok((results, run_ns, project_ns))
-    }
-
-    /// 合并已清洗并绑定玩家身份的意图，不使用 JavaScript 自报的身份。
-    pub(super) fn batch_from_results(results: &BTreeMap<String, RunResult>) -> IntentBatch {
-        let mut batch = IntentBatch::default();
-        for (registered_player, result) in results {
-            // 注册表键是身份真相源；自报 player 和其他玩家键均不能越过此边界。
-            if let Some(intents) = result.intents.users.get(registered_player) {
-                batch
-                    .users
-                    .insert(registered_player.clone(), intents.clone());
-            }
-        }
-        batch
     }
 
     /// 结算成功后向输入日志追加一段（未启用时无操作）。调用点必须在引擎
@@ -700,6 +754,7 @@ impl EmbedEngine {
         PlayerRun {
             executed,
             expr: result.expr,
+            console_expr: result.console_expr,
             console,
         }
     }

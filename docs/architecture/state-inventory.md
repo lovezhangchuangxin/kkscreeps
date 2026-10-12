@@ -51,7 +51,7 @@
 | Mod 提交状态 | `engine.mod_states`（动态映射，载荷不透明——namespace state 是 Mod 自管 JSON） | 无独立版本；与包身份一致性由 realm 重建核对 | Mod namespace state 回填 | 拒绝不迁移，G23 负责 |
 | 引擎杂项 | `engine.next_id`、`engine.plan_hash` | `plan_hash` 恢复时由重新注册实际产生并等值核对，不等即拒 | 对象 ID 游标续发；冻结计划一致性 | 拒绝不迁移，G23 负责 |
 
-## 服务目录宿主侧域（`kk-runtime` `service`，S2.2 现行）
+## 服务目录宿主侧域（`kk-runtime` `service`，S2.3 现行）
 
 与 sim 宿主侧持久面平行的服务目录域；不进引擎键树门禁（同样是 `metadata` 不透明叶子内的新键树），由服务选择器严格解码消费。
 
@@ -59,6 +59,10 @@
 |---|---|---|---|---|
 | 目录身份 | `identity.json`：`service_format_version`、`world_id`、`world_seed`、`scenario_sha256`、`initialized` | 信封 `kkscreeps-service-identity` v1 严格等值；`initialized` 必须 true；服务格式版本 v1（S1）或 v2（S2 命令面，`enable-inbox` 一次性升级） | `service::identity::read`（run 入口）；身份缺失/损坏拒绝运行 | 新域首版，无历史迁移 |
 | 检查点服务元数据 | `metadata.service`：v1 字段（`service_format_version`、`world_id`、`publish_seq`、`tick`、`world_seed`、`scenario_sha256`、`entries.*`）之上，v2 目录候选须齐备 `barrier_id`、`inbox_applied`、`code_versions`、`outbox_cursor`（Option 平滑解码 v1 形状） | v1/v2 严格 `deny_unknown_fields`；载荷序号须与文件名一致，world_id/种子/内容身份/格式与目录身份一致，tick/种子与引擎载荷交叉一致；保留策略按完整版本计数且恒保护恢复锚点 | `service::checkpoints::select_latest`（无日志恢复选择，v2 带 RecoveryFloor）与 `enforce_keep` | 新域首版，无历史迁移 |
+| 拍内命令结果 | `metadata.command_results`：version=1、streams→client_seq/result | 独立 v1 严格树；结果≤64KiB，client_seq≤同版已消费水位；与世界同份发布，后继屏障清理已存档结果 | 选择器核验、run 装配、drain 缺口补全；普通/代码屏障继承，已耐久表达式不重跑 | 旧 S2.2 缺树显式迁移为空；存在但缺字段/未来版拒绝；已确认表达式缺结果冻结 |
+| 命令接收/终态 | `inbox.json`（流、接收序、水位、载荷、Received/Completed/Rejected） | 独立严格信封 v1；原子最新值，损坏不回退 | run/drain/接收 API；拍内终态在屏障确认后存档 | 沿 S2.1 初值 |
+| 效果恢复下限 | `effects.json`（锚点、水位、sink 确认） | 独立严格信封 v1；不随检查点回滚 | v2 选择器硬下限、保留保护 | 沿 S2.1 初值 |
+| 服务操作配置 | `serve.json`、`mod_grants` 授予表 | config_format_version=2；v1 无新字段显式迁移为空授予表；未知/未来拒绝 | run 启动装配，消费按当前授予与目标归属核验 | v1→v2 不改世界/引擎身份 |
 | 服务检查点文件 | `checkpoints/cp-<publishSeq>.json`（复用检查点信封与引擎载荷） | 信封同基础检查点；发布序号目录唯一分配、不复用 | 选择器降序取首个完整份；撕裂/哈希损坏跳过并计数；v2 目录另受恢复下限门 | 随基础检查点 |
 | 单写者租约 | `writer.lock`（无内容语义） | 无版本；固定 inode、持锁期间不删除 | `kk-storage::WriterLease`（进程级互斥，崩溃由 OS 释放） | 不适用 |
 
@@ -69,7 +73,7 @@
 | V8 堆与 JS 全局变量 | 冷恢复重建 VM；玩法持久状态必须写 `ctx.state` 或对象字段，玩家写 Memory/segments |
 | 后台服务 VM、队列与探针 | 独立进程态，不进游戏检查点；后台冷启动重新注册/start，未完成请求不恢复，G27.b 耐久/outbox 尚未实现。见[后台服务](background-services.md) |
 | 模块编译缓存 | 恢复后按保存的模块字节重新安装，回到初始缓存状态 |
-| 失败轮候选 | 检查点只含已提交状态；失败轮须先重试或显式丢弃才能保存 |
+| 失败轮候选与挂起命令 | 检查点只含已提交状态；Settle 候选含玩家结果/表达式结果/固定宿主意图，重试或丢弃后才能保存；未提交命令从 inbox 恢复，已提交结果从 command_results 补全 |
 | 计时样本与 profiler 累计值 | 过程观测数据，不参与状态等价 |
 | 地形编码缓存 | Rust 派生查询缓存，恢复后按地形重建 |
 | Mod 运行 trace 缓冲 | 有界观测缓冲，非回放日志；trace 开启意愿经引擎标志跨恢复保留 |
@@ -87,6 +91,6 @@ sim 的日志游标现为 `{last_seq,last_tick,sha256}`，由 runtime 导出末�
 
 ## 服务域耐久状态（S2.2 起）
 
-- `inbox.json` v1：命令收发单一原子最新状态（活跃流、nextServerSeq、已接收水位、未淘汰明细含载荷与摘要；S2.2 起消费面写入每笔命令的 completed/rejected 终态与 applied 水位）。不随游戏检查点回滚；损坏=停服条件。字段与预算语义见[常驻服务宿主](service-host.md#耐久命令面s22-现行接收消费与代码边界事务)。
+- `inbox.json` v1：命令收发单一原子最新状态（活跃流、nextServerSeq、已接收水位、未淘汰明细含载荷与摘要；S2.2 起消费面写入每笔命令的 completed/rejected 终态与 applied 水位）。不随游戏检查点回滚；损坏=停服条件。字段与预算语义见[常驻服务宿主](service-host.md#耐久命令面s23-现行接收消费代码边界与拍内命令)。
 - `effects.json` v1：恢复下限锚点（屏障检查点身份与命令消费水位）与各 sink 确认水位（S2.4 填值）。单调前进，不随检查点回滚；S2.2 起每笔 completed 命令经即时屏障推进锚点。
 - 检查点 `metadata.service` v2：v1 字段之上追加 barrier_id/inbox_applied/code_versions/outbox_cursor（Option 平滑解码 v1 形状；v2 目录合法候选须四者齐备）。S2.2 起 code_versions 由 code.replace 事务实际维护（CAS 基准+1）。

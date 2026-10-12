@@ -29,7 +29,7 @@
 | N5 服务与客户端贡献 | 后台 JS 服务、provider、路由/订阅/管理；资源资产、渲染与面板；玩家类型生成 | 同一 Mod 包贡献玩法、玩家 API、服务和客户端；至少一个业务 provider 与一个 JS storage provider 可替换；两类客户端分别验证 |
 | N6 完整作者工作流 | init/test/watch、组合图/trace、故障夹具、回放与 tick 边界更新 | 作者用公开 CLI 重现冲突/拒绝/异常、定位绑定、保存恢复；更新失败保旧计划；报告绑定输入与执行身份 |
 
-N1 的 sim 装载/诊断和 N4 的状态清单先行；每个新域当片提供保存恢复，不必等待 N3 或完整 N4。已有基础检查点、JSON 载荷显式迁移、输入日志/结算回放与 sim 周期保存/恢复选择；服务常驻调度、内容级迁移和耐久输入/outbox 仍未实现，具体机制见[检查点](../architecture/checkpoints.md)及[输入日志](../architecture/input-log.md)，早期基础首片证据见[交付记录](../research/notes/basic-checkpoints-2026-10-05.md)。N5 契约在首次存储/网络设计时落实，N6 测试和诊断随各片交付。
+N1 的 sim 装载/诊断和 N4 的状态清单先行；每个新域当片提供保存恢复，不必等待 N3 或完整 N4。已有基础检查点、JSON 载荷显式迁移、输入日志/结算回放与 sim 周期保存/恢复选择；服务常驻调度/无日志目录恢复与耐久命令首片（S2.1–S2.3）已实现并验证；内容级迁移、后台 JS enqueue 与 outbox 仍未实现，具体机制见[检查点](../architecture/checkpoints.md)及[输入日志](../architecture/input-log.md)，早期基础首片证据见[交付记录](../research/notes/basic-checkpoints-2026-10-05.md)。N5 契约在首次存储/网络设计时落实，N6 测试和诊断随各片交付。
 
 N2 移动静态通行已贯通计划级墙、静态对象与私有 rampart 声明及默认玩家/NPC 寻路；G03 已提供准入及障碍追加后的同源链预演，障碍摘要提供与结算同源的安全模式主人。逐房粒度和 G02 其余子片仍未完成，现行机制见[移动契约](../architecture/movement.md#静态对象通行声明g02d3-后续)。
 

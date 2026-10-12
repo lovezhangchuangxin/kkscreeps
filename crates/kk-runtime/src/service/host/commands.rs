@@ -13,14 +13,44 @@ use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
 /// 单笔命令的应用结局；对外状态机 received → completed/rejected。
+/// Deferred 是内部态：命令已挂起待拍内处理（表达式或 Mod 输入），drain 停在
+/// FIFO 前缀，终态由拍成功后的屏障事务写回。
 #[derive(Clone, Debug)]
 pub enum AppliedCommand {
     Completed(Value),
     Rejected(String),
+    Deferred,
+}
+
+/// 已挂起的受限 Mod 输入（S2.3）：包 namespace 每拍一条，下一拍以
+/// 授予玩家身份注入结算批。命令终态只报告"已提交动作"（accepted）；
+/// 动作实际拒绝/产出由结算事件面分别报告，不进命令终态。
+#[derive(Clone, Debug)]
+pub struct PendingModInput {
+    pub stream_id: String,
+    pub client_seq: u64,
+    pub as_player: String,
+    pub target: String,
+    pub intent: String,
+    pub args: Value,
+}
+
+/// 已挂起的控制台表达式（S2.3）：主体每拍一条，下一拍 loop 前求值。
+#[derive(Clone, Debug)]
+pub struct PendingExpr {
+    pub stream_id: String,
+    pub client_seq: u64,
+    pub source: String,
+    /// 求值结果（含软异常的有界错误形态）；None=尚未求值（停跑轮），
+    /// 拍成功提交后经屏障终态化。
+    pub result: Option<Value>,
 }
 
 /// 玩家模块包总字节上限（方案 §4.1 拟议 2MiB；服务配置化留给 S3）。
 const MODULE_BUDGET_BYTES: usize = 2 * 1024 * 1024;
+/// 控制台表达式源码上限（方案 §4.1 拟议 8KiB；结果上限在 runner 层
+/// 的 CONSOLE_EXPR_MAX_BYTES）。
+pub const EXPR_MAX_BYTES: usize = 8 * 1024;
 /// 每轮 drain 消费的命令上限（固定有限全局 FIFO 前缀，防单轮垄断）。
 pub const DRAIN_BATCH: usize = 4;
 
@@ -93,6 +123,11 @@ impl ServiceHost {
                     return Err(error);
                 }
             };
+            if matches!(applied, AppliedCommand::Deferred) {
+                // 拍内命令（console.expr）挂起即停：不越过 FIFO 前缀，
+                // 其余命令（含同主体第二条）等本条终态化后的下一轮。
+                break;
+            }
             // 终态与已消费水位存回 inbox；这之前崩溃=命令重新消费
             // （幂等补全/重放语义覆盖）。
             let stream = state.streams.get_mut(&stream_id).expect("定位的流必在");
@@ -108,6 +143,8 @@ impl ServiceHost {
                 AppliedCommand::Rejected(reason) => inbox::EntryStatus::Rejected {
                     reason: reason.clone(),
                 },
+                // Deferred 已在上游 break，不落终态写路径。
+                AppliedCommand::Deferred => unreachable!("Deferred 不写终态"),
             };
             inbox::store(&state, &self.dir.inbox_file())
                 .map_err(|error| self.freeze_persistence(format!("命令终态存档失败: {error}")))?;
@@ -135,9 +172,8 @@ impl ServiceHost {
             // 屏障水位已含该命令但 inbox 仍是 Received：结果按可推导
             // 规则重构（code.replace 的完成结果=当前 codeVersion），
             // 不重新执行、不补造不可知结果。
-            // S2.3 约束登记：新增会建屏障的命令 kind 时，其结果必须
-            // 可由屏障 meta 重构（或随 meta 持久化），否则此处的
-            // "不可推导"拒绝会把崩溃前已对外确认的 completed 改写。
+            // 表达式结果与世界同份持久化：补全 inbox 缺口时直接返回，
+            // 不能因为客户端尚未看到 completed 再次施加耐久副作用。
             return Ok(match entry.kind.as_str() {
                 "code.replace" => {
                     let version = self
@@ -148,6 +184,18 @@ impl ServiceHost {
                         .unwrap_or(0);
                     AppliedCommand::Completed(json!({"codeVersion": version}))
                 }
+                "console.expr" => match self.command_results.streams.get(stream_id) {
+                    Some(saved) if saved.client_seq == client_seq => {
+                        AppliedCommand::Completed(saved.result.clone())
+                    }
+                    // 旧试验版本可能已确认效果却没有结果；拒绝启动推进，
+                    // 不能以结果未知为由再次施加耐久副作用。
+                    _ => anyhow::bail!("已确认表达式缺耐久结果，须人工核验；不能重新执行"),
+                },
+                // mod.input 的完成结果是常量（已提交动作），直接重构终态——
+                // 意图效果已随屏障链耐久（或已被四门丢弃），重新注入会在
+                // 新拍对非幂等玩法动作双重施加。
+                "mod.input" => AppliedCommand::Completed(json!({"accepted": true})),
                 other => AppliedCommand::Rejected(format!(
                     "命令已在屏障确认但结果不可推导（kind {other}）；不重新执行"
                 )),
@@ -157,10 +205,227 @@ impl ServiceHost {
             "code.replace" => {
                 self.apply_code_replace(stream_id, client_seq, principal, &entry.payload)
             }
+            "console.expr" => {
+                Ok(self.defer_console_expr(stream_id, client_seq, principal, &entry.payload))
+            }
+            "mod.input" => {
+                Ok(self.defer_mod_input(stream_id, client_seq, principal, &entry.payload))
+            }
             other => Ok(AppliedCommand::Rejected(format!(
-                "未知命令 kind {other:?}（S2.2 可用：code.replace）"
+                "未知命令 kind {other:?}（S2.2/S2.3 可用：code.replace/console.expr/mod.input）"
             ))),
         }
+    }
+
+    /// 挂起控制台表达式（S2.3）：校验（主体注册、字符串源码、≤8KiB）
+    /// 失败走明确拒绝终态；通过则挂到下一拍 loop 前求值（每主体每拍
+    /// 一条——已挂起时不再挂，drain 停在前缀等当前完成）。Deferred
+    /// 不是终态：不写 inbox，返回后本轮 drain 结束。
+    fn defer_console_expr(
+        &mut self,
+        stream_id: &str,
+        client_seq: u64,
+        principal: &str,
+        payload: &Value,
+    ) -> AppliedCommand {
+        if self.pending_expr.contains_key(principal) {
+            return AppliedCommand::Deferred;
+        }
+        let reject = |reason: String| AppliedCommand::Rejected(reason);
+        if !self.entries.contains_key(principal) {
+            return reject(format!(
+                "流主体 {principal} 不是注册玩家；console.expr 只对注册玩家生效"
+            ));
+        }
+        let Some(source) = payload["expression"].as_str() else {
+            return reject("payload 缺 expression 字符串字段".into());
+        };
+        if source.len() > EXPR_MAX_BYTES {
+            return reject(format!(
+                "表达式 {source_len} 字节超上限 {EXPR_MAX_BYTES}",
+                source_len = source.len()
+            ));
+        }
+        self.pending_expr.insert(
+            principal.to_string(),
+            PendingExpr {
+                stream_id: stream_id.to_string(),
+                client_seq,
+                source: source.to_string(),
+                result: None,
+            },
+        );
+        AppliedCommand::Deferred
+    }
+
+    /// 挂起受限 Mod 输入（S2.3）：校验（流主体=包 namespace、意图键
+    /// namespace 与主体一致、asPlayer 必填且在该包授予表内、目标 ID 为
+    /// kk 前缀十六进制、参数为 JSON 对象）失败走明确拒绝终态；通过则挂
+    /// 到下一拍注入结算批（每包每拍一条——已挂起时不再挂，drain 停在
+    /// 前缀）。结算层的四门核验（计划目录/schema/接收者/归属）原样
+    /// 生效；消费前先核验当前计划与归属，结算候选再次核验。
+    fn defer_mod_input(
+        &mut self,
+        stream_id: &str,
+        client_seq: u64,
+        principal: &str,
+        payload: &Value,
+    ) -> AppliedCommand {
+        if self.pending_mod_input.contains_key(principal) {
+            return AppliedCommand::Deferred;
+        }
+        let reject = |reason: String| AppliedCommand::Rejected(reason);
+        // 意图键与主体同 namespace：后台主体固定为对应包，不从 payload
+        // 自报取得权限（asPlayer 须经宿主授予表）。
+        let Ok(key) = kk_mod_api::Key::new(payload["intent"].as_str().unwrap_or_default()) else {
+            return reject("payload 缺 intent 意图键（namespace:name）".into());
+        };
+        // Key::new 已保证 namespace:name 形（含 namespace），直接取。
+        let namespace = key.namespace();
+        if namespace != principal {
+            return reject(format!(
+                "意图键 namespace {namespace} 与流主体（包）{principal} 不一致"
+            ));
+        }
+        let Some(as_player) = payload["asPlayer"].as_str() else {
+            return reject("payload 缺 asPlayer（首片要求代表玩家；无授予即拒绝）".into());
+        };
+        let granted = self
+            .mod_grants
+            .get(principal)
+            .is_some_and(|players| players.iter().any(|p| p == as_player));
+        if !granted {
+            return reject(format!(
+                "包 {principal} 未被授予代表玩家 {as_player}（serve config mod_grants）"
+            ));
+        }
+        let Some(target) = payload["targetId"].as_str() else {
+            return reject("payload 缺 targetId 字符串字段".into());
+        };
+        if kk_world::ObjId::parse(target).is_none() {
+            return reject(format!("targetId {target:?} 不是 kk 前缀十六进制对象 ID"));
+        }
+        if !payload["args"].is_object() {
+            return reject("payload 缺 args JSON 对象（参数经冻结 schema 严格转换）".into());
+        }
+        if let Err(reason) = self.engine.validate_host_intent(&crate::HostIntent {
+            player: as_player.to_string(),
+            target: target.to_string(),
+            intent: key.to_string(),
+            args: payload["args"].clone(),
+        }) {
+            return reject(reason);
+        }
+        self.pending_mod_input.insert(
+            principal.to_string(),
+            PendingModInput {
+                stream_id: stream_id.to_string(),
+                client_seq,
+                as_player: as_player.to_string(),
+                target: target.to_string(),
+                intent: key.to_string(),
+                args: payload["args"].clone(),
+            },
+        );
+        AppliedCommand::Deferred
+    }
+
+    /// 拍成功提交后终态化已求值的表达式命令：一条即时屏障覆盖同拍全部
+    /// （消费水位逐流推进、codeVersion 不变），屏障耐久后写回 inbox
+    /// 终态。发布失败按冻结处置——命令保持 Received，重启重新消费
+    /// 确认后的窗口由结果树补全，未确认才重跑。由 tick() 在世界提交后调用。
+    pub(crate) fn finish_pending_commands(&mut self) -> anyhow::Result<()> {
+        // 待终态化集合：已求值的表达式（completed 携带求值结果）与全部
+        // 挂起的 Mod 输入（completed 只报告"已提交动作"——动作实际
+        // 拒绝/产出由结算事件面分别报告）。
+        // 第五元素标记挂起域（表达式=玩家主体表 / Mod 输入=包主体表）：
+        // 键空间无机制隔离（包 namespace 可与玩家名同名），按域移除防止
+        // 同名时误删另一表的未求值挂起项。
+        let mut done: Vec<(String, String, u64, Value, bool)> = self
+            .pending_expr
+            .iter()
+            .filter_map(|(principal, pending)| {
+                pending.result.clone().map(|result| {
+                    (
+                        principal.clone(),
+                        pending.stream_id.clone(),
+                        pending.client_seq,
+                        result,
+                        true,
+                    )
+                })
+            })
+            .collect();
+        done.extend(self.pending_mod_input.iter().map(|(namespace, pending)| {
+            (
+                namespace.clone(),
+                pending.stream_id.clone(),
+                pending.client_seq,
+                json!({"accepted": true}),
+                false,
+            )
+        }));
+        if done.is_empty() {
+            return Ok(());
+        }
+        let mut applied = self
+            .v2
+            .as_ref()
+            .map(|context| context.inbox_applied.clone())
+            .unwrap_or_default();
+        for (_, stream_id, client_seq, _, _) in &done {
+            let entry = applied.entry(stream_id.clone()).or_insert(0);
+            *entry = (*entry).max(*client_seq);
+        }
+        let versions = self
+            .v2
+            .as_ref()
+            .map(|context| context.code_versions.clone())
+            .unwrap_or_default();
+        let barrier = format!("b-{}", crate::service::identity::generate_world_id());
+        let state = inbox::load(&self.dir.inbox_file(), &self.identity.world_id)
+            .map_err(|error| self.freeze_persistence(format!("读取命令收件箱失败: {error}")))?;
+        let mut results = self.command_results.clone();
+        results.streams.retain(|stream, saved| {
+            state
+                .streams
+                .get(stream)
+                .and_then(|s| s.entries.get(&saved.client_seq))
+                .is_some_and(|entry| !entry.status.is_settled())
+        });
+        for (_, stream, seq, result, _) in &done {
+            results.streams.insert(
+                stream.clone(),
+                crate::service::command_results::CommandResult {
+                    client_seq: *seq,
+                    result: result.clone(),
+                },
+            );
+        }
+        self.publish_barrier_with_results(&barrier, applied, versions, results)
+            .map_err(|error| self.freeze_persistence(format!("命令屏障发布失败: {error}")))?;
+        // 屏障已耐久：终态与水位写回 inbox（这之前崩溃=幂等补全的
+        // 结果补全路径，见 apply_command）。
+        let world_id = self.identity.world_id.clone();
+        let mut state = inbox::load(&self.dir.inbox_file(), &world_id)
+            .map_err(|error| self.freeze_persistence(format!("读取命令收件箱失败: {error}")))?;
+        for (key, stream_id, client_seq, result, from_expr) in &done {
+            // 按域移除：表达式查挂起表、Mod 输入查包表（同名键不互删）。
+            if *from_expr {
+                self.pending_expr.remove(key);
+            } else {
+                self.pending_mod_input.remove(key);
+            }
+            let stream = state.streams.get_mut(stream_id).expect("定位的流必在");
+            stream.applied_seq = stream.applied_seq.max(*client_seq);
+            stream.entries.get_mut(client_seq).expect("条目必在").status =
+                inbox::EntryStatus::Completed {
+                    result: result.clone(),
+                };
+        }
+        inbox::store(&state, &self.dir.inbox_file())
+            .map_err(|error| self.freeze_persistence(format!("命令终态存档失败: {error}")))?;
+        Ok(())
     }
 
     /// 代码边界事务：校验与 CAS（失败=验证拒绝，保旧版现役不动）→
@@ -278,6 +543,16 @@ impl ServiceHost {
         applied: BTreeMap<String, u64>,
         versions: BTreeMap<String, u64>,
     ) -> anyhow::Result<u64> {
+        self.publish_barrier_with_results(barrier, applied, versions, self.command_results.clone())
+    }
+
+    fn publish_barrier_with_results(
+        &mut self,
+        barrier: &str,
+        applied: BTreeMap<String, u64>,
+        versions: BTreeMap<String, u64>,
+        results: crate::service::command_results::CommandResults,
+    ) -> anyhow::Result<u64> {
         let context = self.v2.as_ref().expect("屏障发布只用于 v2 目录").clone();
         let seq = checkpoints::next_publish_seq(&self.dir.checkpoints_dir())?;
         let meta = crate::service::metadata::new_meta_v2(
@@ -292,8 +567,13 @@ impl ServiceHost {
             &versions,
             context.outbox_cursor,
         );
-        checkpoints::publish_with_meta(&self.engine, &self.dir.checkpoints_dir(), &meta)
-            .map_err(|error| anyhow::anyhow!("{error:#}"))?;
+        checkpoints::publish_with_results(
+            &self.engine,
+            &self.dir.checkpoints_dir(),
+            &meta,
+            &results,
+        )
+        .map_err(|error| anyhow::anyhow!("{error:#}"))?;
         // 锚点推进：沿用既有 sinks 水位（S2.4 起由投递确认维护）。
         // effects 损坏/身份不符是停服条件——不得按空 sinks 重建覆写
         // （那会静默清零 S2.4 的投递确认水位）。
@@ -309,6 +589,7 @@ impl ServiceHost {
         self.last_durable_seq = seq;
         self.next_seq = seq + 1;
         self.dirty_ticks = 0;
+        self.command_results = results;
         if let Some(context) = self.v2.as_mut() {
             context.barrier_id = barrier.to_string();
             context.inbox_applied = applied;
@@ -324,351 +605,4 @@ impl ServiceHost {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::EmbedEngine;
-    use crate::service::host::{HostParameters, RecoverySummary, ServiceHost, V2SaveContext};
-    use crate::service::{ServiceDir, identity, inbox};
-    use identity::ServiceIdentity;
-    use serde_json::json;
-    use std::collections::BTreeMap;
-    use std::path::PathBuf;
-
-    fn temp_dir(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("kk-cmds-{tag}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
-    /// v2 宿主：单玩家引擎（Memory.n 计数）+ 初始屏障 + 空 inbox/effects。
-    fn host_v2(tag: &str, code: &str) -> (ServiceHost, ServiceIdentity) {
-        let root = temp_dir(tag);
-        let ident = identity::ServiceIdentity {
-            service_format_version: identity::SERVICE_FORMAT_V2,
-            world_id: identity::generate_world_id(),
-            world_seed: 5,
-            scenario_sha256: "e".repeat(64),
-            initialized: true,
-        };
-        let mut engine = EmbedEngine::with_world_seed(ident.world_seed);
-        engine
-            .create_shard(&json!({
-                "players": ["p1"],
-                "rooms": [{"name": "W1N1", "owner": "p1", "rcl": 6}],
-            }))
-            .unwrap();
-        let mut table = kk_runner::ModuleTable::new();
-        table.insert_js("main", code);
-        engine.set_player_modules("p1", table).unwrap();
-        let dir = ServiceDir::new(&root);
-        dir.ensure_layout().unwrap();
-        let mut host = ServiceHost::new(
-            engine,
-            dir,
-            ident.clone(),
-            BTreeMap::from([("p1".to_string(), "main".to_string())]),
-            HostParameters {
-                auto_save_ticks: u64::MAX as u32,
-                auto_save_wall_secs: u64::MAX,
-                keep_checkpoints: 5,
-            },
-            RecoverySummary {
-                selected: String::new(),
-                publish_seq: 0,
-                tick: 0,
-                skipped_broken: 0,
-            },
-        )
-        .unwrap();
-        host.set_v2_context(V2SaveContext {
-            barrier_id: "b-init".into(),
-            inbox_applied: BTreeMap::new(),
-            code_versions: BTreeMap::new(),
-            outbox_cursor: 0,
-            anchor_seq: 0,
-        });
-        // 初始 effects 先行：不变量是 effects 在首次 publish_barrier 前
-        // 存在（它读该文件沿用 sinks，缺失/损坏是停服条件）——enable
-        // 事务在启用时写 effects，此后任何屏障发布都满足此前置。
-        effects::write(
-            &host.dir.effects_file(),
-            &effects::EffectsState::initial(&ident.world_id, 0, "b-init"),
-        )
-        .unwrap();
-        host.publish_barrier("b-init", BTreeMap::new(), BTreeMap::new())
-            .unwrap();
-        inbox::store(
-            &inbox::InboxState::empty(&ident.world_id),
-            &host.dir.inbox_file(),
-        )
-        .unwrap();
-        (host, ident)
-    }
-
-    /// 注入一条 code.replace 命令（stream s1 主体 p1）。
-    fn inject_replace(host: &ServiceHost, ident: &identity::ServiceIdentity, payload: Value) {
-        let mut state = inbox::load(&host.dir.inbox_file(), &ident.world_id).unwrap();
-        if !state.streams.contains_key("s1") {
-            inbox::accept::open_stream(&mut state, "p1", "s1").unwrap();
-        }
-        let envelope = json!({
-            "worldId": ident.world_id,
-            "principal": "p1",
-            "streamId": "s1",
-            "clientSeq": state.streams["s1"].next_client_seq,
-            "kind": "code.replace",
-            "schemaVersion": 1,
-            "payload": payload,
-        });
-        match inbox::accept::accept(&mut state, &envelope, &inbox::InboxLimits::default(), 1) {
-            inbox::accept::AcceptOutcome::Received { .. } => {}
-            other => panic!("注入应接收: {other:?}"),
-        }
-        inbox::store(&state, &host.dir.inbox_file()).unwrap();
-    }
-
-    fn entry_status(
-        host: &ServiceHost,
-        ident: &identity::ServiceIdentity,
-        seq: u64,
-    ) -> inbox::EntryStatus {
-        inbox::load(&host.dir.inbox_file(), &ident.world_id)
-            .unwrap()
-            .streams["s1"]
-            .entries[&seq]
-            .status
-            .clone()
-    }
-
-    /// 走宿主拍执行玩家（require 入口+loop），与 serve run 驱动同路径。
-    fn run_one_player(host: &mut ServiceHost) {
-        host.tick().expect("拍应成功").expect("无故障应推进");
-    }
-
-    /// 主链路：替换消费即屏障——codeVersion 推进、新模块生效、Memory
-    /// 保留、inbox 终态与水位存档、effects 锚点换新屏障、后续保存继承。
-    #[test]
-    fn code_replace_consumes_command_with_immediate_barrier() -> anyhow::Result<()> {
-        let code = "exports.loop = () => { Memory.n = (Memory.n || 0) + 1; };";
-        let (mut host, ident) = host_v2("main-link", code);
-        // 先跑两拍积累 Memory，证明替换不重置。
-        run_one_player(&mut host);
-        run_one_player(&mut host);
-        let tick_before = host.engine.get_game_time();
-        let new_code = "exports.loop = () => { Memory.m = (Memory.n || 0) + 100; };";
-        inject_replace(
-            &host,
-            &ident,
-            json!({"modules": {"main": new_code}, "expectedCodeVersion": 0}),
-        );
-
-        let processed = host.drain_command_prefix(4)?;
-        assert_eq!(processed, 1);
-        assert_eq!(host.engine.get_game_time(), tick_before, "替换不推进世界");
-        match entry_status(&host, &ident, 1) {
-            inbox::EntryStatus::Completed { result } => {
-                assert_eq!(result["codeVersion"], json!(1))
-            }
-            other => panic!("应完成：{other:?}"),
-        }
-        // 新模块生效且 Memory.n 延续（m = n+100 而非 100）。
-        run_one_player(&mut host);
-        let raw = host.engine.player_state("p1").unwrap().raw_memory.clone();
-        let memory: Value = serde_json::from_str(&raw)?;
-        assert_eq!(memory["n"], json!(2), "旧 Memory 不被初始化覆盖");
-        assert_eq!(memory["m"], json!(102), "新代码在正常执行阶段运行");
-        // 屏障与水位：effects 锚点指向新屏障；后续普通保存继承。
-        let effects = effects::load(&host.dir.effects_file(), &ident.world_id)?;
-        assert_ne!(effects.anchor.barrier_id, "b-init");
-        assert_eq!(effects.anchor.inbox_applied.get("s1"), Some(&1));
-        run_one_player(&mut host);
-        host.save_now();
-        let selected = checkpoints::select_latest(
-            &host.dir.checkpoints_dir(),
-            &ident,
-            Some(&checkpoints::RecoveryFloor {
-                checkpoint_seq: effects.anchor.checkpoint_seq,
-                barrier_id: effects.anchor.barrier_id.clone(),
-                inbox_applied: effects.anchor.inbox_applied.clone(),
-            }),
-        )?;
-        assert_eq!(selected.meta.code_versions.unwrap()["p1"], 1);
-        assert_eq!(selected.publish_seq, effects.anchor.checkpoint_seq + 1);
-        Ok(())
-    }
-
-    /// CAS 过期：验证拒绝持久化终态并推进水位，不阻塞后续命令。
-    #[test]
-    fn stale_code_version_is_rejected_without_blocking() -> anyhow::Result<()> {
-        let (mut host, ident) = host_v2("cas", "exports.loop = () => {};");
-        inject_replace(
-            &host,
-            &ident,
-            json!({"modules": {"main": "exports.loop = () => {};"}, "expectedCodeVersion": 7}),
-        );
-        let processed = host.drain_command_prefix(4)?;
-        assert_eq!(processed, 1);
-        match entry_status(&host, &ident, 1) {
-            inbox::EntryStatus::Rejected { reason } => {
-                assert!(reason.contains("CAS"), "{reason}")
-            }
-            other => panic!("应拒绝：{other:?}"),
-        }
-        // 毒消息不阻塞：正确版本的第二条命令照常完成。
-        inject_replace(
-            &host,
-            &ident,
-            json!({"modules": {"main": "exports.loop = () => {};"}, "expectedCodeVersion": 0}),
-        );
-        let processed = host.drain_command_prefix(4)?;
-        assert_eq!(processed, 1);
-        match entry_status(&host, &ident, 2) {
-            inbox::EntryStatus::Completed { result } => assert_eq!(result["codeVersion"], json!(1)),
-            other => panic!("第二条应完成：{other:?}"),
-        }
-        Ok(())
-    }
-
-    /// 非法载荷：验证拒绝且现役模块不动（旧代码继续跑）。含畸形
-    /// expectedCodeVersion（缺失/字符串/负数）——载荷校验走 Rejected
-    /// 终态而非 Err，队首毒消息被消费不形成活锁（三路 review 一致抓出
-    /// 的 P1 回归锁定）。
-    #[test]
-    fn invalid_payload_keeps_current_modules() -> anyhow::Result<()> {
-        let code = "exports.loop = () => { Memory.n = (Memory.n || 0) + 1; };";
-        let (mut host, ident) = host_v2("invalid", code);
-        for payload in [
-            json!({"modules": {}, "expectedCodeVersion": 0}),
-            json!({"modules": {"main": "exports.loop = () => {};"}, "expectedCodeVersion": 0, "entry": "missing"}),
-            json!({"expectedCodeVersion": 0}),
-            json!({"modules": {"main": "exports.loop = () => {};"}}),
-            json!({"modules": {"main": "exports.loop = () => {};"}, "expectedCodeVersion": "0"}),
-            json!({"modules": {"main": "exports.loop = () => {};"}, "expectedCodeVersion": -1}),
-        ] {
-            inject_replace(&host, &ident, payload.clone());
-            assert_eq!(
-                host.drain_command_prefix(4)?,
-                1,
-                "每条都应被消费为终态（载荷 {payload}）"
-            );
-            assert!(
-                host.fault().is_none(),
-                "载荷校验拒绝不得设置故障态（活锁回归）"
-            );
-        }
-        // 旧模块仍生效。
-        run_one_player(&mut host);
-        let raw = host.engine.player_state("p1").unwrap().raw_memory.clone();
-        assert_eq!(serde_json::from_str::<Value>(&raw)?["n"], json!(1));
-        Ok(())
-    }
-
-    /// 流绑定主体不是注册玩家：明确验证拒绝（授权类问题不升级为整服
-    /// 持久化冻结），毒消息不阻塞。
-    #[test]
-    fn unknown_principal_is_rejected_without_freezing() -> anyhow::Result<()> {
-        let (mut host, ident) = host_v2("ghost", "exports.loop = () => {};");
-        let mut state = inbox::load(&host.dir.inbox_file(), &ident.world_id)?;
-        inbox::accept::open_stream(&mut state, "ghost", "s1").unwrap();
-        let envelope = json!({
-            "worldId": ident.world_id,
-            "principal": "ghost",
-            "streamId": "s1",
-            "clientSeq": 1,
-            "kind": "code.replace",
-            "schemaVersion": 1,
-            "payload": {"modules": {"main": "exports.loop = () => {};"}, "expectedCodeVersion": 0},
-        });
-        match inbox::accept::accept(&mut state, &envelope, &inbox::InboxLimits::default(), 1) {
-            inbox::accept::AcceptOutcome::Received { .. } => {}
-            other => panic!("注入应接收: {other:?}"),
-        }
-        inbox::store(&state, &host.dir.inbox_file())?;
-        assert_eq!(host.drain_command_prefix(4)?, 1);
-        match entry_status(&host, &ident, 1) {
-            inbox::EntryStatus::Rejected { reason } => {
-                assert!(reason.contains("不是注册玩家"), "{reason}")
-            }
-            other => panic!("应拒绝：{other:?}"),
-        }
-        assert!(host.fault().is_none(), "授权类拒绝不得冻结");
-        Ok(())
-    }
-
-    /// 屏障确认后、inbox 存档前崩溃：恢复水位已含该身份时 drain 幂等
-    /// 补全（结果由当前版本号重构），不重新执行玩家模块切换。
-    #[test]
-    fn confirmed_barrier_before_archive_recovers_idempotently() -> anyhow::Result<()> {
-        let (mut host, ident) = host_v2("idem", "exports.loop = () => {};");
-        inject_replace(
-            &host,
-            &ident,
-            json!({"modules": {"main": "exports.loop = () => {};"}, "expectedCodeVersion": 0}),
-        );
-        assert_eq!(host.drain_command_prefix(4)?, 1);
-        // 模拟存档前崩溃：把 inbox 的终态回退为 Received、水位归零
-        // （屏障检查点与 effects 已含水位=1）。
-        let mut state = inbox::load(&host.dir.inbox_file(), &ident.world_id)?;
-        state.streams.get_mut("s1").unwrap().applied_seq = 0;
-        state
-            .streams
-            .get_mut("s1")
-            .unwrap()
-            .entries
-            .get_mut(&1)
-            .unwrap()
-            .status = inbox::EntryStatus::Received;
-        inbox::store(&state, &host.dir.inbox_file())?;
-
-        // 用同一宿主实例模拟恢复后的宿主：drain 已把 v2 上下文更新为
-        // 屏障值（水位=1），与真实恢复装配（run 启动自检查点 meta 重建
-        // V2SaveContext）数据同源等价；端到端恢复链路由集成用例覆盖。
-        // 幂等补全 Completed，不重新走 CAS/切换（expected 0 ≠ 当前 1，
-        // 若误重执行将 CAS 拒绝——补全路径不触发）。
-        assert_eq!(host.drain_command_prefix(4)?, 1);
-        match entry_status(&host, &ident, 1) {
-            inbox::EntryStatus::Completed { result } => {
-                assert_eq!(result["codeVersion"], json!(1), "结果由当前版本重构")
-            }
-            other => panic!("应幂等补全：{other:?}"),
-        }
-        Ok(())
-    }
-
-    /// 屏障发布失败：持久化故障冻结推进（保留内存版本、不发布完成）。
-    #[test]
-    fn publish_failure_freezes_as_persistence_fault() -> anyhow::Result<()> {
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let (mut host, ident) = host_v2("freeze", "exports.loop = () => {};");
-            struct Restore(PathBuf);
-            impl Drop for Restore {
-                fn drop(&mut self) {
-                    use std::os::unix::fs::PermissionsExt;
-                    let _ =
-                        std::fs::set_permissions(&self.0, std::fs::Permissions::from_mode(0o755));
-                }
-            }
-            let checkpoints = host.dir.checkpoints_dir();
-            let _restore = Restore(checkpoints.clone());
-            std::fs::set_permissions(&checkpoints, std::fs::Permissions::from_mode(0o500))?;
-            inject_replace(
-                &host,
-                &ident,
-                json!({"modules": {"main": "exports.loop = () => {};"}, "expectedCodeVersion": 0}),
-            );
-            assert!(host.drain_command_prefix(4).is_err(), "发布失败应上抛");
-            assert!(matches!(
-                host.fault(),
-                Some(crate::service::Fault::Persistence { .. })
-            ));
-            assert!(matches!(
-                entry_status(&host, &ident, 1),
-                inbox::EntryStatus::Received
-            ));
-        }
-        Ok(())
-    }
-}
+mod tests;

@@ -33,8 +33,30 @@ pub struct PlayerRun {
     pub executed: bool,
     /// 表达式结果：成功包含 `ok` 和可选的 `value`；失败包含 `ok`、`kind`、`error`。
     pub expr: Value,
+    /// 控制台表达式（S2.3）的求值结果；无输入或未执行（停跑轮）为 None。
+    pub console_expr: Option<Value>,
     /// 该玩家本次执行期间的 console 输出。
     pub console: Vec<String>,
+}
+
+/// 宿主侧受限 Mod 输入（S2.3）：以授予玩家身份注入当轮结算候选的
+/// 扩展意图。同对象同意图与玩家 wire 语义一致（后发覆盖——宿主意图
+/// 先注入，玩家自己的提交覆盖外部命令，不依赖到达先后）；结算层的
+/// 计划目录/参数 schema/接收者/owner_field 归属四门原样生效，核验
+/// 不过即丢弃。
+#[derive(Clone, Debug)]
+pub struct HostIntent {
+    /// 授予的代表玩家（授权身份：命令面经宿主授予表核验；结算层
+    /// owner_field 与之比对，fail-closed）。
+    pub player: String,
+    /// 目标对象 ID（wire 形态 `kk<十六进制>`；非 Mod 对象或不存在
+    /// 由结算侧丢弃）。
+    pub target: String,
+    /// 扩展意图键（namespace:name；namespace 须与命令主体包一致，
+    /// 由命令面核验）。
+    pub intent: String,
+    /// 意图参数（经冻结计划的 arguments schema 严格转换，不过即丢弃）。
+    pub args: Value,
 }
 
 /// 失败轮类别（`pending_round_kind` 返回值）：决定宿主的重试处置。
@@ -52,6 +74,8 @@ struct PendingRound {
     results: BTreeMap<String, RunResult>,
     /// 首次尝试的结算输入，保证重试不改变签名时间等墙钟相关字段。
     input: TickInput,
+    /// 与首次玩家结果绑定的外部意图；重试不能由调用方换一组输入。
+    host_intents: Vec<HostIntent>,
 }
 
 /// 执行结果无法全部确认的轮次。保留已确认结果供诊断，禁止自动重派。
@@ -842,6 +866,7 @@ impl Drop for EmbedEngine {
 
 mod checkpoint;
 mod execution;
+mod host_inputs;
 mod input_log;
 mod input_log_scan;
 mod mod_chain;

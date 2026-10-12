@@ -141,6 +141,25 @@ pub struct ServiceHost {
     frozen_live_tick: Option<u64>,
     /// v2 目录的保存上下文；None=v1 目录按 S1 语义保存。
     v2: Option<V2SaveContext>,
+    /// 已挂起的控制台表达式（S2.3）：主体 → 待求值命令。drain 挂起后由
+    /// 下一拍在 loop 前求值（每主体每拍一条）；拍成功提交后经即时屏障
+    /// 终态化。结算失败缓存整轮候选（表达式结果在候选内），Settle 重试
+    /// 复用缓存不重复求值；Execution 重建重跑按"未承诺只执行一次"重新
+    /// 求值。崩溃重启后命令仍 Received（终态未存档即未对外 completed），
+    /// 未耐久则重新消费，已确认屏障则从结果窗口补全。
+    pending_expr: BTreeMap<String, crate::service::host::commands::PendingExpr>,
+    /// 已挂起的受限 Mod 输入（S2.3）：包 namespace → 待注入意图。下一拍
+    /// 以授予玩家身份注入结算批（先于玩家 wire——玩家提交覆盖外部
+    /// 命令）；拍提交后与表达式一并经屏障终态化。每包每拍一条。
+    pending_mod_input: BTreeMap<String, crate::service::host::commands::PendingModInput>,
+    /// 受限 Mod 输入的代表授予表（包 namespace → 玩家列表，serve
+    /// config 的 mod_grants）；空表=无授予，一切代表提交被拒。
+    mod_grants: BTreeMap<String, Vec<String>>,
+    /// 与世界同份耐久的拍内命令结果，跨屏障/inbox 存档缺口补全。
+    command_results: crate::service::command_results::CommandResults,
+    /// 世界已提交而拍内命令屏障尚未完成：禁止普通/收尾保存旁路发布
+    /// 效果与旧命令水位，否则恢复会重复施加已保存的副作用。
+    pending_commands_committed: bool,
 }
 
 impl ServiceHost {
@@ -180,6 +199,11 @@ impl ServiceHost {
             recent_player_errors: VecDeque::new(),
             frozen_live_tick: None,
             v2: None,
+            pending_expr: BTreeMap::new(),
+            pending_mod_input: BTreeMap::new(),
+            mod_grants: BTreeMap::new(),
+            command_results: Default::default(),
+            pending_commands_committed: false,
         })
     }
 
@@ -222,7 +246,27 @@ impl ServiceHost {
             self.phase
         );
         anyhow::ensure!(self.fault.is_none(), "存在未处置故障，先重试或停止");
-        let runs = match self.engine.run_players(&self.codes) {
+        // 挂起的控制台表达式随本轮 RunJob 注入（loop 前求值、共用预算）；
+        // 结算失败缓存整轮候选，重试轮复用缓存结果（含表达式）。
+        let exprs: BTreeMap<String, String> = self
+            .pending_expr
+            .iter()
+            .map(|(player, pending)| (player.clone(), pending.source.clone()))
+            .collect();
+        let host_intents: Vec<crate::HostIntent> = self
+            .pending_mod_input
+            .values()
+            .map(|pending| crate::HostIntent {
+                player: pending.as_player.clone(),
+                target: pending.target.clone(),
+                intent: pending.intent.clone(),
+                args: pending.args.clone(),
+            })
+            .collect();
+        let runs = match self
+            .engine
+            .run_players_with_inputs(&self.codes, &exprs, &host_intents)
+        {
             Ok(runs) => runs,
             Err(error) => {
                 let reason = format!("{error:#}");
@@ -242,6 +286,13 @@ impl ServiceHost {
         self.dirty_ticks += 1;
         let mut player_errors = Vec::new();
         for (player, run) in runs {
+            // 已求值的表达式结果挂回待终态化（None=停跑轮未求值，保持
+            // 挂起下一拍重求；软异常的 {ok:false,...} 同样是已完成求值）。
+            if let (Some(pending), Some(result)) =
+                (self.pending_expr.get_mut(&player), run.console_expr)
+            {
+                pending.result = Some(result);
+            }
             let ok = run.executed && run.expr["ok"] == true;
             if !ok {
                 let record = json!({
@@ -256,6 +307,19 @@ impl ServiceHost {
                 self.recent_player_errors.push_back(record.clone());
                 player_errors.push((player, run.expr));
             }
+        }
+        // 拍已提交：已求值的表达式经即时屏障终态化（completed 携带求值
+        // 结果）。发布失败冻结，命令保持 Received；屏障已确认时从耐久
+        // 结果窗口补全，未确认时从旧锚点重新消费。
+        if self
+            .pending_expr
+            .values()
+            .any(|pending| pending.result.is_some())
+            || !self.pending_mod_input.is_empty()
+        {
+            self.pending_commands_committed = true;
+            self.finish_pending_commands()?;
+            self.pending_commands_committed = false;
         }
         Ok(Some(TickReport { player_errors }))
     }
@@ -275,12 +339,30 @@ impl ServiceHost {
         self.v2 = Some(context);
     }
 
+    pub fn set_command_results(
+        &mut self,
+        results: crate::service::command_results::CommandResults,
+    ) {
+        self.command_results = results;
+    }
+
+    /// 装配受限 Mod 输入的代表授予表（serve config 的 mod_grants；
+    /// run setup 调用一次，运行期不变）。
+    pub fn set_mod_grants(&mut self, grants: BTreeMap<String, Vec<String>>) {
+        self.mod_grants = grants;
+    }
+
     /// 立即发布当前已提交状态为新检查点并执行保留策略。序号在每次尝试
     /// 时按目录实况重新分配（不缓存：发布失败后目录环境可能变化，缓存
     /// 序号会与“紧接已发布版本”的不变式脱节）。失败按持久化故障处置：
     /// 冻结推进（retry 不可用），消息附带目标文件的实证状态——rename 后
     /// 父目录同步失败属耐久未知，调用方不能按“旧文件一定还在”重试。
     pub fn save_now(&mut self) -> SaveOutcome {
+        if self.pending_commands_committed {
+            return SaveOutcome::Failed {
+                reason: "拍内命令屏障未完成，禁止保存效果与旧消费水位；重启从耐久锚点恢复".into(),
+            };
+        }
         let dir = self.dir.checkpoints_dir();
         let seq = match checkpoints::next_publish_seq(&dir) {
             Ok(seq) => seq,
@@ -309,7 +391,7 @@ impl ServiceHost {
                     &context.code_versions,
                     context.outbox_cursor,
                 );
-                checkpoints::publish_with_meta(&self.engine, &dir, &meta)
+                checkpoints::publish_with_results(&self.engine, &dir, &meta, &self.command_results)
             }
             None => checkpoints::publish(&self.engine, &dir, seq, &self.identity, &self.entries),
         };

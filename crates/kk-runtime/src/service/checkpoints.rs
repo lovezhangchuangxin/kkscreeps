@@ -92,14 +92,31 @@ pub fn publish_with_meta(
     dir: &Path,
     meta: &super::metadata::ServiceCheckpointMeta,
 ) -> anyhow::Result<()> {
+    publish_with_results(
+        engine,
+        dir,
+        meta,
+        &super::command_results::CommandResults::default(),
+    )
+}
+
+/// 结果窗口与服务水位、权威世界原子发布，不能在屏障后另写结果文件。
+pub fn publish_with_results(
+    engine: &EmbedEngine,
+    dir: &Path,
+    meta: &super::metadata::ServiceCheckpointMeta,
+    results: &super::command_results::CommandResults,
+) -> anyhow::Result<()> {
     anyhow::ensure!(
         meta.publish_seq == next_publish_seq(dir)?,
         "发布序号 {} 不紧接目录已发布版本；须由 next_publish_seq 分配",
         meta.publish_seq
     );
     let path = dir.join(checkpoint_file_name(meta.publish_seq));
+    let mut metadata = metadata::engine_metadata(meta);
+    metadata["command_results"] = serde_json::to_value(results)?;
     engine
-        .save_checkpoint(&path, metadata::engine_metadata(meta))
+        .save_checkpoint(&path, metadata)
         .with_context(|| format!("发布服务检查点 {}", path.display()))
 }
 
@@ -161,6 +178,8 @@ pub fn select_latest(
         };
         let meta = metadata::decode(&value)
             .with_context(|| format!("候选 {} 服务元数据核验", file.display()))?;
+        super::command_results::CommandResults::decode(&value)
+            .with_context(|| format!("候选 {} 命令结果窗口核验", file.display()))?;
         anyhow::ensure!(
             meta.publish_seq == seq,
             "候选 {} 的载荷序号 {} 与文件名不一致",

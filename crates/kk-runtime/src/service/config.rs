@@ -1,4 +1,4 @@
-//! 服务运行配置（严格版本化 JSON v1）。
+//! 服务运行配置（严格版本化 JSON v2，含 v1 空授予表迁移）。
 //!
 //! 只承载操作配置（tick 节奏、并发/通道、保存/保留策略、退出等待与
 //! Mod 包来源）；世界与执行身份（种子、世界 ID、工作者预算、模块、
@@ -9,7 +9,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::Path;
 
-pub const CONFIG_FORMAT_VERSION: u32 = 1;
+pub const CONFIG_FORMAT_VERSION: u32 = 2;
 
 /// Mod 包来源：与场景的 mods 声明同形（root 相对配置文件目录解析），
 /// 供 run 恢复时装载并经检查点 ModIdentity 核验。
@@ -56,6 +56,12 @@ pub struct ServeConfig {
     pub exit_wait_secs: u64,
     #[serde(default)]
     pub mods: Option<ModsSource>,
+    /// 受限 Mod 输入（S2.3）的代表授予表：包 namespace → 允许代表的
+    /// 玩家列表。mod.input 命令的 asPlayer 必须在对应包的授予列表内
+    /// （命令面核验）；对象范围由结算层 owner_field 与授予玩家比对
+    /// fail-closed。缺省无授予——任何代表提交都被拒绝。
+    #[serde(default)]
+    pub mod_grants: BTreeMap<String, Vec<String>>,
 }
 
 fn default_tick_interval_ms() -> u64 {
@@ -85,8 +91,18 @@ impl ServeConfig {
     pub fn load(path: &Path) -> anyhow::Result<(Self, std::path::PathBuf)> {
         let bytes = std::fs::read(path)
             .map_err(|error| anyhow::anyhow!("读取服务配置 {}: {error}", path.display()))?;
-        let config: ServeConfig = serde_json::from_slice(&bytes)
+        let mut config: ServeConfig = serde_json::from_slice(&bytes)
             .map_err(|error| anyhow::anyhow!("解析服务配置 {}: {error}", path.display()))?;
+        // v1 → v2 显式迁移：旧字段集原样沿用，新增授予表为空；v1 携带
+        // v2 字段仍拒绝，不能把新增权限静默解释为旧协议。
+        if config.config_format_version == 1 {
+            let value: Value = serde_json::from_slice(&bytes)?;
+            anyhow::ensure!(
+                value.get("mod_grants").is_none(),
+                "v1 不支持 mod_grants；请将 config_format_version 升至 2"
+            );
+            config.config_format_version = CONFIG_FORMAT_VERSION;
+        }
         config.validate()?;
         let state_dir = match path.parent() {
             Some(parent) if !parent.as_os_str().is_empty() => parent.join(&config.state_dir),
@@ -154,7 +170,19 @@ mod tests {
         assert!(
             load_text(r#"{"config_format_version": 1, "state_dir": "s", "surprise": 1}"#).is_err()
         );
-        assert!(load_text(r#"{"config_format_version": 2, "state_dir": "s"}"#).is_err());
+        assert!(load_text(r#"{"config_format_version": 3, "state_dir": "s"}"#).is_err());
+        assert!(
+            load_text(r#"{"config_format_version": 2, "state_dir": "s", "state_dir": "other"}"#)
+                .is_err()
+        );
+        assert!(
+            load_text(r#"{"config_format_version": 1, "state_dir": "s", "mod_grants": {}}"#)
+                .is_err()
+        );
+        let (config, _) = load_text(
+            r#"{"config_format_version": 2, "state_dir": "s", "mod_grants": {"example": ["p1"]}}"#,
+        )?;
+        assert_eq!(config.mod_grants["example"], ["p1"]);
         assert!(
             load_text(r#"{"config_format_version": 1, "state_dir": "s", "tick_interval_ms": 0}"#)
                 .is_err()

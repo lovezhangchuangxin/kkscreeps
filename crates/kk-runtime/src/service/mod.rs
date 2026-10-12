@@ -6,6 +6,7 @@
 //! （[`config`]）。命令边界与 outbox 随 S2 切片接入；方案见
 //! docs/plans/service-playable-batches.md。
 pub mod checkpoints;
+pub mod command_results;
 pub mod config;
 pub mod dir;
 pub mod effects;

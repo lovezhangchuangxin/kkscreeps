@@ -20,12 +20,75 @@ fn result(intents: IntentBatch) -> RunResult {
         intents,
         intents_raw: serde_json::Value::Null,
         expr: serde_json::Value::Null,
+        console_expr: None,
         cpu_billed_ms: None,
         raw_memory: None,
         ism_local: None,
         segments_out: None,
         console: Vec::new(),
     }
+}
+
+#[test]
+fn host_intents_lose_to_player_wire_on_same_key_and_survive_on_others() {
+    // S2.3 宿主意图合并语义：玩家 wire 对同 (对象, 意图键) 覆盖宿主注入
+    // （结构性玩家优先），玩家未提交的宿主键保留；玩家自有意图族不受
+    // 宿主注入影响。
+    let mut wire = IntentBatch::default();
+    wire.add_ext_intent(
+        "p1",
+        ObjId(1),
+        kk_mod_api::Key::new("example:playerOnly").unwrap(),
+        json!({"from": "player"}),
+    );
+    wire.add_ext_intent(
+        "p1",
+        ObjId(1),
+        kk_mod_api::Key::new("example:shared").unwrap(),
+        json!({"from": "player"}),
+    );
+    wire.add_object_intent("p1", ObjId(1), Action::Move, IntentData::bare());
+    let host = vec![
+        // 同键：宿主先注入，玩家 wire 覆盖。
+        crate::HostIntent {
+            player: "p1".into(),
+            target: "kk1".into(),
+            intent: "example:shared".into(),
+            args: json!({"from": "host"}),
+        },
+        // 玩家未提交的键：宿主保留。
+        crate::HostIntent {
+            player: "p1".into(),
+            target: "kk1".into(),
+            intent: "example:hostOnly".into(),
+            args: json!({"from": "host"}),
+        },
+        // 非 Mod 对象 ID 形非法（kk9f 越界十六进制字符？kkff 合法但对象
+        // 不存在——构造层不查存在性，结算层负责；这里校验 wire 形合法即注入）。
+    ];
+    let batch =
+        EmbedEngine::batch_with_host_intents(&BTreeMap::from([("p1".into(), result(wire))]), &host);
+    let user = &batch.users["p1"];
+    let ext = &user.ext[&ObjId(1)];
+    assert_eq!(
+        ext[&kk_mod_api::Key::new("example:shared").unwrap()],
+        json!({"from": "player"}),
+        "同键玩家覆盖宿主"
+    );
+    assert_eq!(
+        ext[&kk_mod_api::Key::new("example:hostOnly").unwrap()],
+        json!({"from": "host"}),
+        "玩家未提交的宿主键保留"
+    );
+    assert_eq!(
+        ext[&kk_mod_api::Key::new("example:playerOnly").unwrap()],
+        json!({"from": "player"}),
+        "玩家自有键不受影响"
+    );
+    assert!(
+        user.objects.contains_key(&ObjId(1)),
+        "玩家对象动作随合并保留"
+    );
 }
 
 #[test]

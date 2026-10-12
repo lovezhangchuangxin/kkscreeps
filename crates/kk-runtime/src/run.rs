@@ -57,6 +57,10 @@ pub struct RunResult {
     pub intents_raw: serde_json::Value,
     /// runExpr 结果 JSON（screeps-ok 通道：`{ok, value?} | {ok:false, kind, error}`）。
     pub expr: serde_json::Value,
+    /// 控制台表达式（S2.3）的求值结果，与 expr 同分类体系；无表达式
+    /// 输入或未执行（停跑轮）为 None。随失败候选缓存，Settle 重试不
+    /// 重复求值。
+    pub console_expr: Option<serde_json::Value>,
     /// 本轮 CPU 计费候选，单位毫秒；None 表示没有产出。
     pub cpu_billed_ms: Option<f64>,
     /// 本轮 RawMemory 写回候选；None 表示未产出或写回失败。
@@ -78,6 +82,7 @@ impl RunResult {
             outcome: RunOutcome::InjectFailed,
             intents: IntentBatch::default(),
             intents_raw: serde_json::Value::Null,
+            console_expr: None,
             expr: serde_json::json!({
                 "ok": false, "kind": "inject_failed", "error": error.into(),
             }),
@@ -96,6 +101,7 @@ impl RunResult {
             outcome: RunOutcome::InfraFailure(error.into()),
             intents: IntentBatch::default(),
             intents_raw: serde_json::Value::Null,
+            console_expr: None,
             expr: serde_json::Value::Null,
             cpu_billed_ms: None,
             raw_memory: None,

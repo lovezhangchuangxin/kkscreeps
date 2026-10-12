@@ -4,22 +4,24 @@
 
 ## 当前接手位置
 
-- 更新日期：2026-10-12；S1.1（54db7774）、S1.2（c27db2d3）、S1.3（78b28e15）、S2.1（f2001ed2）与 S2.2（代码边界事务，本次提交）已实现：serve init/run、严格版本化配置、网格调度（anchor/pending 两点接线）、Paused/Persistence 故障语义、周期保存与收尾保存、stdio 控制、SIGTERM 优雅退出与租约互斥；两玩家/两房/nursery Mod 场景冷恢复续存验收（世界/Memory/CPU/入口/Mod 状态核对、JSON/KKPV 双通道、撕裂回退与同步失败不发布水位）；耐久命令面 v2（inbox 接收/幂等/预算/流生命周期、effects 恢复下限、enable-inbox 启用事务、FIFO 命令消费、code.replace CAS+即时屏障+崩溃窗口两段确认、链路级矩阵用例）见各实施记录。下一实施入口为 S2.3 玩家表达式与受限 Mod 输入；G27.b/G28.a 等父项状态不变。
+- 本轮接手复审已完成（2026-10-12，HEAD `59710e0b`）：S2.3 补齐预算中断、耐久结果、失败保存、输入固定/回放、授权与配置迁移；6 项 Review 问题已清偿，完整门禁与兼容棘轮通过，已完成并纳入本次提交。下一接手入口 S2.4；不标 G27.b/M3 全域完成。
+
+- 更新日期：2026-10-12；S1.1（54db7774）、S1.2（c27db2d3）、S1.3（78b28e15）、S2.1（f2001ed2）与 S2.2（59710e0b：代码边界事务）已实现：serve init/run、严格版本化配置、网格调度（anchor/pending 两点接线）、Paused/Persistence 故障语义、周期保存与收尾保存、stdio 控制、SIGTERM 优雅退出与租约互斥；两玩家/两房/nursery Mod 场景冷恢复续存验收（世界/Memory/CPU/入口/Mod 状态核对、JSON/KKPV 双通道、撕裂回退与同步失败不发布水位）；耐久命令面 v2（inbox 接收/幂等/预算/流生命周期、effects 恢复下限、enable-inbox 启用事务、FIFO 命令消费、code.replace CAS+即时屏障+崩溃窗口两段确认、链路级矩阵用例）见各实施记录。S2.3 玩家表达式与受限 Mod 输入已实现（本次提交，接手 Review 和完整门禁已完成，实施记录见下节）；下一入口 S2.4 outbox；G27.b/G28.a 等父项状态不变。
 - 性能主线已按用户要求暂缓：50 玩家×6 个 RCL8 满功能成熟房，共 300 房。已交付 KKPV 共享编码/视图复用、信封直构、条件逐房并行、克隆-结算重叠、预校验 commit 与融合校验；完整紧凑存储/变化集/列式共享直读仍为目标。旧投影预取两版已撤回，恢复时从 run 注入协议重新核验归因，最终验收未完成。
 - 最新标尺记录为 kk/xxs 耗时比中枢 1.0492、热窗 0.9859，来源为[归档接手记录](archive/mod-history-2026-10.md#接手位置沿革)；未找到随最新两片入库的同口径双端标尺明细，不能据此声称本轮独立复算或已正式领先。热态、分段收益及原始窗口须一起判断。
 - 默认玩法：19/19 powers 已接通；[兼容机器报告](../../compat/reports/kkscreeps.json)为 2905/2914 passed、9 failed、0 pending，原始 success=false，按既有差异登记通过棘轮不等于套件全绿或 M2B 整体完成。地图生成、stronghold 战术 AI/create-creep、bot 对战、多房扩张运营与 Overmind 旗标出兵仍有缺口。
 - 真实 bot 已有经济、防御、双房进攻和长期存活/冷恢复证据，见[验收说明](../../compat/README.md)。各报告绑定归档二进制，本 HEAD 未重跑；86400 tick 是 72h 等价游戏时间，不是 72h 墙钟服务长跑。
 - Mod 已有对象/资源/建筑、部分战斗/移动策略、作者 CLI/类型、检查点与回放；默认玩法消费者已实现不代表 Mod 替换能力开放，父项缺口见下表。
-- 服务线：G27.a 独立后台宿主/只读探针已交付；常驻调度、无日志目录恢复、G27.b 耐久输入/outbox、数据库/provider、HTTP/WS 和完整客户端仍未交付。renderer R0–R6 已交付，R7 最终矩阵/长测未收口，此前暂缓的长测不因本轮文档整理自动启动。
+- 服务线：G27.a 独立后台宿主/只读探针已交付；S1 常驻调度/无日志恢复与 S2.1–S2.3 耐久命令首片已实现；G27.b 的后台 enqueue/outbox、数据库/provider、HTTP/WS 和完整客户端仍未交付。renderer R0–R6 已交付，R7 最终矩阵/长测未收口，此前暂缓的长测不因本轮文档整理自动启动。
 
 ## 当前执行队列
 
-以下仅安排未完成工作；性能主线按用户 2026-10-12 要求暂缓。用户已选择服务功能方向，本轮完成目标设计，下一实施入口建议 S1.1（文件发布/目录租约/无日志恢复），不把设计视为已交付。服务线保留 G27.b → G28.a 的硬依赖；Mod 领域按子片依赖选择，不按父编号机械串行。
+以下仅安排未完成工作；性能主线按用户 2026-10-12 要求暂缓。用户已选择服务功能方向，S1 与 S2.1–S2.3 已实现并验证，当前实施入口为 S2.4；网络/后台 enqueue 与 outbox 的目标设计不视为已交付。服务线保留 G27.b → G28.a 的硬依赖；Mod 领域按子片依赖选择，不按父编号机械串行。
 
 | 顺位 | 任务 | 首片与完成条件 |
 |---|---|---|
-| 1（进行中：S1 已交付，S2 进行中） | S1 常驻运行与无日志检查点恢复 | S1（54db7774/c27db2d3/78b28e15）已交付；S2.1（f2001ed2：inbox 接收面/幂等/预算/流生命周期、effects 恢复下限锚点、service v2 元数据与选择门、enable-inbox 启用事务含中断续接）与 S2.2（本次提交：FIFO 命令消费、code.replace CAS/校验/即时屏障、崩溃窗口两段确认、rejected 不建屏障、统一冻结语义）已交付；S2.3 玩家表达式与受限 Mod 输入为当前入口；默认关闭审计日志，恢复后同目录续存；此片不标 G27.b 或 M3 完成 |
-| 2（进行中：S2.1/S2.2 已交付） | S2/G27.b 耐久输入/outbox | S2.1（f2001ed2）与 S2.2（本次提交）已交付；当前入口 S2.3 表达式/受限 Mod 输入 → S2.4 幂等投递；最终确认与外部投递等待耐久屏障，恢复不跨已确认下限；不等待 JS storage provider |
+| 1（进行中：S1 已交付，S2 进行中） | S1 常驻运行与无日志检查点恢复 | S1（54db7774/c27db2d3/78b28e15）已交付；S2.1（f2001ed2：inbox 接收面/幂等/预算/流生命周期、effects 恢复下限锚点、service v2 元数据与选择门、enable-inbox 启用事务含中断续接）与 S2.2（59710e0b：FIFO 命令消费、code.replace CAS/校验/即时屏障、崩溃窗口两段确认、rejected 不建屏障、统一冻结语义）已交付；S2.3 玩家表达式与受限 Mod 输入已实现并通过接手 Review（本次提交）；下一入口 S2.4；默认关闭审计日志，恢复后同目录续存；此片不标 G27.b 或 M3 完成 |
+| 2（进行中：S2.1/S2.2 已交付） | S2/G27.b 耐久输入/outbox | S2.1（f2001ed2）与 S2.2（本次提交）已交付；S2.3 表达式/受限 Mod 输入已实现并验证（本次提交）；当前入口 S2.4 幂等投递；最终确认与外部投递等待耐久屏障，恢复不跨已确认下限；不等待 JS storage provider |
 | 3（设计完成，写入依赖 S2） | S3/G28.a → G29.b 最小真实联网闭环 | S3.1 认证/命令/DTO → S3.2 授权房间订阅 → S3.3 两玩家实际客户端 → S3.4 分发/只读 provider；固定地图/预建玩家首片，官方 HTTP/sockjs 兼容另验，不标 M3 或 G21 全域完成 |
 | 随服务验证 | Linux 服务容量与恢复验收（2GB 参考） | 50 玩家×6 房、300 占用房，另覆盖目标 9 区块地图的注册地形规模；短探针只覆盖 300 房，不能代表整幅地图或成熟 bot 负载。长窗观察 RSS/GC、tick 延迟、保存峰值与冷启动，区分合成 worker 与真实 bot；同机 xxscreeps 正式对照另按性能验收口径完成 |
 | 独立候选 | 默认玩法与真实 bot 补验 | bot 对战、多房扩张运营、Overmind 旗标出兵；stronghold 战术 AI/create-creep 与地图生成另拆。9 个既有兼容失败按官方语义/套件仲裁继续保留证据，不为追求百分比改变已确认契约 |
@@ -62,7 +64,7 @@ G30.a 覆盖清单与 G30.d 同功能参考随领域滚动；新增写入域当�
 | G24 | tick 边界更新/watch | 部分完成 | .a 无开放轮次的包/API 切换已交付；watch 未开始；[检查点](../architecture/checkpoints.md) |
 | G25 | 输入日志与结算回放 | 已完成 | .a 日志协议/保存、.b 回放/完整状态核对；[输入日志](../architecture/input-log.md) |
 | G26 | 自动检查点/storage | 部分完成 | .a 周期保存/keep/恢复选择已交付；.b provider 未实现，G27.a 前置已交付；[检查点](../architecture/checkpoints.md) |
-| G27 | 后台服务/outbox | 部分完成 | .a 独立异步宿主与有限只读探针已交付，见[后台服务](../architecture/background-services.md)；.b 耐久输入/outbox 未实现 |
+| G27 | 后台服务/outbox | 部分完成 | .a 独立异步宿主与有限只读探针已交付，见[后台服务](../architecture/background-services.md)；.b 耐久输入首片（S2.1–S2.3）已实现；后台 JS enqueue/outbox 未实现 |
 | G28 | Backend 贡献 | 未开始 | .a M3 最小真实服务；.b 路由/订阅/provider，依赖后台与输入边界 |
 | G29 | 玩家类型与客户端 | 部分完成 | .a mod types / --check 已交付；.b 真实客户端、.c 资产/渲染/面板未开始；[类型生成](../architecture/mod-types.md) |
 | G30 | 预设/覆盖/性能验收 | 未开始 | .a 覆盖清单、.d 同功能参考先滚动；.b 官方预设、.c 内容所有权迁移、.e 最终收口 |
@@ -192,6 +194,17 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - 范围声明：S2.2 交付 code.replace 一种命令的完整事务；玩家表达式与受限 Mod 输入（S2.3）、淘汰/evict 接线（消费推进时按 floor≤next_client_seq 契约接）、outbox（S2.4）、模块预算服务配置化与 HTTP 入口（S3）不在本批。进程内接收 API 的宿主接线仍待 S3 网络入口（测试经文件注入验收消费面）。
 - 实际验证：`cargo test -p kk-runtime --lib service` 45 项（commands 6 项：主链路即时屏障/CAS 不阻塞/非法载荷保现役含畸形 expectedCodeVersion/未知主体拒绝/幂等补全/发布失败冻结）；`cargo test -p kk-cli --test serve_tests` 19 项（S2.2 新增 3 项：主链路集成 + 两条链路级崩溃窗口——矩阵 2 幂等补全真恢复（回退 inbox 终态→重启→补全不建新屏障）/矩阵 3 孤儿屏障（effects 回拨 enable 锚点→重启→floor 身份门过滤孤儿链→回旧链重新消费收敛）；进程内恢复经 recovery::mod_loadout 提取的共享装载辅助）；完整无参数 `pnpm run check`（含 Clippy）通过——过程中 Clippy 曾拦下 run.rs single_match 与测试辅助 unnecessary_cast 两处（首两轮 tail 管道退出码不可信已废弃，改 && 链真实传递）。文档：service-host.md 耐久命令面节升 S2.2 + 页首/边界节矛盾修正；state-inventory.md 服务域节与表格同步。
 - Review 闭环（3 路 subagent，A 行为正确性/B 持久化崩溃恢复/C 边界测试契约）：初审 A/C FAIL、B FAIL，三路一致抓出 **P1=畸形 expectedCodeVersion（缺失/非 u64）走裸 Err 而非 Rejected 终态**——drain 该 Err 不设 fault，drive 形成无故障态活锁（A/B 真实子进程实测：tick 永久饿死、命令永无终态、SIGTERM 退出 0 掩盖、重启复现；单测的非法载荷恰好全带合法字段零覆盖）。修复：载荷校验改 reject 闭包（缺字段/字符串形态即时入用例锁定；负数形态在复核后补入——初审记录曾虚称三种齐备）+ drain 对未冻结 Err 兜底 freeze（Err 必伴随 fault 的契约由代码保证）+ drain 前置 fault 检查。B 对崩溃矩阵六窗口全部以真实二进制注入实证（received 前存续/幂等补全真恢复/孤儿屏障回旧链收敛/拒绝水位分离无误判/发布失败冻结重启收敛/冻结停止退出 2）——实现全对，缺链路级固化；已补矩阵 2/3 两条 serve_tests 用例。其余修复：A-P2 未知主体 code.replace 从整服冻结改为明确拒绝（授权类不升级持久化故障，入用例）；A/B-P2 publish_barrier 的 effects 损坏被 unwrap_or_default 吞掉违反自身停服契约——改 Err 上抛（夹具补初始 effects，满足"effects 在首次屏障前存在"不变量）；A-P2 命令冻结后收尾保存的 engine/meta 分歧检查点——评审 B 实证重启收敛（floor 同屏障同水位放行→CAS 随 meta 回滚→drain 先于 tick 重新消费），取契约如实修正路线（注释+边界节记录已知形态，不改行为——回滚模块表需新导出 API 且引入回滚自身故障模式）；B-P3 drain 后 continue 级联清空使 DRAIN_BATCH 防垄断失效——改不回循环顶；B-P3 幂等补全结果形状不对称（原生带 note）——结果统一 `{"codeVersion":N}`；A-P3 幂等补全门对 S2.3 不可推导 kind 的降级风险——代码注释登记约束；A/C-P3 host.rs derive_player_code 注释错位（tick 的 doc 挂错）修正；A/B/C-P3 stream_principal 每命令整读一次 inbox 冗余——drain 已加载状态直传 principal；A/C-P3 集成注入循环未断言 accept 结局——补 match 断言；B-P3 test.ping 用例意图偏移——断言升级为现行消费语义（unknown kind 明确拒绝+水位推进+明细保留）；C-P2 service-host.md 页首仍标 S1.2/边界节写"S2.2 未交付"与新节自相矛盾——页首升 S2.2 现行、边界节重写；C-P3 state-inventory 表格 identity/metadata 行仍只写 v1——同步 v2 口径；C-P3 幂等单测模拟方式——注释说明与真实恢复装配的数据同源等价。B 确认无问题项：水位 map 单调、孤儿屏障永不复出（随机 barrier_id+身份门）、序号不复用、enforce_keep 顺序（anchor_seq 更新先于调用）、run.rs 恢复时锚点保护两视图不脱节。C 确认无问题项：模块边界（kk-runtime→kk-runner 既有依赖）、单一所有者（drain 调用点必无开放轮）、行数全部门禁内（commands.rs 674/host.rs 483）、两套检查点选择入口的契约区分清晰、预算两层正交。终态复核：A/B/C 三路全部 PASS——A 确认活锁路径结构不可达（双防线+兜底无双重包装+P2-3 处置接受）并独立复跑 45/19；B 以真实二进制复验畸形载荷活锁已灭（tick 满速推进 25→98、Rejected 终态、applied_seq=1、退出 0、锚点不动）、确认两条链路用例忠实复刻其实验 B/C 形态（锚点双不变⟺无新屏障、effects 原副本逐字写回）、effects 上抛后崩溃语义收敛且已登记、freeze 组合无双重包装；C 确认文档三处逐句成立、45/19 可复算、行数（commands.rs 672/host.rs 481）与 fmt 门禁通过、新用例无恒真谓词。复核残留 P3 已全部清偿：负数载荷补入 invalid_payload（6 形态）；交付描述"有处理即 continue"与终态代码的矛盾修正；夹具注释失实修正（enable 实际顺序为屏障→inbox→effects，真实不变量是"effects 在首次屏障前存在"）；set_player_modules 基础设施 Err→freeze 映射无直接注入用例（publish_failure 只覆盖发布路径，未知主体拒绝已由前置校验拦截）落账为不阻塞备忘；service-host.md "Err 必伴随 fault"限定为数据面（phase 前置守卫为纯防御断言，drive 侧不可达）；test.ping 用例 doc 行更新为现行消费语义；孤儿用例 keep 窗口时序假设显式注释（保存密度增大时旧链份被清理则正确停服、用例响亮失败）。矩阵 5"发布失败冻结+收尾分歧检查点→重启收敛"的链路级固化与幂等补全门 S2.3 不可推导约束的运行时防御挂 S2.3 顺手处理。终态验证：`cargo test -p kk-runtime --lib service` 45 项、`cargo test -p kk-cli --test serve_tests` 19 项、完整无参数 `pnpm run check`（含 Clippy）通过。
+### 2026-10-12 S2.3 玩家表达式与受限 Mod 输入实施记录
+
+- 范围：console.expr 随玩家 RunJob 在 loop 前求值，共用预算；软异常继续、硬中断跳过主代码；8KiB 源码与 64KiB 结果预算。mod.input 绑定当前冻结对象意图，以配置授予玩家身份注入，消费时核验活动包/目录/schema/目标/归属，结算再次核验；玩家同对象同意图优先。首片全局 FIFO 每拍至多一条拍内命令，不宣称后台 JS enqueue 或 S2.4 outbox 已交付。
+- 候选/耐久：Settle 候选固定表达式结果与宿主输入，重试不重新求值或换命令。提交后世界、水位和独立 `metadata.command_results` v1 结果窗口同份发布，effects 确认后写 inbox 终态；屏障已确认但终态未存档时恢复原结果，不重复副作用。屏障失败冻结并禁止普通/收尾保存已变化世界与旧水位。窗口在后继屏障清理已存档结果；旧 S2.2 缺树显式迁移为空，存在但未来/畸形/超预算/超消费水位拒绝，已确认表达式缺结果冻结。
+- 配置：config_format_version 升至 2；v1 无新字段时显式迁移为空授予表，v1 携带 mod_grants 拒绝。引擎/目录/inbox/effects 版本不变，新增结果树有独立版本门。宿主意图加入审计日志最终扩展意图，包含无 RunJob 玩家，原玩家原始 wire 的其他部分保留，回放不执行 JS。
+- 接手 Review 修复：P1 硬中断解除看门狗后仍执行主代码；P1 已耐久表达式在存档缺口重复副作用；P1 屏障失败后停止保存能发布世界与旧水位；P2 宿主输入未固定进失败候选且审计日志遗漏；P2 mod.input 未核验当前计划/目标/归属，原 accepted 夹具使用不存在的意图；P2 新配置字段未升版。均已修复并增加回归。模块边界按职责复审：proto/eval 管求值预算/写回，embed/host_inputs 管授权/合并，service/command_results 管独立结果树；未压缩代码规避行数门禁。
+- 本轮实际验证：`cargo test -p kk-runtime --lib service` 61 项通过；`cargo test -p kk-cli --test serve_tests` 20 项在完整门禁中通过。最终无参数 `pnpm run check` 通过（Rust/JS workspace、Clippy、维护工具、文档链接及 1028 个源码/测试文件规模门禁）；新增完整引擎状态回放等值与配置重复字段拒绝均进入最终门禁。已重建 debug/release CLI，核验 screeps-ok 固定 commit，运行 fetch-bots、适配器 build 与 release `node compat/scripts/ratchet.mjs`：2905/2914 passed、9 既有 failed、0 pending，门禁通过；另与接手时报告逐例比对 2914 项状态零变化（原始 success=false，未宣称全绿）。兼容报告刷新，未跑此前暂缓长测。首次完整门禁发现新增测试单元素循环的 Clippy 错误，已修复；新增故障夹具调试时的 V8 LIFO/空 Memory/恢复窗口时序问题已改为正确生命周期和可发生的崩溃窗口。日志 `/tmp/kkscreeps-s23-review-check.log`；S2.3 复审无未清偿的阻塞项；用户要求提交后继续审查 S1.1 至今的整条服务链，跨批 Review 尚待执行，剩余交付范围见下条。
+- 已完成并纳入本次提交，HEAD `59710e0b`；完成本片后下一入口 S2.4 outbox，S3 网络/后台 enqueue、淘汰与预算配置化仍未交付。此前性能/长测暂缓保持。
+
+## 台账维护与每批验收
+
 
 
 

@@ -14,7 +14,7 @@ mod run;
 pub mod service;
 pub mod world_source;
 
-pub use embed::{EmbedEngine, PlayerRun};
+pub use embed::{EmbedEngine, HostIntent, PlayerRun};
 pub use kk_runner::RunEpoch;
 pub use mod_trace::{ModTraceEntry, ModTraceEvent};
 pub use mod_vm::{ModAutoDisable, ModFaultStreak, ModSettlementFault};

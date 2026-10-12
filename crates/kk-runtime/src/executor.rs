@@ -346,6 +346,7 @@ fn eval_report_to_run_result(player: &str, report: kk_runner::EvalReport) -> Run
         intents,
         intents_raw,
         expr: report.expr,
+        console_expr: report.console_expr,
         // 仅转换回执；协调器计算桶候选并将 Memory、段及桶值交给引擎发布。
         cpu_billed_ms: report.cpu_billed_ms,
         raw_memory: report.raw_memory,
@@ -373,6 +374,7 @@ mod tests {
                 outcome: RunOutcome::Executed,
                 intents: IntentBatch::default(),
                 expr: self.expr.clone(),
+                console_expr: None,
                 cpu_billed_ms: None,
                 raw_memory: None,
                 ism_local: None,
@@ -488,6 +490,7 @@ mod tests {
         use serde_json::json;
         let mk = |kind: &str| kk_runner::EvalReport {
             expr: json!({ "ok": false, "kind": kind, "error": "e" }),
+            console_expr: None,
             console: vec![kk_runner::LogLine {
                 level: "log".into(),
                 text: "hi".into(),
@@ -526,6 +529,7 @@ mod tests {
             kkpv_public: None,
             world: json!({"time":0,"rooms":{},"objects":[]}),
             code: code.into(),
+            pre_expr: None,
             epoch: RunEpoch::default(),
             attempt,
             deadline: None,
