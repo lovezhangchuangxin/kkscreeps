@@ -8,8 +8,14 @@ use std::path::Path;
 
 /// identity.json 自身的线格式版本（信封版本）。
 pub const IDENTITY_FORMAT_VERSION: u32 = 1;
-/// 服务域格式版本：v1=S1 常驻与恢复；v2=S2 追加命令水位/outbox（另切片）。
-pub const SERVICE_FORMAT_VERSION: u32 = 1;
+/// 服务域格式版本：v1=S1 常驻与恢复；v2=S2 耐久命令面（inbox/屏障/
+/// 恢复下限，字段见 metadata）。v1 目录经 `serve enable-inbox` 显式升级。
+pub const SERVICE_FORMAT_V1: u32 = 1;
+pub const SERVICE_FORMAT_V2: u32 = 2;
+/// 新写入身份使用的当前版本（enable 前的 init 仍写 v1）。
+pub const SERVICE_FORMAT_VERSION: u32 = SERVICE_FORMAT_V1;
+/// 当前二进制可运行的身份版本集。
+pub const SUPPORTED_SERVICE_FORMATS: [u32; 2] = [SERVICE_FORMAT_V1, SERVICE_FORMAT_V2];
 
 const IDENTITY_SPEC: kk_storage::EnvelopeSpec = kk_storage::EnvelopeSpec {
     format: "kkscreeps-service-identity",
@@ -70,10 +76,10 @@ fn validate(identity: &ServiceIdentity) -> anyhow::Result<()> {
         "身份标记未完成初始化；目录处于半初始化状态，拒绝使用"
     );
     anyhow::ensure!(
-        identity.service_format_version == SERVICE_FORMAT_VERSION,
-        "服务格式版本 {} 不被当前二进制支持（期望 {}）；需按迁移流程升级",
+        SUPPORTED_SERVICE_FORMATS.contains(&identity.service_format_version),
+        "服务格式版本 {} 不被当前二进制支持（支持 {:?}）；需按迁移流程升级",
         identity.service_format_version,
-        SERVICE_FORMAT_VERSION
+        SUPPORTED_SERVICE_FORMATS
     );
     anyhow::ensure!(
         identity.scenario_sha256.len() == 64
@@ -139,7 +145,7 @@ mod tests {
                 ..sample()
             },
             ServiceIdentity {
-                service_format_version: 2,
+                service_format_version: 3,
                 ..sample()
             },
         ] {

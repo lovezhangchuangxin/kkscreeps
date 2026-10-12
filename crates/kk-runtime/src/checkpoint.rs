@@ -11,7 +11,7 @@ pub const CHECKPOINT_VERSION: u32 = 1;
 pub const MAX_CHECKPOINT_BYTES: u64 = 256 * 1024 * 1024;
 
 /// 检查点信封规格：格式名、线格式版本与 256 MiB 单文件上限。
-pub(crate) const SPEC: EnvelopeSpec = EnvelopeSpec {
+pub const SPEC: EnvelopeSpec = EnvelopeSpec {
     format: "kkscreeps-checkpoint",
     version: CHECKPOINT_VERSION,
     max_bytes: MAX_CHECKPOINT_BYTES,

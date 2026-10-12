@@ -84,3 +84,9 @@
 - **RNG**：随机协议自 G22.b 落地（[确定性玩法时间与随机协议](gameplay-determinism.md)）：Mod 面抽值由（世界种子、流域、tick、域内序号）无状态推导，序号按结算轮重置——持久化随机状态就是世界种子本身，不新增独立域；引擎结算墙钟仍按 ADR-013 记录型外部输入处理（每轮输入由[输入日志](input-log.md)逐轮记录并支持跨进程续接；G25.b 的回放核对是 sim 进程内旗标 `--verify-replay`，独立跨进程 replay 子命令未实现）。
 
 sim 的日志游标现为 `{last_seq,last_tick,sha256}`，由 runtime 导出末段真实链摘要，并由 `InputLogData::segments_after_cursor` 消费。它不进入引擎键树（metadata 为不透明叶子），但目录恢复端到端测试覆盖零段错历史、较旧份重放与分支后缀。Mod 建筑的已存在自定义字段在编辑、恢复、发布三处验证；缺默认键的手放记录仍允许存在，整集写回须补齐。
+
+## 服务域耐久状态（S2.1 起）
+
+- `inbox.json` v1：命令接收面单一原子最新状态（活跃流、nextServerSeq、已接收水位、未淘汰明细含载荷与摘要）。不随游戏检查点回滚；损坏=停服条件。字段与预算语义见[常驻服务宿主](service-host.md#耐久命令面s21-现行接收与恢复下限)。
+- `effects.json` v1：恢复下限锚点（屏障检查点身份与命令消费水位）与各 sink 确认水位（S2.4 填值）。单调前进，不随检查点回滚。
+- 检查点 `metadata.service` v2：v1 字段之上追加 barrier_id/inbox_applied/code_versions/outbox_cursor（Option 平滑解码 v1 形状；v2 目录合法候选须四者齐备）。

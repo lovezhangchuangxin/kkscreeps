@@ -132,18 +132,37 @@ fn setup(
     let (config, state_dir) = service::config::ServeConfig::load(config_path)?;
     let dir = ServiceDir::new(&state_dir);
     dir.validate_for_run().context("服务目录不可运行")?;
-    let identity = service::identity::read(&dir.identity_file()).context("读取服务身份失败")?;
-    // 写权覆盖整个运行期：恢复选择、清理与全部发布都在租约内。
+    // 写权覆盖整个运行期：恢复选择、清理与全部发布都在租约内；身份
+    // 在租约内读取，防止与 enable-inbox 的身份切换竞态（以过期版本
+    // 跑目录会绕过 v2 锚点保护）。
     let lease =
         kk_storage::WriterLease::acquire(&dir.writer_lock()).context("获取服务目录写者租约")?;
+    let identity = service::identity::read(&dir.identity_file()).context("读取服务身份失败")?;
     for clean_dir in [dir.root(), &dir.checkpoints_dir()] {
         let cleanup = kk_storage::publish::remove_stale_temporaries(clean_dir)?;
         for failure in cleanup.failed {
             eprintln!("serve run: 残留临时文件清理失败（不阻塞）: {failure}");
         }
     }
-    let selected = service::checkpoints::select_latest(&dir.checkpoints_dir(), &identity)
-        .context("无日志恢复选择失败")?;
+    // v2 目录：inbox/effects 必须存在且合法（缺一即拒——不猜测缺失
+    // 文件）；恢复下限来自 effects 锚点。v1 目录维持 S1 语义。
+    let v2_floor =
+        if identity.service_format_version == kk_runtime::service::identity::SERVICE_FORMAT_V2 {
+            let effects = service::effects::load(&dir.effects_file(), &identity.world_id)
+                .context("v2 目录缺合法恢复锚点（effects.json）；须人工核验，不自动重建")?;
+            service::inbox::load(&dir.inbox_file(), &identity.world_id)
+                .context("v2 目录缺合法命令收件箱（inbox.json）")?;
+            Some(service::checkpoints::RecoveryFloor {
+                checkpoint_seq: effects.anchor.checkpoint_seq,
+                barrier_id: effects.anchor.barrier_id.clone(),
+                inbox_applied: effects.anchor.inbox_applied.clone(),
+            })
+        } else {
+            None
+        };
+    let selected =
+        service::checkpoints::select_latest(&dir.checkpoints_dir(), &identity, v2_floor.as_ref())
+            .context("无日志恢复选择失败")?;
     // 配置声明的堆上限对恢复工作者是硬一致性约束（与 sim 同口径）。
     if let Some(expected) = config.player_heap_limit_bytes {
         for (name, worker) in selected.value["workers"].as_object().into_iter().flatten() {
@@ -177,7 +196,23 @@ fn setup(
     engine.set_player_concurrency(config.player_concurrency)?;
     engine.set_kkpv_channel(matches!(config.channel, service::config::Channel::Kkpv));
 
-    let host = ServiceHost::new(
+    let anchor_seq = v2_floor
+        .as_ref()
+        .map(|floor| floor.checkpoint_seq)
+        .unwrap_or_default();
+    // v2 上下文先取值再移交 entries（避免部分移动后借用）。
+    let v2_context = v2_floor.as_ref().map(|floor| service::host::V2SaveContext {
+        barrier_id: selected
+            .meta
+            .barrier_id
+            .clone()
+            .unwrap_or_else(|| floor.barrier_id.clone()),
+        inbox_applied: selected.meta.inbox_applied.clone().unwrap_or_default(),
+        code_versions: selected.meta.code_versions.clone().unwrap_or_default(),
+        outbox_cursor: selected.meta.outbox_cursor.unwrap_or_default(),
+        anchor_seq,
+    });
+    let mut host = ServiceHost::new(
         engine,
         dir,
         identity,
@@ -199,6 +234,11 @@ fn setup(
         },
     )
     .context("装配服务宿主")?;
+    if let Some(context) = v2_context {
+        // v2 保存上下文继承恢复版本的屏障与水位（S2.1 恒为启用初值；
+        // 真实推进自 S2.2 起由命令完成事务建立新屏障）。
+        host.set_v2_context(context);
+    }
 
     let control = if control_stdio {
         let (sender, receiver) = std::sync::mpsc::channel::<String>();

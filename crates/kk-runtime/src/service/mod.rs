@@ -8,8 +8,10 @@
 pub mod checkpoints;
 pub mod config;
 pub mod dir;
+pub mod effects;
 pub mod host;
 pub mod identity;
+pub mod inbox;
 pub mod metadata;
 
 pub use dir::ServiceDir;

@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
+mod inbox_enable;
 mod recovery;
 
 static NEXT: AtomicUsize = AtomicUsize::new(0);

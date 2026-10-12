@@ -30,9 +30,17 @@ run 启动：`validate_for_run`（不做任何创建）→ 读 identity（缺失
 
 状态摘要（status 应答与最终输出）包含 `world_id/run_epoch/phase/fault/live_tick/durable_tick/publish_seq/next_publish_seq/dirty_ticks/ticks_total/last_save_ms/last_error/recovery_selected/skipped_broken/players/recent_player_errors`；`live_tick` 在停止收尾时冻结为停止时刻值（teardown 重置引擎后不归零）。RPO 按最新成功保存报告：60 拍/60 秒是健康策略，保存耗时、故障或降级恢复会扩大窗口，不承诺严格一分钟零损失。
 
+## 耐久命令面（S2.1 现行：接收与恢复下限）
+
+- `kkscreeps serve enable-inbox --config <file>`：v1→v2 显式一次性启用（可重入续接）。租约内顺序：恢复 v1 最新完整份 → 发布初始 v2 屏障检查点（世界与时间不变，仅元数据升级，屏障身份 `b-<32hex>`）→ 写空 inbox → 写初始 effects 锚点 → 最后原子重写 identity 为 v2（完成边界）。中断后重跑即续接：沿用已发布的 v2 屏障检查点、补齐缺失的 inbox/effects（identity 未切时无接收入口，inbox 必为空或测试注入态且保留不覆盖）、identity 已 v2 则拒绝重复启用。
+- `inbox.json` v1（`kk_runtime::service::inbox`）：单一原子发布的有界最新状态（活跃流/nextServerSeq/水位/未淘汰明细）。幂等键 `(principal,streamId,clientSeq)`：同规范载荷返回原接收状态、异载荷冲突、淘汰后统一结果过期不重新执行；clientSeq 跳号拒绝；每主体 ≤4 活跃流；预算 256 条未终态/单主体跨流合计 8 条/16MiB，任一先到即拒；关闭有在途命令的流被拒、退役留墓碑不复用。接收是进程内库 API（宿主未来接线），received 只在文件+父目录同步后成立；文件损坏=停服条件不回退旧值。
+- `effects.json` v1（`service::effects`）：恢复下限锚点（屏障检查点 seq/barrier_id/inbox 消费水位）+各 sink 确认水位（S2.4 起填）。不随游戏检查点回滚。
+- 检查点 v2 元数据：barrier_id/inbox_applied/code_versions/outbox_cursor 四字段齐备（`is_v2_complete`），普通保存继承恢复版本的屏障与水位；保留策略恒保护锚点序号。恢复选择（`select_latest` 带 `RecoveryFloor`）：v2 目录中 v1 形状旧份跳过（skipped_ineligible 计数），只允许锚点本身或携带同一屏障身份、消费水位不低于下限的后继完整版本；无满足者停服，不回退锚点之前。v2 目录 run 启动要求 inbox/effects 齐备且身份一致，缺一拒启。
+- S2.1 未交付（后续切片）：命令消费与 completed/rejected 业务终态（S2.2/S2.3）、屏障推进事务（命令完成时建立新屏障）、outbox 投递（S2.4）、HTTP 接收入口（S3）。
+
 ## 边界与剩余缺口
 
 - 引擎/V8 由宿主单线程所有；engine 不依赖文件 I/O，存储原语经 kk-storage。宿主不接触网络；信号与 stdio 只表达操作者意图。
 - S3 在同一宿主上增加 HTTP/WS 监听与授权投影；命令边界、outbox、恢复下限随 S2。
 - 平台：macOS/Linux 本地文件系统已验证（含 flock 租约与 XNU 残锁怪僻的规避，见 kk-storage lease 模块注释）；网络文件系统的锁与耐久保证不默认成立。Linux 侧 flock 未单独实证。
-- 本批不包含：同 tick 代码边界事务（S2.2）、命令查询（S2.1/S3）、断线重连（S3）。
+- 本批不包含：同 tick 代码边界事务（S2.2）、命令消费面（S2.2/S2.3）、outbox（S2.4）、断线重连与 HTTP 入口（S3）。

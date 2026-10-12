@@ -180,7 +180,6 @@ fn command_interruptions_do_not_slide_deadlines() {
     // 拍 1 在 first 消费执行；拍 2 网格锁定 first+interval，其等待窗内
     // 的命令打断同样不滑动。
     anchor = Some(first);
-    pending = None;
     let second = next_deadline(anchor, first + Duration::from_millis(2), interval);
     assert_eq!(second, first + interval);
     pending = Some(second);
@@ -192,7 +191,6 @@ fn command_interruptions_do_not_slide_deadlines() {
     // 命令处理慢到越过网格点（second+interval 之后再 +1ms）：锚上网格
     // 点已过，按超时语义从当前时刻延后一个间隔。
     anchor = Some(second);
-    pending = None;
     let late = second + interval + Duration::from_millis(1);
     assert_eq!(next_deadline(anchor, late, interval), late + interval);
 }

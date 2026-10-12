@@ -12,6 +12,10 @@ pub const WRITER_LOCK: &str = "writer.lock";
 pub const IDENTITY_FILE: &str = "identity.json";
 /// 服务检查点子目录；文件名携带发布序号。
 pub const CHECKPOINTS_DIR: &str = "checkpoints";
+/// v2 耐久命令面的收件箱最新状态文件（原子发布）。
+pub const INBOX_FILE: &str = "inbox.json";
+/// v2 恢复下限锚点（effects）文件；不随游戏检查点回滚。
+pub const EFFECTS_FILE: &str = "effects.json";
 
 /// 已解析的服务状态目录：只负责路径解析与目录级核验，不持有租约。
 #[derive(Clone)]
@@ -38,6 +42,14 @@ impl ServiceDir {
 
     pub fn checkpoints_dir(&self) -> PathBuf {
         self.root.join(CHECKPOINTS_DIR)
+    }
+
+    pub fn inbox_file(&self) -> PathBuf {
+        self.root.join(INBOX_FILE)
+    }
+
+    pub fn effects_file(&self) -> PathBuf {
+        self.root.join(EFFECTS_FILE)
     }
 
     /// init 用：创建目录骨架并同步相关父目录（新建目录的目录项也须耐久）。

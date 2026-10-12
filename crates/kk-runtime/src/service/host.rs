@@ -39,6 +39,17 @@ pub fn next_deadline(
     }
 }
 
+/// v2 目录的保存上下文：普通保存继承恢复版本的屏障身份与水位
+/// （新屏障由命令完成事务建立，S2.2 起）；锚点序号供保留策略保护。
+#[derive(Clone, Debug)]
+pub struct V2SaveContext {
+    pub barrier_id: String,
+    pub inbox_applied: std::collections::BTreeMap<String, u64>,
+    pub code_versions: std::collections::BTreeMap<String, u64>,
+    pub outbox_cursor: u64,
+    pub anchor_seq: u64,
+}
+
 /// 宿主生命周期；故障不单独成态，挂在 `fault` 上并冻结推进。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Phase {
@@ -128,6 +139,8 @@ pub struct ServiceHost {
     /// 停止收尾时冻结的活 tick：teardown 重置引擎后 status 仍如实报告
     /// 停止时刻的世界时间（而不是误导性的 0）。
     frozen_live_tick: Option<u64>,
+    /// v2 目录的保存上下文；None=v1 目录按 S1 语义保存。
+    v2: Option<V2SaveContext>,
 }
 
 impl ServiceHost {
@@ -170,6 +183,7 @@ impl ServiceHost {
             recovery,
             recent_player_errors: VecDeque::new(),
             frozen_live_tick: None,
+            v2: None,
         })
     }
 
@@ -251,12 +265,17 @@ impl ServiceHost {
                 || secs_since_reference >= self.params.auto_save_wall_secs as f64)
     }
 
+    /// 装配 v2 保存上下文（run setup 在 v2 目录恢复成功后调用一次）；
+    /// 普通保存自此携带继承的屏障身份与水位，保留策略保护锚点。
+    pub fn set_v2_context(&mut self, context: V2SaveContext) {
+        self.v2 = Some(context);
+    }
+
     /// 立即发布当前已提交状态为新检查点并执行保留策略。序号在每次尝试
     /// 时按目录实况重新分配（不缓存：发布失败后目录环境可能变化，缓存
     /// 序号会与“紧接已发布版本”的不变式脱节）。失败按持久化故障处置：
     /// 冻结推进（retry 不可用），消息附带目标文件的实证状态——rename 后
-    /// 同步失败时目标可能已是新版本（耐久未知），调用方不能按“旧文件
-    /// 一定还在”重试。
+    /// 父目录同步失败属耐久未知，调用方不能按“旧文件一定还在”重试。
     pub fn save_now(&mut self) -> SaveOutcome {
         let dir = self.dir.checkpoints_dir();
         let seq = match checkpoints::next_publish_seq(&dir) {
@@ -272,7 +291,24 @@ impl ServiceHost {
         };
         let tick = self.engine.get_game_time();
         let started = Instant::now();
-        let outcome = checkpoints::publish(&self.engine, &dir, seq, &self.identity, &self.entries);
+        let outcome = match &self.v2 {
+            Some(context) => {
+                let meta = crate::service::metadata::new_meta_v2(
+                    &self.identity.world_id,
+                    seq,
+                    self.engine.get_game_time(),
+                    self.engine.world_seed(),
+                    &self.identity.scenario_sha256,
+                    &self.entries,
+                    &context.barrier_id,
+                    &context.inbox_applied,
+                    &context.code_versions,
+                    context.outbox_cursor,
+                );
+                checkpoints::publish_with_meta(&self.engine, &dir, &meta)
+            }
+            None => checkpoints::publish(&self.engine, &dir, seq, &self.identity, &self.entries),
+        };
         match outcome {
             Ok(()) => {
                 self.last_save_ms = Some(started.elapsed().as_secs_f64() * 1000.0);
@@ -302,10 +338,16 @@ impl ServiceHost {
     }
 
     fn enforce_keep(&self) -> anyhow::Result<KeepReport> {
+        // v2 目录的恢复锚点恒受保留：窗口前移不得释放锚点引用。
+        let protected: Vec<u64> = self
+            .v2
+            .as_ref()
+            .map(|context| vec![context.anchor_seq])
+            .unwrap_or_default();
         checkpoints::enforce_keep(
             &self.dir.checkpoints_dir(),
             self.params.keep_checkpoints,
-            &[],
+            &protected,
         )
     }
 

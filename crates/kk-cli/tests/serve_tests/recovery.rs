@@ -21,9 +21,9 @@ static NEXT: AtomicUsize = AtomicUsize::new(0);
 
 /// 两玩家/两房/nursery Mod 场景夹具（对齐 compat/fixtures/sim-mod-objects
 /// 的形态，模块与 Mod 根改为测试自管路径）。
-struct Fixture(PathBuf);
+pub(super) struct Fixture(PathBuf);
 impl Fixture {
-    fn new() -> anyhow::Result<Self> {
+    pub(super) fn new() -> anyhow::Result<Self> {
         let path = std::env::temp_dir().join(format!(
             "kkscreeps-recovery-test-{}-{}",
             std::process::id(),
@@ -77,7 +77,7 @@ impl Fixture {
     }
 
     /// 写服务配置（channel 等差异经 extra 覆盖）。
-    fn config(&self, extra: Value) -> anyhow::Result<PathBuf> {
+    pub(super) fn config(&self, extra: Value) -> anyhow::Result<PathBuf> {
         let path = self.0.join("serve.json");
         let mut config = json!({
             "config_format_version": 1,
@@ -107,11 +107,11 @@ impl Fixture {
         self.0.join("scenario.json")
     }
 
-    fn state(&self) -> PathBuf {
+    pub(super) fn state(&self) -> PathBuf {
         self.0.join("state")
     }
 
-    fn checkpoints(&self) -> PathBuf {
+    pub(super) fn checkpoints(&self) -> PathBuf {
         self.state().join("checkpoints")
     }
 }
@@ -121,7 +121,7 @@ impl Drop for Fixture {
     }
 }
 
-fn init_ok(fixture: &Fixture, config: &Path) -> anyhow::Result<Value> {
+pub(super) fn init_ok(fixture: &Fixture, config: &Path) -> anyhow::Result<Value> {
     let output = serve(&[
         "serve",
         "init",
@@ -140,7 +140,11 @@ fn init_ok(fixture: &Fixture, config: &Path) -> anyhow::Result<Value> {
 }
 
 /// 启动常驻 run 并把 stderr 落文件；返回 (守卫子进程, stderr 路径)。
-fn spawn_run(config: &Path, fixture: &Fixture, tag: &str) -> anyhow::Result<(KillOnDrop, PathBuf)> {
+pub(super) fn spawn_run(
+    config: &Path,
+    fixture: &Fixture,
+    tag: &str,
+) -> anyhow::Result<(KillOnDrop, PathBuf)> {
     let stderr_path = fixture.0.join(tag);
     let child = KillOnDrop::spawn(
         serve(&["serve", "run", "--config", &config.to_string_lossy()])
@@ -161,7 +165,7 @@ fn restore_in_process(state: &Path) -> anyhow::Result<Recovered> {
     let dir = kk_runtime::service::ServiceDir::new(state);
     let identity = kk_runtime::service::identity::read(&dir.identity_file())?;
     let selected =
-        kk_runtime::service::checkpoints::select_latest(&dir.checkpoints_dir(), &identity)?;
+        kk_runtime::service::checkpoints::select_latest(&dir.checkpoints_dir(), &identity, None)?;
     let packages = kk_mod_host::discover_packages(&Fixture::mods_root()?)?;
     let options = kk_mod_host::RegisterOptions {
         configs: BTreeMap::from([("nursery".to_string(), json!({"period": 5, "life": 3}))]),
@@ -634,7 +638,7 @@ fn mod_checkpoint_run_without_mods_config_is_refused() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn checkpoint_count(fixture: &Fixture) -> usize {
+pub(super) fn checkpoint_count(fixture: &Fixture) -> usize {
     std::fs::read_dir(fixture.checkpoints())
         .map(|entries| entries.filter_map(|entry| entry.ok()).count())
         .unwrap_or(0)

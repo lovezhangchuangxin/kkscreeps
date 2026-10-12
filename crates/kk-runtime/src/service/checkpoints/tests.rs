@@ -52,6 +52,148 @@ fn write_synthetic(dir: &Path, seq: u64, tick: u64, ident: &ServiceIdentity) {
     .unwrap();
 }
 
+/// v2 合成载荷：屏障/水位四字段齐备（is_v2_complete）。
+fn synthetic_v2(
+    seq: u64,
+    tick: u64,
+    ident: &ServiceIdentity,
+    barrier: &str,
+    applied: &BTreeMap<String, u64>,
+) -> Value {
+    let meta = metadata::new_meta_v2(
+        &ident.world_id,
+        seq,
+        tick,
+        ident.world_seed,
+        &ident.scenario_sha256,
+        &BTreeMap::from([("p1".to_string(), "main".to_string())]),
+        barrier,
+        applied,
+        &Default::default(),
+        0,
+    );
+    json!({
+        "engine": {"world": {"time": tick, "seed": ident.world_seed}},
+        "metadata": {"service": meta},
+    })
+}
+
+fn write_synthetic_v2(
+    dir: &Path,
+    seq: u64,
+    tick: u64,
+    ident: &ServiceIdentity,
+    barrier: &str,
+    applied: &BTreeMap<String, u64>,
+) {
+    kk_storage::publish_json(
+        &dir.join(checkpoint_file_name(seq)),
+        SPEC,
+        &synthetic_v2(seq, tick, ident, barrier, applied),
+        |_| Ok(()),
+    )
+    .unwrap();
+}
+
+/// v2 锚点约束：v1 旧份与低于锚点/异屏障/低水位的候选被跳过，只允许
+/// 锚点本身或携带同一屏障且水位不降的后继；无满足者是停服错误。
+/// 伪 v2 形状（service_format_version=2 但四字段缺省）不得被当选：
+/// v1 目录中被版本门硬拒；v2 floor 下因资格不全而不可入选（无其它
+/// 合格候选时以恢复下限停服）。
+#[test]
+fn fake_v2_shape_without_v2_fields_is_rejected() -> anyhow::Result<()> {
+    let dir = temp_dir("fake-v2")?;
+    let ident = sample_identity();
+    // serde default 允许解码"缺四字段但版本写 2"的形状。
+    let mut fake = synthetic(1, 5, &ident);
+    fake["metadata"]["service"]["service_format_version"] = json!(2);
+    kk_storage::publish_json(&dir.join(checkpoint_file_name(1)), SPEC, &fake, |_| Ok(())).unwrap();
+    // v1 目录：版本门硬错（外来未来内容，不能当选）。
+    let error = select_latest(&dir, &ident, None).expect_err("伪 v2 形状必须拒绝");
+    assert!(
+        format!("{error:#}").contains("服务格式版本"),
+        "错误应指向服务格式版本：{error:#}"
+    );
+    std::fs::remove_dir_all(&dir)?;
+    Ok(())
+}
+
+#[test]
+fn v2_floor_selects_only_anchor_and_qualified_successors() -> anyhow::Result<()> {
+    let dir = temp_dir("floor")?;
+    let mut ident = sample_identity();
+    ident.service_format_version = identity::SERVICE_FORMAT_V2;
+    // v1 旧份（启用线之前）、锚点、合格后继；最新两份异屏障（被过滤，
+    // 选择回落到锚点线上的最新合格份并计数跳过）。
+    write_synthetic(&dir, 1, 5, &ident);
+    write_synthetic_v2(&dir, 2, 8, &ident, "b-1", &BTreeMap::new());
+    write_synthetic_v2(&dir, 3, 9, &ident, "b-1", &BTreeMap::new());
+    write_synthetic_v2(&dir, 4, 10, &ident, "b-2", &BTreeMap::new());
+    write_synthetic_v2(&dir, 5, 11, &ident, "b-3", &BTreeMap::new());
+
+    let floor = RecoveryFloor {
+        checkpoint_seq: 2,
+        barrier_id: "b-1".into(),
+        inbox_applied: BTreeMap::new(),
+    };
+    let selected = select_latest(&dir, &ident, Some(&floor))?;
+    assert_eq!(selected.publish_seq, 3, "异屏障的 5/4 被过滤，回落锚点线");
+    assert_eq!(selected.skipped_ineligible, 2, "降序跳过 seq5/seq4");
+
+    // 锚点之后全部不合格（异屏障）：停服，不回退锚点之前。
+    let dir2 = temp_dir("floor-stop")?;
+    write_synthetic_v2(&dir2, 1, 5, &ident, "b-x", &BTreeMap::new());
+    let floor2 = RecoveryFloor {
+        checkpoint_seq: 1,
+        barrier_id: "b-1".into(),
+        inbox_applied: BTreeMap::new(),
+    };
+    let error = select_latest(&dir2, &ident, Some(&floor2)).expect_err("无合格候选必须停服");
+    assert!(
+        format!("{error:#}").contains("恢复下限"),
+        "错误应指向恢复下限停服：{error:#}"
+    );
+
+    // 仅剩 v1 旧份（启用线之前）+floor：全部跳过，停服错误指向恢复
+    // 下限——不回退到锚点之前，也不把 v1 旧份当合法候选。
+    let dir4 = temp_dir("floor-v1-only")?;
+    write_synthetic(&dir4, 1, 5, &ident);
+    write_synthetic(&dir4, 2, 6, &ident);
+    let error = select_latest(&dir4, &ident, Some(&floor)).expect_err("仅 v1 旧份必须停服");
+    assert!(
+        format!("{error:#}").contains("恢复下限"),
+        "错误应指向恢复下限停服：{error:#}"
+    );
+    std::fs::remove_dir_all(&dir4)?;
+
+    // 消费水位不降门：floor 要求 s1≥3 时，applied {s1:2} 的候选被滤。
+    let dir3 = temp_dir("floor-applied")?;
+    let mut applied_floor = BTreeMap::new();
+    applied_floor.insert("s1".to_string(), 3u64);
+    write_synthetic_v2(&dir3, 1, 5, &ident, "b-1", &BTreeMap::new());
+    let mut low = BTreeMap::new();
+    low.insert("s1".to_string(), 2u64);
+    write_synthetic_v2(&dir3, 2, 6, &ident, "b-1", &low);
+    let floor3 = RecoveryFloor {
+        checkpoint_seq: 1,
+        barrier_id: "b-1".into(),
+        inbox_applied: applied_floor.clone(),
+    };
+    // 锚点本身（seq1）水位空——锚点水位与 floor 一致来自同一 effects，
+    // 此处锚点=1 空水位会因 "unwrap_or(0)>=3" 不成立被滤——这正是
+    // effects 与候选不一致时的安全方向（不选择低于已确认水位的版本）。
+    let mut anchor_applied = BTreeMap::new();
+    anchor_applied.insert("s1".to_string(), 3u64);
+    write_synthetic_v2(&dir3, 3, 7, &ident, "b-1", &anchor_applied);
+    let selected = select_latest(&dir3, &ident, Some(&floor3))?;
+    assert_eq!(selected.publish_seq, 3);
+
+    std::fs::remove_dir_all(&dir)?;
+    std::fs::remove_dir_all(&dir2)?;
+    std::fs::remove_dir_all(&dir3)?;
+    Ok(())
+}
+
 #[test]
 fn sequence_allocation_never_reuses_published_names() -> anyhow::Result<()> {
     let dir = temp_dir("seq")?;
@@ -82,7 +224,7 @@ fn selection_skips_broken_but_stops_on_identity_and_format_errors() -> anyhow::R
     write_synthetic(&dir, 2, 2, &ident);
     // 最新份撕裂 → 跳过选次新。
     write_raw(&dir, 3, b"{\"format\":");
-    let selected = select_latest(&dir, &ident)?;
+    let selected = select_latest(&dir, &ident, None)?;
     assert_eq!((selected.publish_seq, selected.meta.tick), (2, 2));
     assert_eq!(selected.skipped_broken, 1);
 
@@ -93,34 +235,34 @@ fn selection_skips_broken_but_stops_on_identity_and_format_errors() -> anyhow::R
         "payload": serde_json::to_string(&synthetic(4, 4, &ident))?,
     });
     write_raw(&dir, 4, &serde_json::to_vec(&envelope)?);
-    let selected = select_latest(&dir, &ident)?;
+    let selected = select_latest(&dir, &ident, None)?;
     assert_eq!(selected.publish_seq, 2);
     assert_eq!(selected.skipped_broken, 2);
 
     // 未来版本/异格式/未知字段信封 → 停止（不能以坏文件为由退到旧规则版本）。
     envelope["version"] = json!(SPEC.version + 1);
     write_raw(&dir, 4, &serde_json::to_vec(&envelope)?);
-    assert!(select_latest(&dir, &ident).is_err());
+    assert!(select_latest(&dir, &ident, None).is_err());
     envelope["version"] = json!(SPEC.version);
     envelope["format"] = json!("other-format");
     write_raw(&dir, 4, &serde_json::to_vec(&envelope)?);
-    assert!(select_latest(&dir, &ident).is_err());
+    assert!(select_latest(&dir, &ident, None).is_err());
     let mut future_field = envelope;
     future_field["format"] = json!(SPEC.format);
     future_field["compression"] = json!("zstd");
     write_raw(&dir, 4, &serde_json::to_vec(&future_field)?);
-    assert!(select_latest(&dir, &ident).is_err());
+    assert!(select_latest(&dir, &ident, None).is_err());
 
     // 恢复正常最新份后逐一验证服务身份门。
     write_synthetic(&dir, 4, 4, &ident);
-    let selected = select_latest(&dir, &ident)?;
+    let selected = select_latest(&dir, &ident, None)?;
     assert_eq!(selected.publish_seq, 4);
     assert_eq!(selected.skipped_broken, 0);
     // world_id 不一致（同目录混入另一世界）→ 停止。
     let mut foreign = sample_identity();
     foreign.world_seed = ident.world_seed; // 仅 world_id 不同。
     write_synthetic(&dir, 5, 5, &foreign);
-    assert!(select_latest(&dir, &ident).is_err());
+    assert!(select_latest(&dir, &ident, None).is_err());
     std::fs::remove_file(dir.join(checkpoint_file_name(5)))?;
     // world_seed 与目录身份不一致 → 停止。
     let mut other_seed = sample_identity();
@@ -128,7 +270,7 @@ fn selection_skips_broken_but_stops_on_identity_and_format_errors() -> anyhow::R
     other_seed.scenario_sha256 = ident.scenario_sha256.clone();
     other_seed.world_seed = ident.world_seed + 1;
     write_synthetic(&dir, 5, 5, &other_seed);
-    assert!(select_latest(&dir, &ident).is_err());
+    assert!(select_latest(&dir, &ident, None).is_err());
     std::fs::remove_file(dir.join(checkpoint_file_name(5)))?;
     // scenario_sha256 与目录身份不一致 → 停止。
     let mut other_scene = sample_identity();
@@ -136,7 +278,7 @@ fn selection_skips_broken_but_stops_on_identity_and_format_errors() -> anyhow::R
     other_scene.world_seed = ident.world_seed;
     other_scene.scenario_sha256 = "c".repeat(64);
     write_synthetic(&dir, 5, 5, &other_scene);
-    assert!(select_latest(&dir, &ident).is_err());
+    assert!(select_latest(&dir, &ident, None).is_err());
     std::fs::remove_file(dir.join(checkpoint_file_name(5)))?;
     // 引擎载荷种子与服务元数据不一致（重哈希的篡改载荷）→ 停止。
     let mut tampered = synthetic(5, 5, &ident);
@@ -144,7 +286,7 @@ fn selection_skips_broken_but_stops_on_identity_and_format_errors() -> anyhow::R
     kk_storage::publish_json(&dir.join(checkpoint_file_name(5)), SPEC, &tampered, |_| {
         Ok(())
     })?;
-    assert!(select_latest(&dir, &ident).is_err());
+    assert!(select_latest(&dir, &ident, None).is_err());
     std::fs::remove_file(dir.join(checkpoint_file_name(5)))?;
     // 服务格式版本与目录身份不一致 → 停止。
     let mut future_format = synthetic(5, 5, &ident);
@@ -155,7 +297,7 @@ fn selection_skips_broken_but_stops_on_identity_and_format_errors() -> anyhow::R
         &future_format,
         |_| Ok(()),
     )?;
-    assert!(select_latest(&dir, &ident).is_err());
+    assert!(select_latest(&dir, &ident, None).is_err());
     std::fs::remove_file(dir.join(checkpoint_file_name(5)))?;
     // 载荷序号与文件名不一致 → 停止。
     kk_storage::publish_json(
@@ -164,7 +306,7 @@ fn selection_skips_broken_but_stops_on_identity_and_format_errors() -> anyhow::R
         &synthetic(3, 5, &ident),
         |_| Ok(()),
     )?;
-    assert!(select_latest(&dir, &ident).is_err());
+    assert!(select_latest(&dir, &ident, None).is_err());
     std::fs::remove_file(dir.join(checkpoint_file_name(5)))?;
     // 服务元数据缺失（外部放置的普通检查点）→ 停止。
     kk_storage::publish_json(
@@ -173,7 +315,7 @@ fn selection_skips_broken_but_stops_on_identity_and_format_errors() -> anyhow::R
         &json!({"engine": {"world": {"time": 5, "seed": ident.world_seed}}}),
         |_| Ok(()),
     )?;
-    assert!(select_latest(&dir, &ident).is_err());
+    assert!(select_latest(&dir, &ident, None).is_err());
     std::fs::remove_file(dir.join(checkpoint_file_name(5)))?;
     std::fs::remove_dir_all(&dir)?;
     Ok(())
@@ -185,7 +327,7 @@ fn selection_fails_when_no_complete_version_remains() -> anyhow::Result<()> {
     let ident = sample_identity();
     write_raw(&dir, 1, b"garbage");
     write_raw(&dir, 2, b"{\"format\":");
-    let error = match select_latest(&dir, &ident) {
+    let error = match select_latest(&dir, &ident, None) {
         Err(error) => error.to_string(),
         Ok(_) => anyhow::bail!("全部损坏时应报错"),
     };
@@ -280,7 +422,7 @@ fn publish_select_restore_roundtrip_with_real_engine() -> anyhow::Result<()> {
     // 序号不紧接目录实况时拒绝，防止回滚后复用。
     assert!(publish(&engine, &dir, 1, &ident, &entries).is_err());
 
-    let selected = select_latest(&dir, &ident)?;
+    let selected = select_latest(&dir, &ident, None)?;
     assert_eq!(selected.meta.tick, tick);
     assert_eq!(selected.meta.entries, entries);
     assert_eq!(selected.meta.world_seed, ident.world_seed);

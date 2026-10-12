@@ -82,14 +82,30 @@ pub fn publish(
         &identity.scenario_sha256,
         entries,
     );
-    let path = dir.join(checkpoint_file_name(seq));
+    publish_with_meta(engine, dir, &meta)
+}
+
+/// 按调用方给定的完整服务元数据发布（v2 屏障/普通检查点走此入口）；
+/// 序号紧接性在此统一把关，元数据字段值由调用方负责。
+pub fn publish_with_meta(
+    engine: &EmbedEngine,
+    dir: &Path,
+    meta: &super::metadata::ServiceCheckpointMeta,
+) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        meta.publish_seq == next_publish_seq(dir)?,
+        "发布序号 {} 不紧接目录已发布版本；须由 next_publish_seq 分配",
+        meta.publish_seq
+    );
+    let path = dir.join(checkpoint_file_name(meta.publish_seq));
     engine
-        .save_checkpoint(&path, metadata::engine_metadata(&meta))
+        .save_checkpoint(&path, metadata::engine_metadata(meta))
         .with_context(|| format!("发布服务检查点 {}", path.display()))
 }
 
 /// 恢复选择的产物；`value` 为完整检查点载荷，宿主随后在替代引擎上核验
 /// 引擎/Mod 身份并切换（restore 失败按停止处置，不改原文件）。
+#[derive(Debug)]
 pub struct Selected {
     pub value: serde_json::Value,
     pub file: PathBuf,
@@ -97,12 +113,27 @@ pub struct Selected {
     pub meta: ServiceCheckpointMeta,
     /// 因撕裂/哈希损坏跳过的份数（不含身份/格式硬错误——那些直接中止）。
     pub skipped_broken: usize,
+    /// 因不满足恢复下限（v2 目录中的 v1 旧份或锚点约束过滤）跳过的份数。
+    pub skipped_ineligible: usize,
+}
+
+/// 恢复下限（effects 锚点）：恢复选择只允许锚点本身或携带同一屏障
+/// 身份、命令消费水位不低于下限的后继完整版本；无满足者即停服条件。
+#[derive(Clone, Debug)]
+pub struct RecoveryFloor {
+    pub checkpoint_seq: u64,
+    pub barrier_id: String,
+    pub inbox_applied: BTreeMap<String, u64>,
 }
 
 /// 无日志恢复选择：按发布序号降序取首个完整且身份一致的服务检查点。
 /// 服务身份逐项核对目录身份与引擎载荷（文件名不是身份真相源）。
 /// S1 无外部耐久确认，允许退到较旧完整版本（丢失窗口如实上报）。
-pub fn select_latest(dir: &Path, identity: &ServiceIdentity) -> anyhow::Result<Selected> {
+pub fn select_latest(
+    dir: &Path,
+    identity: &ServiceIdentity,
+    floor: Option<&RecoveryFloor>,
+) -> anyhow::Result<Selected> {
     let mut seqs: Vec<u64> = list_seqs(dir)?.into_iter().collect();
     seqs.sort_unstable();
     seqs.reverse();
@@ -112,6 +143,7 @@ pub fn select_latest(dir: &Path, identity: &ServiceIdentity) -> anyhow::Result<S
         dir.display()
     );
     let mut skipped = 0usize;
+    let mut skipped_ineligible = 0usize;
     for seq in seqs {
         let file = dir.join(checkpoint_file_name(seq));
         let value = match kk_storage::envelope::read_json(&file, SPEC) {
@@ -152,13 +184,39 @@ pub fn select_latest(dir: &Path, identity: &ServiceIdentity) -> anyhow::Result<S
             "候选 {} 的种子内容身份与目录身份不一致",
             file.display()
         );
-        anyhow::ensure!(
-            meta.service_format_version == identity.service_format_version,
-            "候选 {} 的服务格式版本 {} 与目录身份 {} 不一致",
-            file.display(),
-            meta.service_format_version,
-            identity.service_format_version
-        );
+        if meta.service_format_version != identity.service_format_version {
+            // v2 目录中启用线之前的 v1 旧份：不可选（锚点约束天然排
+            // 除），跳过继续找；未来版本（含不完整的伪形状）是必须停止
+            // 的外来内容，不能当旧份静默跳过。
+            if floor.is_some() && meta.service_format_version == super::identity::SERVICE_FORMAT_V1
+            {
+                skipped_ineligible += 1;
+                continue;
+            }
+            anyhow::bail!(
+                "候选 {} 的服务格式版本 {} 与目录身份 {} 不一致",
+                file.display(),
+                meta.service_format_version,
+                identity.service_format_version
+            );
+        }
+        if let Some(floor) = floor {
+            let eligible = meta.is_v2_complete()
+                && meta.publish_seq >= floor.checkpoint_seq
+                && meta.barrier_id.as_deref() == Some(floor.barrier_id.as_str())
+                && floor.inbox_applied.iter().all(|(stream, applied)| {
+                    meta.inbox_applied
+                        .as_ref()
+                        .and_then(|applied_map| applied_map.get(stream))
+                        .copied()
+                        .unwrap_or(0)
+                        >= *applied
+                });
+            if !eligible {
+                skipped_ineligible += 1;
+                continue;
+            }
+        }
         let tick = value
             .pointer("/engine/world/time")
             .and_then(|v| v.as_u64())
@@ -187,7 +245,13 @@ pub fn select_latest(dir: &Path, identity: &ServiceIdentity) -> anyhow::Result<S
             publish_seq: seq,
             meta,
             skipped_broken: skipped,
+            skipped_ineligible,
         });
+    }
+    if skipped_ineligible > 0 {
+        anyhow::bail!(
+            "目录存在 {skipped} 份损坏与 {skipped_ineligible} 份不满足恢复下限的候选，没有锚点及之后的完整版本；锚点检查点须完整保留，不能回退到锚点之前（停服处置）"
+        );
     }
     anyhow::bail!(
         "服务检查点目录全部 {skipped} 份候选损坏（撕裂/校验值不匹配），没有可恢复的完整版本"
