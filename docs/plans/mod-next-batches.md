@@ -4,9 +4,9 @@
 
 ## 当前接手位置
 
-- 本轮接手复审已完成（2026-10-12，HEAD `59710e0b`）：S2.3 补齐预算中断、耐久结果、失败保存、输入固定/回放、授权与配置迁移；6 项 Review 问题已清偿，完整门禁与兼容棘轮通过，已完成并纳入本次提交。下一接手入口 S2.4；不标 G27.b/M3 全域完成。
+- S2.3 已提交 `89f4f89`（2026-10-12）：本片 6 项问题已清偿，完整门禁与兼容棘轮通过。用户要求的 S1.1–S2.3 跨批 Review 已完成，新增 1 项 P1、3 项 P2 尚未修复；下一接手先清偿下节四项，再进入 S2.4，不标 G27.b/M3 全域完成。
 
-- 更新日期：2026-10-12；S1.1（54db7774）、S1.2（c27db2d3）、S1.3（78b28e15）、S2.1（f2001ed2）与 S2.2（59710e0b：代码边界事务）已实现：serve init/run、严格版本化配置、网格调度（anchor/pending 两点接线）、Paused/Persistence 故障语义、周期保存与收尾保存、stdio 控制、SIGTERM 优雅退出与租约互斥；两玩家/两房/nursery Mod 场景冷恢复续存验收（世界/Memory/CPU/入口/Mod 状态核对、JSON/KKPV 双通道、撕裂回退与同步失败不发布水位）；耐久命令面 v2（inbox 接收/幂等/预算/流生命周期、effects 恢复下限、enable-inbox 启用事务、FIFO 命令消费、code.replace CAS+即时屏障+崩溃窗口两段确认、链路级矩阵用例）见各实施记录。S2.3 玩家表达式与受限 Mod 输入已实现（本次提交，接手 Review 和完整门禁已完成，实施记录见下节）；下一入口 S2.4 outbox；G27.b/G28.a 等父项状态不变。
+- 更新日期：2026-10-12；S1.1（54db7774）、S1.2（c27db2d3）、S1.3（78b28e15）、S2.1（f2001ed2）与 S2.2（59710e0b：代码边界事务）已实现：serve init/run、严格版本化配置、网格调度（anchor/pending 两点接线）、Paused/Persistence 故障语义、周期保存与收尾保存、stdio 控制、SIGTERM 优雅退出与租约互斥；两玩家/两房/nursery Mod 场景冷恢复续存验收（世界/Memory/CPU/入口/Mod 状态核对、JSON/KKPV 双通道、撕裂回退与同步失败不发布水位）；耐久命令面 v2（inbox 接收/幂等/预算/流生命周期、effects 恢复下限、enable-inbox 启用事务、FIFO 命令消费、code.replace CAS+即时屏障+崩溃窗口两段确认、链路级矩阵用例）见各实施记录。S2.3 玩家表达式与受限 Mod 输入已实现（89f4f89，本片 Review/门禁通过，跨批 Review 新增四项待修复，实施记录见下节）；下一入口先清偿跨批 Review 四项，再做 S2.4 outbox；G27.b/G28.a 等父项状态不变。
 - 性能主线已按用户要求暂缓：50 玩家×6 个 RCL8 满功能成熟房，共 300 房。已交付 KKPV 共享编码/视图复用、信封直构、条件逐房并行、克隆-结算重叠、预校验 commit 与融合校验；完整紧凑存储/变化集/列式共享直读仍为目标。旧投影预取两版已撤回，恢复时从 run 注入协议重新核验归因，最终验收未完成。
 - 最新标尺记录为 kk/xxs 耗时比中枢 1.0492、热窗 0.9859，来源为[归档接手记录](archive/mod-history-2026-10.md#接手位置沿革)；未找到随最新两片入库的同口径双端标尺明细，不能据此声称本轮独立复算或已正式领先。热态、分段收益及原始窗口须一起判断。
 - 默认玩法：19/19 powers 已接通；[兼容机器报告](../../compat/reports/kkscreeps.json)为 2905/2914 passed、9 failed、0 pending，原始 success=false，按既有差异登记通过棘轮不等于套件全绿或 M2B 整体完成。地图生成、stronghold 战术 AI/create-creep、bot 对战、多房扩张运营与 Overmind 旗标出兵仍有缺口。
@@ -16,12 +16,12 @@
 
 ## 当前执行队列
 
-以下仅安排未完成工作；性能主线按用户 2026-10-12 要求暂缓。用户已选择服务功能方向，S1 与 S2.1–S2.3 已实现并验证，当前实施入口为 S2.4；网络/后台 enqueue 与 outbox 的目标设计不视为已交付。服务线保留 G27.b → G28.a 的硬依赖；Mod 领域按子片依赖选择，不按父编号机械串行。
+以下仅安排未完成工作；性能主线按用户 2026-10-12 要求暂缓。用户已选择服务功能方向，S1 与 S2.1–S2.3 已实现并验证，当前实施入口先清偿 S1.1–S2.3 跨批 Review 四项，再进入 S2.4；网络/后台 enqueue 与 outbox 的目标设计不视为已交付。服务线保留 G27.b → G28.a 的硬依赖；Mod 领域按子片依赖选择，不按父编号机械串行。
 
 | 顺位 | 任务 | 首片与完成条件 |
 |---|---|---|
-| 1（进行中：S1 已交付，S2 进行中） | S1 常驻运行与无日志检查点恢复 | S1（54db7774/c27db2d3/78b28e15）已交付；S2.1（f2001ed2：inbox 接收面/幂等/预算/流生命周期、effects 恢复下限锚点、service v2 元数据与选择门、enable-inbox 启用事务含中断续接）与 S2.2（59710e0b：FIFO 命令消费、code.replace CAS/校验/即时屏障、崩溃窗口两段确认、rejected 不建屏障、统一冻结语义）已交付；S2.3 玩家表达式与受限 Mod 输入已实现并通过接手 Review（本次提交）；下一入口 S2.4；默认关闭审计日志，恢复后同目录续存；此片不标 G27.b 或 M3 完成 |
-| 2（进行中：S2.1/S2.2 已交付） | S2/G27.b 耐久输入/outbox | S2.1（f2001ed2）与 S2.2（本次提交）已交付；S2.3 表达式/受限 Mod 输入已实现并验证（本次提交）；当前入口 S2.4 幂等投递；最终确认与外部投递等待耐久屏障，恢复不跨已确认下限；不等待 JS storage provider |
+| 1（进行中：S1 已交付，S2 进行中） | S1 常驻运行与无日志检查点恢复 | S1（54db7774/c27db2d3/78b28e15）已交付；S2.1（f2001ed2：inbox 接收面/幂等/预算/流生命周期、effects 恢复下限锚点、service v2 元数据与选择门、enable-inbox 启用事务含中断续接）与 S2.2（59710e0b：FIFO 命令消费、code.replace CAS/校验/即时屏障、崩溃窗口两段确认、rejected 不建屏障、统一冻结语义）已交付；S2.3 已提交 89f4f89；跨批 Review 四项待修复后进入 S2.4；默认关闭审计日志，恢复后同目录续存；此片不标 G27.b 或 M3 完成 |
+| 2（进行中：S2.1/S2.2 已交付） | S2/G27.b 耐久输入/outbox | S2.1（f2001ed2）与 S2.2（59710e0b）已交付；S2.3 已提交 89f4f89；当前先清偿跨批 Review 四项，再进入 S2.4 幂等投递；最终确认与外部投递等待耐久屏障，恢复不跨已确认下限；不等待 JS storage provider |
 | 3（设计完成，写入依赖 S2） | S3/G28.a → G29.b 最小真实联网闭环 | S3.1 认证/命令/DTO → S3.2 授权房间订阅 → S3.3 两玩家实际客户端 → S3.4 分发/只读 provider；固定地图/预建玩家首片，官方 HTTP/sockjs 兼容另验，不标 M3 或 G21 全域完成 |
 | 随服务验证 | Linux 服务容量与恢复验收（2GB 参考） | 50 玩家×6 房、300 占用房，另覆盖目标 9 区块地图的注册地形规模；短探针只覆盖 300 房，不能代表整幅地图或成熟 bot 负载。长窗观察 RSS/GC、tick 延迟、保存峰值与冷启动，区分合成 worker 与真实 bot；同机 xxscreeps 正式对照另按性能验收口径完成 |
 | 独立候选 | 默认玩法与真实 bot 补验 | bot 对战、多房扩张运营、Overmind 旗标出兵；stronghold 战术 AI/create-creep 与地图生成另拆。9 个既有兼容失败按官方语义/套件仲裁继续保留证据，不为追求百分比改变已确认契约 |
@@ -200,8 +200,17 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - 候选/耐久：Settle 候选固定表达式结果与宿主输入，重试不重新求值或换命令。提交后世界、水位和独立 `metadata.command_results` v1 结果窗口同份发布，effects 确认后写 inbox 终态；屏障已确认但终态未存档时恢复原结果，不重复副作用。屏障失败冻结并禁止普通/收尾保存已变化世界与旧水位。窗口在后继屏障清理已存档结果；旧 S2.2 缺树显式迁移为空，存在但未来/畸形/超预算/超消费水位拒绝，已确认表达式缺结果冻结。
 - 配置：config_format_version 升至 2；v1 无新字段时显式迁移为空授予表，v1 携带 mod_grants 拒绝。引擎/目录/inbox/effects 版本不变，新增结果树有独立版本门。宿主意图加入审计日志最终扩展意图，包含无 RunJob 玩家，原玩家原始 wire 的其他部分保留，回放不执行 JS。
 - 接手 Review 修复：P1 硬中断解除看门狗后仍执行主代码；P1 已耐久表达式在存档缺口重复副作用；P1 屏障失败后停止保存能发布世界与旧水位；P2 宿主输入未固定进失败候选且审计日志遗漏；P2 mod.input 未核验当前计划/目标/归属，原 accepted 夹具使用不存在的意图；P2 新配置字段未升版。均已修复并增加回归。模块边界按职责复审：proto/eval 管求值预算/写回，embed/host_inputs 管授权/合并，service/command_results 管独立结果树；未压缩代码规避行数门禁。
-- 本轮实际验证：`cargo test -p kk-runtime --lib service` 61 项通过；`cargo test -p kk-cli --test serve_tests` 20 项在完整门禁中通过。最终无参数 `pnpm run check` 通过（Rust/JS workspace、Clippy、维护工具、文档链接及 1028 个源码/测试文件规模门禁）；新增完整引擎状态回放等值与配置重复字段拒绝均进入最终门禁。已重建 debug/release CLI，核验 screeps-ok 固定 commit，运行 fetch-bots、适配器 build 与 release `node compat/scripts/ratchet.mjs`：2905/2914 passed、9 既有 failed、0 pending，门禁通过；另与接手时报告逐例比对 2914 项状态零变化（原始 success=false，未宣称全绿）。兼容报告刷新，未跑此前暂缓长测。首次完整门禁发现新增测试单元素循环的 Clippy 错误，已修复；新增故障夹具调试时的 V8 LIFO/空 Memory/恢复窗口时序问题已改为正确生命周期和可发生的崩溃窗口。日志 `/tmp/kkscreeps-s23-review-check.log`；S2.3 复审无未清偿的阻塞项；用户要求提交后继续审查 S1.1 至今的整条服务链，跨批 Review 尚待执行，剩余交付范围见下条。
-- 已完成并纳入本次提交，HEAD `59710e0b`；完成本片后下一入口 S2.4 outbox，S3 网络/后台 enqueue、淘汰与预算配置化仍未交付。此前性能/长测暂缓保持。
+- 本轮实际验证：`cargo test -p kk-runtime --lib service` 61 项通过；`cargo test -p kk-cli --test serve_tests` 20 项在完整门禁中通过。最终无参数 `pnpm run check` 通过（Rust/JS workspace、Clippy、维护工具、文档链接及 1028 个源码/测试文件规模门禁）；新增完整引擎状态回放等值与配置重复字段拒绝均进入最终门禁。已重建 debug/release CLI，核验 screeps-ok 固定 commit，运行 fetch-bots、适配器 build 与 release `node compat/scripts/ratchet.mjs`：2905/2914 passed、9 既有 failed、0 pending，门禁通过；另与接手时报告逐例比对 2914 项状态零变化（原始 success=false，未宣称全绿）。兼容报告刷新，未跑此前暂缓长测。首次完整门禁发现新增测试单元素循环的 Clippy 错误，已修复；新增故障夹具调试时的 V8 LIFO/空 Memory/恢复窗口时序问题已改为正确生命周期和可发生的崩溃窗口。日志 `/tmp/kkscreeps-s23-review-check.log`；该 S2.3 修复验证通过；提交后的跨批 Review 另发现四项，见下节，未把原完整门禁通过视为这些边界已覆盖。
+- 已提交 `89f4f89`；下一入口先清偿下节跨批 Review 四项，再做 S2.4 outbox，S3 网络/后台 enqueue、淘汰与预算配置化仍未交付。此前性能/长测暂缓保持。
+
+### 2026-10-12 S1.1–S2.3 提交后跨批 Review
+
+- 用户要求：先提交 S2.3，再审查 `54db7774^..89f4f89`（S1.1 文件/租约、S1.2 调度、S1.3 冷恢复、S2.1 接收/启用、S2.2 代码事务、S2.3 拍内命令）。实现提交 `89f4f89`，本轮只审查/实证并登记，未修实现；原完整门禁和兼容报告结论保留，不能因此标本轮四项已通过。
+- **P1：裸相对服务目录漏同步父目录**（`service/dir.rs:62`）。`--config serve.json` + `state_dir: "state"` 经配置解析仍是裸 `state`；Rust `Path::parent` 为 `Some("")`，被 filter 排除，根目录创建后未 fsync 当前目录。实际 CLI 初始化退出 0，路径探针确认父目录同步分支 false；未做掉电实验。须使用 `.` 回退或先绝对化，锁定常见相对路径的发布顺序，不能只同步新根目录代替其父目录。
+- **P2：stdio 控制积压饿死 tick**（`serve/run.rs:299–303`，同时核对 `control::wait_until` 控制优先臂）。每条 status 后 continue 回循环顶，没有有界批量/到期拍优先。真实进程 10ms 节奏，连续 40000 条 status 在 0.858s 内 live_tick 全为 7（无故障），队列清空后继续到 31；停止退出 0。须限制控制批量并保证截止点已到时推进，覆盖持续输入而非只验纯 deadline 函数。
+- **P2：未知命令 schemaVersion 仍执行**（`host/commands.rs:205–213`）。接收记录 schema_version/参与摘要，但消费只按 kind 分派。真实 v2 目录注入 `schemaVersion:999` 的 code.replace，返回 Completed/codeVersion=1，玩家 Memory.futureVersionExecuted=true。须对新执行命令按 kind 核验支持版本、明确 rejected；不把未知版按 v1 解释。
+- **P2：enable-inbox 续接绕过恢复门**（`serve/enable.rs:52–63,171–188`）。扫描吞掉所有信封/元数据错误，且续接不做完整引擎/Mod 恢复、种子/内容交叉核验。两条真实 CLI 故障注入：模拟 identity 未切的中断态，新增信封 version=99 最新份，或将锚点 engine_version 改为 99.0.0 并重封；两者 enable 均退出 0、identity 切 v2，随后 run 退出 1（前者版本门、后者引擎门）。须与普通恢复统一 Broken/Fatal 分类并在身份切换前完整核验，未来/I/O/身份错误不降级。
+- 复现脚本 `/tmp/kkscreeps-s1-s23-review.py`，结果 `/tmp/kkscreeps-s1-s23-review-results.log`；末轮夹具 `/var/folders/f8/953xb5vj2j39wzvk2jkkp9280000gn/T/kk-s1-s23-review-5ztgw6_8`。相对路径 Rust 探针 `/tmp/kkscreeps-state-parent-review.rs`；裸路径 CLI 夹具另在 `kk-s1-s23-review-m7tvpbtx/bare-relative`。临时证据不当作长期入库验收，修复时固化为仓库测试。本轮未重跑完整门禁（未改实现），仅文档更新后检查链接/格式；未启动性能/长测，S2.4 等待四项清偿。
 
 ## 台账维护与每批验收
 
