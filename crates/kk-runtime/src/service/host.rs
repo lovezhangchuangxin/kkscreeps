@@ -156,11 +156,7 @@ impl ServiceHost {
     ) -> anyhow::Result<Self> {
         let mut codes = BTreeMap::new();
         for (player, entry) in &entries {
-            let entry = serde_json::to_string(entry)?;
-            codes.insert(
-                player.clone(),
-                format!("(() => {{ const bot = require({entry}); if (!bot || typeof bot.loop !== 'function') throw new Error('bot entry must export loop'); bot.loop(); return true; }})()"),
-            );
+            codes.insert(player.clone(), Self::derive_player_code(entry));
         }
         let last_durable_tick = engine.get_game_time();
         Ok(Self {
@@ -207,6 +203,14 @@ impl ServiceHost {
     /// 新拍不得开始（写入准入已关）；Paused 下等待显式重试。
     pub fn can_tick(&self) -> bool {
         self.phase == Phase::Running && self.fault.is_none()
+    }
+
+    /// 由入口模块名派生宿主拍的玩家执行代码（require 入口并调用 loop）。
+    pub(crate) fn derive_player_code(entry: &str) -> String {
+        let entry = serde_json::to_string(entry).expect("入口名序列化不可失败");
+        format!(
+            "(() => {{ const bot = require({entry}); if (!bot || typeof bot.loop !== 'function') throw new Error('bot entry must export loop'); bot.loop(); return true; }})()"
+        )
     }
 
     /// 执行一拍：全部注册玩家运行一次并结算。玩家级错误计入统计继续
@@ -470,6 +474,8 @@ impl ServiceHost {
         })
     }
 }
+
+pub mod commands;
 
 #[cfg(test)]
 mod tests;

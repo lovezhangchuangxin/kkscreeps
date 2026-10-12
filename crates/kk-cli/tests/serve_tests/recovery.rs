@@ -166,16 +166,26 @@ fn restore_in_process(state: &Path) -> anyhow::Result<Recovered> {
     let identity = kk_runtime::service::identity::read(&dir.identity_file())?;
     let selected =
         kk_runtime::service::checkpoints::select_latest(&dir.checkpoints_dir(), &identity, None)?;
-    let packages = kk_mod_host::discover_packages(&Fixture::mods_root()?)?;
-    let options = kk_mod_host::RegisterOptions {
-        configs: BTreeMap::from([("nursery".to_string(), json!({"period": 5, "life": 3}))]),
-        ..Default::default()
-    };
+    let (packages, options) = mod_loadout()?;
     let mut engine = kk_runtime::EmbedEngine::new();
     engine
         .restore_checkpoint(selected.value.clone(), Some((&packages, &options)))
         .context_proceed()?;
     Ok(Recovered { engine, selected })
+}
+
+/// 进程内恢复与 serve run 一致的 Mod 装载输入（包表+注册配置）；
+/// Fixture::config 的默认 mods 段与此保持同值，否则 ModIdentity 核验拒绝。
+pub(super) fn mod_loadout() -> anyhow::Result<(
+    BTreeMap<String, kk_mod_host::ModPackage>,
+    kk_mod_host::RegisterOptions,
+)> {
+    let packages = kk_mod_host::discover_packages(&Fixture::mods_root()?)?;
+    let options = kk_mod_host::RegisterOptions {
+        configs: BTreeMap::from([("nursery".to_string(), json!({"period": 5, "life": 3}))]),
+        ..Default::default()
+    };
+    Ok((packages, options))
 }
 
 /// 便于链式 Result 的轻量别名（anyhow::Context 的用法在测试里冗长）。

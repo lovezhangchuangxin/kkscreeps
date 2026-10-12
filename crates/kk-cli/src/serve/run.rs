@@ -298,6 +298,26 @@ fn drive(
         }
         match host.fault() {
             None if host.phase() == kk_runtime::service::Phase::Running => {
+                // v2 命令面：消费 inbox 前缀（固定有限批量，含即时屏障
+                // 发布与终态存档）。消费后不回循环顶重入 drain——否则
+                // 突发命令会级联清空整个 inbox（每条一次全量快照+fsync）
+                // 才放行首个 tick，DRAIN_BATCH 的防垄断意图即失效；
+                // 余量留待下一轮循环（间隔内停止信号经 wait_until 响应）。
+                if host.commands_enabled() {
+                    match host
+                        .drain_command_prefix(kk_runtime::service::host::commands::DRAIN_BATCH)
+                    {
+                        Ok(_) => {}
+                        Err(error) => {
+                            // 冻结由宿主 fault 表达（drain 保证 Err 必伴随
+                            // fault）：下一轮 drive 的持久化分支统一提示
+                            // 并只接受停止。
+                            eprintln!("serve run: 命令消费失败（冻结推进）: {error:#}");
+                            nap();
+                            continue;
+                        }
+                    }
+                }
                 // pending 已锚定则继续等同一截止点（命令打断不滑动、
                 // 首拍也不被命令流无限推迟）；无 pending 才按网格锚重算。
                 let deadline = match *pending {
